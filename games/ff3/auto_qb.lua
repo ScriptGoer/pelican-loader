@@ -292,10 +292,15 @@ local function readLines(now)
     local los=ground.Position+cf.UpVector*.5-cf.LookVector*blue.z
     local forward=cf.LookVector*(delta>0 and -1 or 1)
     local same=lines.los and flat(lines.los-los).Magnitude<.05 and lines.forward:Dot(forward)>.99
-    if not same then
-        lines.since=now; lines.generation=lines.generation+1
+    local sameMeaning=lines.confirmedLos and flat(lines.confirmedLos-los).Magnitude<.05
+        and lines.confirmedForward:Dot(forward)>.99 and math.abs(lines.confirmedTargetZ-yellow.z)<.05
+        and lines.confirmedGround==ground
+    if not sameMeaning then
+        lines.generation=lines.generation+1
         log('LOS',string.format('z=%.2f forwardZ=%.0f',los.Z,forward.Z))
     end
+    if not same or not sameMeaning then lines.since=now end
+    lines.confirmedLos,lines.confirmedForward,lines.confirmedTargetZ,lines.confirmedGround=los,forward,yellow.z,ground
     lines.los,lines.forward,lines.at=los,forward,now
     lines.status=now-lines.since>=.25 and 'OBSERVED_LINES_STABLE' or 'LOS_SETTLING'
     return lines.status=='OBSERVED_LINES_STABLE'
