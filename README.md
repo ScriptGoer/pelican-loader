@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v15.1` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v15.2` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V15 preserves the user-confirmed V14 native lock/solver/release path. Automatic throws wait at least three seconds and require a moving receiver at least six yards beyond the observed LOS. No idle, inside-LOS, or guessed-LOS fallback throws. Tap the small status pill for AUTO / THR / COPY, **WR LIST** to block/allow teammates, and **WAIT 3s** to choose a 3/4/5-second minimum hold. Opening the dropdown pauses automatic release. Launch Yuna separately with QB Aimbot on and Mouse Aimbot off. Practice, original V13, and the `ff3-v14` tag are preserved. New gates/UI still need live validation. [Policy, usage, and evidence](FF3_AUTO_QB.md).
+**FF3:** V15 preserves the user-confirmed V14 native lock/solver/release path. Automatic throws wait at least three seconds and require a moving receiver at least six yards beyond the observed LOS. No idle, inside-LOS, or guessed-LOS fallback throws. Tap the small status pill for AUTO / THR / COPY, **WR LIST** to block/allow teammates, and **WAIT 3s** to choose a 3/4/5-second minimum hold. Opening the dropdown pauses automatic release. Launch Yuna separately with QB Aimbot on and Mouse Aimbot off. Practice, original V13, and the `ff3-v14` tag are preserved. V15.2 fixes the sticky LOS scan cap caused by unrelated Beams and retained map objects; real LOS is still required. The fix and gates/UI still need live validation. [Policy, usage, and evidence](FF3_AUTO_QB.md).
 
 Copy reports before leaving Roblox. Clipboard success indicates API acceptance, not iOS readback. Local tests do not prove in-game performance or mechanics.
 

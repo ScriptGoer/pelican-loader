@@ -44,8 +44,11 @@ local receiverRejects={}
 local maxTick=0
 local usedTools = setmetatable({}, {__mode='k'})
 local possession = {tool=nil, model=nil, wasReady=false, epoch=0, since=0}
-local lines={status='SEARCHING',ground=nil,los=nil,forward=nil,at=0,since=0,generation=0,parts={},labels={},
-    scan={q={workspace,pg,core},seen={},i=1},complete=false,capped=false,negativeText=setmetatable({}, {__mode='k'})}
+local lines={status='SEARCHING',ground=nil,los=nil,forward=nil,at=0,since=0,generation=0,
+    parts=setmetatable({}, {__mode='k'}),markerCount=0,labels={},
+    scan={q={workspace,pg,core},tail=core and 3 or 2,i=1,stack={},
+        queued=setmetatable({}, {__mode='k'}),seen=setmetatable({}, {__mode='k'}),visited=0},
+    complete=false,capped=false,negativeText=setmetatable({}, {__mode='k'})}
 local V = Vector3.new
 local function clean(x) return tostring(x):gsub('[\r\n|]', ' '):sub(1,180) end
 local function log(kind, value)
@@ -142,37 +145,52 @@ local function groundShape(o)
         and math.abs(c.RightVector.X)>.999 and math.abs(c.LookVector.Z)>.999
 end
 local function partCandidate(o)
-    if not instance(o,'BasePart') then return false end
+    if not instance(o,'BasePart') or not o.Anchored then return false end
     local s=o.Size; local width=math.max(s.X,s.Z)
-    return s.Y<=3 and width>=30 and width<=175 and math.abs(o.Position.X)<=85
-        and math.abs(o.Position.Z)<=153 and math.abs(o.Position.Y-3)<4
+    return s.Y<=3 and math.min(s.X,s.Z)<=5 and width>=30 and width<=175 and math.abs(o.Position.X)<=85
+        and math.abs(o.Position.Z)<=153 and math.abs(o.Position.Y-3)<4 and o.CFrame.UpVector.Y>=.98
 end
 local function colorRole(c)
     if c.B>.65 and c.B>c.R+.3 and c.R<.4 and c.G<.85 then return 'BLUE' end
     if c.R>.75 and c.G>.45 and c.B<.4 then return 'YELLOW' end
 end
+local function markerCandidate(o)
+    -- Retain plausible strip geometry even while hidden or using another color;
+    -- marker() rechecks current color/visibility every read, without extra listeners.
+    if partCandidate(o) then return true end
+    if not instance(o,'Beam') or not o.Attachment0 or not o.Attachment1
+        or math.abs(o.CurveSize0)>.1 or math.abs(o.CurveSize1)>.1 then return false end
+    local a,b=o.Attachment0.WorldPosition,o.Attachment1.WorldPosition
+    local d,p=b-a,(a+b)*.5
+    return math.abs(d.X)>=30 and math.abs(d.X)<=175 and math.abs(d.Z)<=5 and math.abs(d.Y)<=3
+        and math.abs(p.X)<=85 and math.abs(p.Z)<=153 and math.abs(p.Y-3)<4
+end
 local function enqueueLine(o)
     local scan=lines.scan
-    if scan.seen[o] then return end
-    if #scan.q>=12000 then lines.capped=true; return end
-    scan.seen[o]=true; scan.q[#scan.q+1]=o; lines.complete=false
+    if scan.seen[o] or scan.queued[o] then return end
+    scan.tail=scan.tail+1; scan.q[scan.tail]=o; scan.queued[o]=true; lines.complete=false
 end
 local function scanLines()
     local scan=lines.scan; local work=0; local deadline=os.clock()+.0015
     while work<96 and os.clock()<deadline do
-        if scan.children then
-            local child=scan.children[scan.j]
-            if child then enqueueLine(child); scan.j=scan.j+1; work=work+1
-            else scan.children=nil end
+        local frame=scan.stack[#scan.stack]; local o
+        if frame then
+            if frame.i<=frame.n then
+                o=frame.children[frame.i]; frame.children[frame.i]=nil; frame.i=frame.i+1
+            else scan.stack[#scan.stack]=nil end
         else
-            local o=scan.q[scan.i]
-            if not o then lines.complete=true; break end
-            scan.i=scan.i+1; work=work+1
+            o=scan.q[scan.i]
+            if not o then lines.complete=true; lines.initialComplete=true; scan.q={}; scan.i=1; scan.tail=0; break end
+            scan.q[scan.i]=nil; scan.i=scan.i+1; scan.queued[o]=nil
+        end
+        work=work+1
+        if o and not scan.seen[o] then
+            scan.seen[o]=true; scan.visited=scan.visited+1
             if o==workspace or o.Parent then
                 if groundShape(o) then
                     if lines.ground and lines.ground~=o then lines.groundAmbiguous=true else lines.ground=o end
-                elseif partCandidate(o) or instance(o,'Beam') then
-                    if #lines.parts<128 then lines.parts[#lines.parts+1]=o else lines.capped=true end
+                elseif markerCandidate(o) then
+                    lines.parts[o]=true
                 elseif instance(o,'TextLabel') or instance(o,'TextButton') then
                     if not (gui and o:IsDescendantOf(gui)) then
                         if #lines.labels<256 then lines.labels[#lines.labels+1]=o
@@ -184,7 +202,8 @@ local function scanLines()
                     end
                 end
                 if not instance(o,'Humanoid') and not (instance(o,'Model') and o:FindFirstChildOfClass('Humanoid')) then
-                    scan.children=o:GetChildren(); scan.j=1
+                    local children=o:GetChildren()
+                    if #children>0 then scan.stack[#scan.stack+1]={children=children,n=#children,i=1} end
                 end
             end
         end
@@ -254,12 +273,21 @@ local function readLines(now)
     local function missing(reason)
         lines.status=reason; lines.los=nil; lines.forward=nil; lines.since=0; return false
     end
-    if lines.capped then return missing('LOS_SCAN_LIMIT') end
+    -- The bound applies to actual marker geometry, never the number of visited
+    -- map objects or unrelated Beams. It recovers as markers disappear/hide.
+    lines.capped=false; lines.markerCount=0
     if not ground or not groundShape(ground) or lines.groundAmbiguous then return missing('LOS_GROUND_UNKNOWN') end
-    local clusters={BLUE={},YELLOW={},GOAL={}}
-    for _,o in ipairs(lines.parts) do
-        local role,z,lo,hi=marker(o,ground)
+    if not lines.initialComplete then return missing('LOS_SEARCHING') end
+    local clusters={BLUE={},YELLOW={},GOAL={}}; local inspected=0
+    for o in pairs(lines.parts) do
+        inspected=inspected+1
+        if inspected>512 then lines.capped=true; return missing('LOS_CANDIDATE_LIMIT') end
+        local role,z,lo,hi
+        if not o.Parent or not o:IsDescendantOf(workspace) then lines.parts[o]=nil
+        else role,z,lo,hi=marker(o,ground) end
         if role then
+            lines.markerCount=lines.markerCount+1
+            if lines.markerCount>128 then lines.capped=true; return missing('LOS_MARKER_LIMIT') end
             local groups=clusters[role]; local group
             for _,g in ipairs(groups) do if math.abs(g.z-z)<.3 then group=g; break end end
             if not group then group={z=z,segments={}}; groups[#groups+1]=group end
@@ -339,7 +367,8 @@ function controller.GetReport()
         'LOS_STATUS|'..lines.status,'LOS_WORLD_Z|'..(lines.los and string.format('%.2f',lines.los.Z) or 'NONE'),
         'ATTACK_FORWARD_Z|'..(lines.forward and string.format('%.0f',lines.forward.Z) or 'NONE'),
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
-        'LOS_MARKER_CANDIDATES|'..#lines.parts,
+        'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
+        'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
         'TARGET_DEPTH_YARDS|'..(choice and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
