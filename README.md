@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Live teammates/automatic passing | `v13` |
+| FF3 live `82866880824588` | Native shared-lock Auto QB rewrite | `ff3-v14` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** gameplay modules remain byte-identical to v13. Launch Yuna separately, before or after this loader. CTRL holds a fresh safe receiver for up to six seconds with throwing paused; turn THR off for manual-only sessions. Practice automatic passing remains unimplemented. Current live automatic passing and catches remain unconfirmed; no speculative jump-height offset was added.
+**FF3:** live Auto QB V14 uses Yuna's shared native receiver lock and final solver, then sends the readable source's ordinary live release request. Launch Yuna separately, before or after this loader, and enable its QB Aimbot with Mouse Aimbot off. Native movement-based and manual modes are preserved. Tap the status pill for AUTO / THR / COPY; THR off selects without releasing. Red X stops and preserves the report. Practice and original live V13 remain byte-identical and practice stays pinned to `v13`. Real executor qualification, server acceptance, and catches are unverified. [Rewrite evidence, usage, and limits](FF3_AUTO_QB.md).
 
 Copy reports before leaving Roblox. Clipboard success indicates API acceptance, not iOS readback. Local tests do not prove in-game performance or mechanics.
 
