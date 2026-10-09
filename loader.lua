@@ -5,25 +5,31 @@ if options == nil then options = {} end
 
 -- BEGIN INLINE MANIFEST (tests compare with manifest.lua)
 local manifest = {
-    Schema = 1,
-    LoaderVersion = "PELICAN_LOADER_V1",
+    Schema = 2,
+    LoaderVersion = "PELICAN_LOADER_V2",
     DefaultRef = "v13",
     BaseUrl = "https://raw.githubusercontent.com/ScriptGoer/pelican-loader",
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live",
-            Path = "games/ff3/live.lua",
-            Version = "PELICAN_FF3_V13",
-            Experimental = true,
-            Policy = "LIVE_HUMAN_TEAMMATES",
+            Name = "FF3 live", Game = "FF3", Ref = "v13",
+            Path = "games/ff3/live.lua", Version = "PELICAN_FF3_V13",
+            Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
         [81310542478972] = {
-            Name = "FF3 practice",
-            Path = "games/ff3/practice.lua",
-            Version = "PELICAN_FF3_V13",
-            Experimental = true,
-            Policy = "PRACTICE_EXPLICIT_TEAMLESS",
+            Name = "FF3 practice", Game = "FF3", Ref = "v13",
+            Path = "games/ff3/practice.lua", Version = "PELICAN_FF3_V13",
+            Experimental = true, Policy = "PRACTICE_EXPLICIT_TEAMLESS",
+        },
+        [78453398695059] = {
+            Name = "Threshold lobby", Game = "Threshold", Ref = "threshold-v1",
+            Path = "games/threshold/init.lua", Version = "PELICAN_THRESHOLD_V1",
+            Experimental = true, Policy = "THRESHOLD_OPT_IN_LOBBY",
+        },
+        [129085487311457] = {
+            Name = "Threshold Chase", Game = "Threshold", Ref = "threshold-v1",
+            Path = "games/threshold/init.lua", Version = "PELICAN_THRESHOLD_V1",
+            Experimental = true, Policy = "THRESHOLD_PHASE_AWARE_CHASE",
         },
     },
 }
@@ -209,6 +215,7 @@ function session.Stop(reason)
     local cleaned = stopInternal(reason or "STOP", userEnd)
     if userEnd then
         setStatus(cleaned and "PELICAN stopped" or "PELICAN cleanup pending")
+        if gui then pcall(function() gui.Enabled = true end) end
         if panel then pcall(function() panel.Visible = true end) end
     end
     return cleaned
@@ -224,6 +231,12 @@ local function fail(kind, message)
     return session
 end
 
+session.Context.RequestStop = function(reason)
+    reason = reason or "USER_END"
+    local cleaned = session.Stop(reason)
+    if reason == "USER_END" then copyReport() end
+    return cleaned
+end
 session.Context.IsCancelled = function() return stopRequested end
 session.Context.ReportRuntimeError = function(message)
     -- Async module tasks must call this explicitly; the loader's init pcall
@@ -294,6 +307,13 @@ end
 session.Context.Ref, session.Context.BaseUrl = ref, baseUrl
 session.Context.LoaderVersion = manifest.LoaderVersion
 session.Context.SourceMode = sourceMode
+session.Context.Sources = sources
+session.Context.LoaderBaseUrl = manifest.BaseUrl
+session.Context.LoaderRef = "main"
+if options.Threshold ~= nil and type(options.Threshold) ~= "table" then return fail("CONFIG", "Threshold options must be a table") end
+if options.ThresholdResume ~= nil and type(options.ThresholdResume) ~= "table" then return fail("CONFIG", "ThresholdResume must be a table") end
+session.Context.ThresholdOptions = options.Threshold or {}
+session.Context.ThresholdResume = options.ThresholdResume
 
 local started = os.clock()
 while not stopRequested do
@@ -320,10 +340,12 @@ if not route then
     setStatus("PELICAN unsupported")
     return session
 end
-if gameId ~= manifest.ObservedFF3Universe then
+if route.Game == "FF3" and gameId ~= manifest.ObservedFF3Universe then
     -- Historical universe is logged, never a substitute for exact-place routing.
     record("UNIVERSE_DIFFERENCE", "Observed FF3 universe differs from supplied report")
 end
+ref = options.Ref or route.Ref or manifest.DefaultRef
+session.Context.Ref = ref
 moduleVersion = route.Version
 moduleUrl = sources ~= nil and ("bundled:" .. route.Path) or (baseUrl .. "/" .. ref .. "/" .. route.Path)
 session.Context.PlaceId, session.Context.GameId = placeId, gameId
@@ -372,6 +394,6 @@ if type(stopped) == "function" then
 end
 if stopped == true then return fail("CONTROLLER", "Module returned an already stopped controller") end
 session.State = "RUNNING"
-record("INIT_OK", "Controller returned; this does not verify target adoption or an in-game throw")
+record("INIT_OK", "Controller returned; this does not verify gameplay behavior")
 if gui then pcall(function() gui.Enabled = false end) end
 return session
