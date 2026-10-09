@@ -1,52 +1,39 @@
-# FF3 live Auto QB V14
+# FF3 Auto QB V15: casual receiver readiness
 
-The live route now loads `games/ff3/auto_qb.lua` at `ff3-v14`. The previous `games/ff3/live.lua` is preserved byte-for-byte, as is practice. Threshold modules and route pins are unchanged. Re-run the same public loader to obtain V14.
+V14 is the working baseline: the user reported that automatic throwing worked, then identified throws to idle receivers, receivers behind the LOS, and releases too soon after the snap. V15 changes eligibility, timing, and the compact menu. It preserves V14's shared native receiver lock, source-qualified final solver, native throw-mode settings, and ordinary live request. V14 source is preserved in `archive/ff3-v14/auto_qb.lua` and the public `ff3-v14` tag. Practice, original live V13, and Threshold gameplay modules remain unchanged.
 
-Launch Yuna separately, before or after Pelican, and enable **QB Aimbot**. Pelican waits for a matching live instance. Native Mouse Aimbot must be off because it deliberately substitutes a mouse position for the selected receiver. Enable Yuna's Auto Throw Type to retain its movement-based selection; if disabled, Pelican preserves its manual mode instead. Existing SmartPass, AntiOOB, lead, angle, power, and mode settings remain untouched.
+The same public loader now routes live FF3 to `games/ff3/auto_qb.lua` at `ff3-v15`. Launch Yuna separately and enable QB Aimbot with Mouse Aimbot off, as for V14.
 
-The top-right 138×22 status pill expands AUTO / THR / COPY controls. AUTO off restores the owned lock. THR off selects and previews without sending requests. The red 22×22 X stops Pelican through the loader and exposes the final report. Supported `writefile` saves `PELICAN_FF3_AUTO_QB_REPORT.txt`; COPY, stopping, and teleport attempt clipboard preservation. `PELICAN_FF3_LAST_REPORT` retains a report in executor memory. API acceptance is not iOS clipboard readback. Copy before leaving Roblox; fresh rejoin execution is not established.
+## Automatic receiver policy
 
-## Source-supported failure and correction
+- Hold at least **3 seconds** from the equipped/throwable possession and its current confirmed LOS context. A new possession or meaningful LOS change restarts the hold. There is no emergency/rusher exception.
+- Require the receiver's **current position at least 6 yards beyond the actual observed LOS**. A future lead/catch point crossing the line does not make a receiver standing inside it eligible. Receivers off the observed field or a QB past the LOS also block release.
+- Require observed recent, continuous horizontal movement: at least 0.65 seconds of movement, measured speed and current engine speed at least 2 studs/s, and at least 2.4 studs of observed travel within the recent 0.8-second window. These are readiness policy choices, not game catch-mechanics measurements. Stationary receivers are excluded even if they might be watching their screen; physical movement cannot establish whether a human is truly AFK.
+- Require the native catch arrival to remain downfield/on field, estimated defender risk to pass the existing thresholds, and the same receiver/mode to remain safe to throw to for 0.65 seconds.
+- Recheck current receiver position, current motion, team, blacklist, native target, current LOS, possession, and native output immediately before the request. Stopping, moving back inside the LOS, blacklisting, or losing the current line context cancels automatic eligibility. There are no relaxed fallback throws.
 
-Evidence is the supplied `DPH_Message_readable.txt`, SHA-256 `ff065de978a9b2d037068658ddf03898913ebad40ec5fd0f4bb6796191a3c8f2`. Only the readable QB section was inspected. The VM wrapper was not executed or published; its relationship to the user's currently running Yuna build remains unverified.
+The existing native movement/manual mode policy remains intact. V15 adds no vertical jump-catch offset, alternate aiming solver, anti-cheat/anti-tamper modification, or synthetic input path.
 
-| Contract in the readable source | V13 limitation | V14 behavior |
-|---|---|---|
-| `fn13`, lines 1213–1283, reads shared `Locked`, `LockedOnto`, `LockedOntoName`; the locked branch returns one model | Replaces a getter captured by one Heartbeat callback and expects an unlocked model/distance pair | Owns the native lock triplet; validates a living human teammate; restores only its own writes |
-| `fn37`, lines 1922–1966, calls its own captured `fn13` | A different closure's captured getter need not change with the preview getter | Qualifies the same final solver across preview and release and the same settings table in its native selector |
-| `fn37` returns origin, power, flight time, final velocity, and mode; its returned/displayed angle is an initial angle | Reconstructs the throw path from HUD values | Uses returned final velocity directly for interception evaluation and the release request |
-| Native aiming release is an `InputBegan` callback, lines 2287–2319 | `Tool:Activate()` does not emit `UserInputService.InputBegan` | Sends the readable live request directly, after current game throw permission, native target, and trajectory checks |
+## LOS evidence and failure behavior
 
-The separate getter capture and Tool/input mismatch are reproduced using real Lua closures and separate mock signals. They establish defects in the old integration contract. They do **not** establish that every historical zero-attempt report had only those causes.
+Earlier supplied FF3 reports, including `FF3 Auto Throw & Field Context Test V4.txt` lines 15–22 and 86–89, record a blue full-width LOS strip and yellow first-down strip, both at world Y 2.95, on the observed 225×1×420 ground. The recorded blue/first-down separation agrees with three studs per yard. V15 preserves the earlier source's marker color, width, height, and alignment checks. It accepts full-width parts or straight field-spanning Beams, merges contiguous segments, and obtains attack direction from the first-down line relative to the blue LOS. A visible down-distance label, when present, must agree; conflicting labels block release. With unique validated blue/yellow geometry, a missing label does not force a guessed direction or a repeated global HUD scan.
 
-Discovery uses bounded, read-only `getconnections`, `getconstants`, and `getupvalues` (or their debug equivalents). It requires a single source-shaped preview/solver/selector/release graph, four native HUD cards, and captured game `Status` / `Throwable` value instances. The live release signature includes the source's `70000000` constant. There are no fixed upvalue positions, getter replacements, global hooks, obfuscated program execution, or anti-cheat/anti-tamper modifications. A different source profile remains inactive and displays a reason; it is not silently guessed.
+For goal-to-go, the supplied earlier source's observed white goal strips at local Z ±150 establish direction when the scoreboard reads Goal and the LOS is near that goal. The existing half-stud minimum goal gap is preserved. Camera facing, team name, receiver movement, or the QB's possession-start position never substitute for LOS.
 
-## Selection and release
+Missing, ambiguous, hidden, changed, or contradictory geometry pauses Auto QB. The report distinguishes those gates. Marker/label discovery processes bounded chunks; it avoids character descendants, filters constantly recreated small trajectory visuals from ongoing discovery, and caches unchanged unrelated label text so it does not repeatedly walk HUD ancestry. Scope is the observed FF3 map geometry; a verified map change requires an update. New LOS behavior is still unverified in-game.
 
-Pelican samples current human players, evaluates at most two candidate trajectories per 0.12-second selection tick, settles the winner through the shared lock and native solver, and re-solves immediately before releasing. Lower-ranked candidates rotate so a blocked first/second candidate cannot permanently hide a third. Native solver calls are bounded to four per release tick. Departed player samples are removed.
+## Mobile menu and blacklist
 
-Defender estimates evaluate the native parabolic flight path and projected arrival, using gravity 28 and conservative risk parameters retained from V13. They consider defender motion and the catch portion of the trajectory, not only present receiver proximity. These estimates remain provisional; they are not measured server catch windows. No new jump bullet or arbitrary vertical offset is added. Existing native modes are preserved: the readable source chooses Fit for a near-straight route away from the QB, Bullet for a sufficiently lateral route, and retains its other native cases. Its High Arc setting selects different native modes; Pelican does not alter that setting.
+The normal surface stays a 138×22 status pill and a red 22×22 kill switch. Tap the status pill to expose AUTO, THR, COPY, **WR LIST**, and **WAIT 3s**. WAIT cycles **3 / 4 / 5 seconds**, all with the same strict receiver gates. It is a minimum hold, not a countdown that forces a pass.
 
-The ordinary live request exactly follows the inspected release:
+WR LIST opens a three-row paged dropdown. Each row shows the teammate's username. Tap `[ ] @Name` to blacklist; it changes to `[X] @Name`. Tap again to allow. Teammates without a current character can still be blocked before respawn. The blacklist uses Roblox UserIds and persists through controller/loader reexecution in the current executor session. It is not written as a persistent preference across app restarts. A selected WR's owned lock is released immediately when blocked.
 
-```lua
-remote:FireServer(
-    "Clicked",
-    origin - finalVelocity.Unit * 5 + Vector3.new(70000000, 0, 0),
-    origin + finalVelocity.Unit * 10000,
-    nativePower,
-    1
-)
-```
+Opening the receiver dropdown pauses automatic release while selection continues. Closing it requires a fresh safe-open hold. The list remains bounded and folded during play; no per-player listeners are accumulated. Red kill removes the menu and owned listeners, restores only the owned native lock, and preserves reports as before. Blacklist and readiness gates govern Pelican's automatic control; Yuna's separate manual input remains Yuna's behavior.
 
-The offset is on X only, matching the source's single-argument `Vector3.new(70000000)`. The existing equipped tool's existing `Handle.RemoteEvent` is used. No remotes are created. Pelican does not call the input handler's unbounded animation wait or its `RemoveBalls` cosmetic cleanup. Whether current live servers require that animation timing or any additional release conditions is **unverified**. A successful `FireServer` API call is labeled `API_ACCEPTED_UNCONFIRMED`, never a confirmed throw, completion, or catch.
+Reports add LOS status/position/direction, discovery completion/caps, minimum hold/depth, possession age, target depth, open-hold time, blacklist identities, and per-receiver rejection reasons. COPY, kill, and teleport retain the same supported clipboard/file behavior. Copy reports before leaving Roblox; clipboard API acceptance is not iOS readback.
 
-An attempt is recorded before calling the remote. There is one request per continuous equipped/throwable possession; no timer or ambiguous error automatically retries it. The native `Throw` animation from readable `fn26` also reserves a manual throw, preserving the shared target for its native solver and suppressing a competing automatic request. A subsequent authoritative play/throwability transition, equipped ball change, or character change permits a new possession, including reuse of the same Tool. An unconfirmed request drops its owned lock after one second. A user/native lock edit is preserved and pauses AUTO. Stopping disconnects only Pelican listeners, restores only its owned lock, removes its UI, and confirms cleanup only after those operations succeed.
+## Validation
 
-## Validation and live uncertainties
+Local validation: **53 actual-controller policy/UI checks**, **86 loader checks**, and **55 checks across every route's real bundled startup/reexecution/cleanup** passed. The policy tests cover no snap-time throw, successful delayed native Bullet/Fit, stationary and false-velocity exclusion, receivers at/behind/near LOS, native arrival behind LOS, last-moment stopping and line changes, unknown/ambiguous/missing geometry, down-label mismatch/recreation, reversed direction, goal-to-go, new-possession timing, transient visual churn, negative-text cache behavior, straight marker Beams, actual paged blacklist controls, large UserIds, session persistence, menu pause/resume, and the longer pace control. Native Luau syntax compilation passes for controller, loader, manifest, and rebuilt bundle. Original gameplay payload preservation is checked by byte comparison.
 
-`tests/auto_qb_v14_test.lua` executes the actual shipped controller against source-shaped closures with supplied reflection metadata. It reproduces the old contract failures and verifies automatic request generation, coherent final-velocity arguments, movement/manual modes, trajectory threats, teammate restriction, lock ownership, startup before Yuna, profile ambiguity, missing APIs, malformed solver output, authoritative throw permission, no ambiguous retry, reused Tool/new possession, cancellation, report preservation, and cleanup failure/retry. This verifies integration behavior in mocks, not actual executor reflection or server acceptance.
-
-Local validation on 2026-10-09: 58 actual-controller mock checks, 86 loader checks, 55 checks of every route's real bundled startup/reexecution/cleanup, and five ordinary Yuna source-model tests passed. Original live V13, practice, and all six Threshold gameplay module hashes remain unchanged. Native Luau compilation passed for the new controller, loader, manifest, and rebuilt bundle. The fixture also covers native vector returns and both plain-table and Instance containers for captured game values. Completed gameplay experiments are not rerun as claims of new success.
-
-Required live validation: qualification against the current Yuna build and iPhone executor; shared-lock display and actual selected receiver; current live request/animation acceptance; defender-motion estimates; release, catch, and miss outcomes; frame time on the iPhone; report copy before exit. High jump-catch regions and the intermediate dead zone still require game-mechanics calibration and remain outside this rewrite. Reports identify the current gate and exact request counters, so qualification failures can be distinguished from a server rejecting a sent request.
+V14 automatic throwing is user-reported success. V15's new LOS, movement policy, blacklist, pacing, and iPhone performance still require live testing. Local results do not establish in-game receiver readiness, catches, or absence of every interception.
