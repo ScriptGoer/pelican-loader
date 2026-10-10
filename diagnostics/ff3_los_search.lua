@@ -1,7 +1,7 @@
--- PELICAN_FF3_LOS_SEARCH_V1: bounded public-instance inspection, no game requests.
+-- PELICAN_FF3_LOS_SEARCH_V2: bounded public-instance inspection, no game requests.
 -- V15.2 predicates below are diagnostic comparisons, not new accepted LOS rules.
 -- Starts without Yuna; stops an existing Pelican Auto QB and never restarts it.
-local VERSION,KEY='PELICAN_FF3_LOS_SEARCH_V1','PELICAN_FF3_LOS_SEARCH'
+local VERSION,KEY='PELICAN_FF3_LOS_SEARCH_V2','PELICAN_FF3_LOS_SEARCH'
 if game.PlaceId~=82866880824588 then error('Pelican LOS search requires the observed FF3 live place') end
 local env=type(getgenv)=='function' and getgenv() or _G
 local old=env[KEY]
@@ -11,15 +11,16 @@ local me=Players.LocalPlayer; local pg=me and me:FindFirstChild('PlayerGui')
 if not pg then error('Pelican LOS search: PlayerGui not ready') end
 local controller={Version=VERSION,IsStopped=false}
 local connections,records,byObject,history,errors={},{},setmetatable({}, {__mode='k'}),{},{}
-local limits={GROUND=4,PART=64,BEAM=24,GUI=16,VALUE=24}
+local limits={FOCUS=8,GROUND=4,PART=64,BEAM=24,GUI=16,VALUE=24}
 for kind in pairs(limits) do records[kind]={} end
 local stopped,cleanupComplete,busy=false,false,false
-local gui,status,copyButton,scanButton
+local gui,status,copyButton,scanButton,reportButton
 local started,lastTick,nextSave,nextRefresh,nextUI=os.clock(),-math.huge,0,0,0
 local sweep,completed,totalVisited,nextSweep=0,0,0,0
 local scan,ground,id,refreshCursor=nil,nil,0,1
 local considered,dropped,incrementalDrops,maxTick=0,0,0,0
 local copyResult,fileResult,autoState,stopReason='NOT_REQUESTED','NOT_REQUESTED','NOT_PRESENT','NONE'
+local copyAPI,copyError,readback='NONE','NONE','NOT_ATTEMPTED'
 local initialAutoReport='NONE'
 local V=Vector3.new
 local function safe(x,n) return tostring(x):gsub('[\r\n|]',' '):sub(1,n or 180) end
@@ -123,6 +124,26 @@ local function beamData(o)
     return text,verdict(discovery),verdict(active),r,#active==0
 end
 local function data(o,kind)
+    if kind=='FOCUS' then
+        local parent=o.Parent
+        local suffix='; parent='..(parent and path(parent)..' ['..parent.ClassName..']' or 'NONE')
+        local text,discovery,active,r,qualifies
+        if o:IsA('BasePart') then text,discovery,active,r,qualifies=partData(o)
+        elseif o:IsA('Beam') then text,discovery,active,r,qualifies=beamData(o)
+        elseif o:IsA('ValueBase') then text,discovery,active=data(o,'VALUE')
+        elseif o:IsA('GuiObject') or o:IsA('LayerCollector') or o:IsA('Decal') or o:IsA('Texture') then text,discovery,active=data(o,'GUI')
+        else
+            local children=o:GetChildren(); local names={}
+            for i=1,math.min(8,#children) do
+                local child=children[i]; local detail=safe(child.Name)..' ['..child.ClassName..']'
+                if child:IsA('BasePart') then detail=detail..' p='..vec(child.Position)..' size='..vec(child.Size)..' rgb='..rgb(child.Color) end
+                names[#names+1]=detail
+            end
+            text='class='..o.ClassName..'; children='..#children..'; samples='..table.concat(names,' / ')
+            discovery,active='NOT_APPLICABLE','CONTEXT_ONLY'
+        end
+        return text..suffix,discovery,active,r,qualifies
+    end
     if kind=='PART' or kind=='GROUND' then return partData(o) end
     if kind=='BEAM' then return beamData(o) end
     if kind=='VALUE' then return 'value='..safe(o.Value,96),'NOT_APPLICABLE','CONTEXT_ONLY' end
@@ -168,6 +189,9 @@ local function consider(o,kind,score)
     sample(record,os.clock()); log('FOUND|'..record.id..'|'..record.name..'|'..record.discovery)
 end
 local function inspect(o)
+    -- User identifies LineDown as the blue LOS. Pin it even if V15.2 rejects
+    -- its shape; runtime class/path and dimensions still need inspection.
+    if o.Name:lower()=='linedown' then consider(o,'FOCUS',10000); return end
     if o:IsA('BasePart') then
         local s,p=o.Size,o.Position; local width,thin=math.max(s.X,s.Z),math.min(s.X,s.Z)
         if groundShape(o) then ground=o; consider(o,'GROUND',2000); return end
@@ -235,7 +259,7 @@ local function scanChunk()
 end
 local function refreshChunk()
     local list={}
-    for _,kind in ipairs({'GROUND','PART','BEAM','GUI','VALUE'}) do for _,r in ipairs(records[kind]) do list[#list+1]=r end end
+    for _,kind in ipairs({'FOCUS','GROUND','PART','BEAM','GUI','VALUE'}) do for _,r in ipairs(records[kind]) do list[#list+1]=r end end
     for _=1,8 do
         if #list==0 then break end
         if refreshCursor>#list then refreshCursor=1 end
@@ -246,7 +270,7 @@ local function refreshChunk()
 end
 local function summary()
     local blue,yellow=0,0
-    for _,kind in ipairs({'PART','BEAM'}) do for _,r in ipairs(records[kind]) do
+    for _,kind in ipairs({'FOCUS','PART','BEAM'}) do for _,r in ipairs(records[kind]) do
         if r.active then if r.role=='BLUE' then blue=blue+1 elseif r.role=='YELLOW' then yellow=yellow+1 end end
     end end
     return blue,yellow
@@ -260,7 +284,8 @@ function controller.GetReport()
         'TOTAL_VISITED|'..totalVisited,'SCAN_COMPLETE|'..tostring(scan and scan.complete==true),
         'GROUND|'..(ground and ground.Parent and path(ground) or 'NONE'),'CANDIDATE_ACTIVE_BLUE|'..blue,'CANDIDATE_ACTIVE_YELLOW|'..yellow,
         'CONSIDERED|'..considered,'RECORDS_REPLACED_OR_DROPPED|'..dropped,'INCREMENTAL_DROPS|'..incrementalDrops,
-        'MAX_TICK_SECONDS|'..num(maxTick),'COPY_RESULT|'..copyResult,'FILE_RESULT|'..fileResult,
+        'MAX_TICK_SECONDS|'..num(maxTick),'COPY_RESULT|'..copyResult,'COPY_API|'..copyAPI,
+        'COPY_ERROR|'..copyError,'CLIPBOARD_READBACK|'..readback,'FILE_RESULT|'..fileResult,
         'POLICY|READ_PUBLIC_INSTANCES_ONLY; NO_THROW; NO_REMOTE_CALL; NO_YUNA_HOOK; NO_AUTO_RESUME',
         'COMPARISON|FF3_AUTO_QB_FF3_V15.2_INITIAL_DISCOVERY_AND_ACTIVE_GEOMETRY',
         'LIMITS|80_SCAN_WORK_OR_1.5MS_PER_40MS; 8_RETAINED_REFRESHES_PER_80MS; RECORDS_RANKED_AND_BOUNDED',
@@ -269,7 +294,7 @@ function controller.GetReport()
     if root then rows[#rows+1]='LOCAL_QB_POSITION|'..vec(root.Position) end
     if scan then local classes={}; for name in pairs(scan.classes) do classes[#classes+1]=name end; table.sort(classes)
         for _,name in ipairs(classes) do rows[#rows+1]='CLASS|'..name..'|'..scan.classes[name] end end
-    for _,kind in ipairs({'GROUND','PART','BEAM','GUI','VALUE'}) do
+    for _,kind in ipairs({'FOCUS','GROUND','PART','BEAM','GUI','VALUE'}) do
         rows[#rows+1]='RECORD_COUNT|'..kind..'|'..#records[kind]
         for _,r in ipairs(records[kind]) do
             rows[#rows+1]='OBJECT|'..r.id..'|'..r.kind..'|'..r.name..'|rank='..r.score
@@ -287,22 +312,52 @@ function controller.GetReport()
     for _,line in ipairs(history) do rows[#rows+1]='EVENT|'..line end
     return table.concat(rows,'\n')
 end
+function controller.GetFocusReport()
+    local rows={VERSION,'FOCUS|USER_IDENTIFIES_LineDown_AS_BLUE_LOS; NAME_ALONE_NOT_GEOMETRY_PROOF',
+        'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),'NAMED_OBJECTS|'..#records.FOCUS,
+        'SCANNED|'..totalVisited,'COMPLETED_SWEEPS|'..completed,'GROUND|'..(ground and ground.Parent and path(ground) or 'NONE'),
+        'COPY_RESULT|'..copyResult,'COPY_API|'..copyAPI,'COPY_ERROR|'..copyError,'CLIPBOARD_READBACK|'..readback}
+    for _,r in ipairs(records.FOCUS) do
+        rows[#rows+1]='OBJECT|'..r.id..'|'..r.name
+        rows[#rows+1]='CURRENT|'..(r.current or 'NONE')
+        rows[#rows+1]='V15_2_DISCOVERY|'..(r.discovery or 'NONE')
+        rows[#rows+1]='V15_2_ACTIVE|'..(r.live or 'NONE')
+        rows[#rows+1]='FIRST_OBSERVED|'..(r.first or 'NONE')
+        rows[#rows+1]='LAST_ACTIVE_GEOMETRY|'..(r.lastActive or 'NONE')
+    end
+    if #records.FOCUS==0 then rows[#rows+1]='NOTE|LineDown not recorded yet. Continue searching or open FULL for other candidates.' end
+    return table.concat(rows,'\n')
+end
+local function copySnapshot(payload)
+    local fn=setclipboard
+    copyAPI=type(fn)=='function' and 'setclipboard' or 'NONE'
+    if type(fn)~='function' and type(toclipboard)=='function' then fn=toclipboard; copyAPI='toclipboard' end
+    copyError='NONE'; readback='UNAVAILABLE'
+    if type(fn)~='function' then copyResult='UNAVAILABLE'; return end
+    -- One call, before any file I/O. A false return is a failed operation.
+    local ok,result=pcall(fn,payload)
+    if not ok or result==false then copyResult='FAILED'; copyError=ok and 'RETURNED_FALSE' or safe(result,600); return end
+    copyResult='API_RETURNED_NO_READBACK'
+    if type(getclipboard)=='function' then
+        local readOK,value=pcall(getclipboard)
+        if not readOK then readback='FAILED'
+        elseif value==payload then readback='MATCHED'; copyResult='READBACK_MATCHED'
+        else readback='MISMATCH'; copyResult='READBACK_MISMATCH' end
+    end
+end
 local function preserve(copy)
-    if copy then copyResult=type(setclipboard)=='function' and 'ATTEMPTING' or 'UNAVAILABLE' end
-    fileResult=type(writefile)=='function' and 'ATTEMPTING' or 'UNAVAILABLE'
+    if copy then copySnapshot(controller.GetFocusReport()) end
+    if type(writefile)~='function' then fileResult='UNAVAILABLE' end
     local report=controller.GetReport()
     if type(writefile)=='function' then fileResult=pcall(writefile,'PELICAN_FF3_LOS_SEARCH_REPORT.txt',report) and 'API_ACCEPTED' or 'FAILED' end
-    if copy and type(setclipboard)=='function' then
-        copyResult=pcall(setclipboard,controller.GetReport()) and 'API_ACCEPTED_NO_READBACK' or 'FAILED'
-        -- Copy the resolved outcome too. API acceptance still has no iOS readback.
-        if copyResult=='API_ACCEPTED_NO_READBACK' and not pcall(setclipboard,controller.GetReport()) then copyResult='FAILED' end
-    end
-    if copy and type(writefile)=='function' then
-        fileResult=pcall(writefile,'PELICAN_FF3_LOS_SEARCH_REPORT.txt',controller.GetReport()) and 'API_ACCEPTED' or 'FAILED'
-    end
     env.PELICAN_FF3_LOS_SEARCH_REPORT=controller.GetReport()
 end
-function controller.Copy() preserve(true); return copyResult end
+function controller.Copy(payload)
+    if stopped then return 'STOPPED' end
+    copySnapshot(payload or controller.GetFocusReport()); preserve(false)
+    if copyResult~='READBACK_MATCHED' and controller.ShowReport then controller.ShowReport() end
+    return copyResult
+end
 function controller.Rescan() if stopped then return false end; startSweep(); return true end
 function controller.Stop(reason)
     if cleanupComplete then return true end
@@ -345,9 +400,77 @@ local built,buildError=pcall(function()
     status=button('Status','LOS SEARCH',-166,138,62)
     local kill=button('Kill','X',-26,22,62); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     copyButton=button('Copy','COPY',-166,79,87); scanButton=button('Rescan','RESCAN',-84,80,87)
-    copyButton.Visible=false; scanButton.Visible=false
-    connect(status.Activated,function() copyButton.Visible=not copyButton.Visible; scanButton.Visible=copyButton.Visible end)
-    connect(copyButton.Activated,function() controller.Copy(); copyButton.Text=copyResult=='API_ACCEPTED_NO_READBACK' and 'COPIED' or 'COPY FAIL' end)
+    reportButton=button('Report','REPORT / MANUAL COPY',-166,162,112)
+    copyButton.Visible=false; scanButton.Visible=false; reportButton.Visible=false
+    local viewer=Instance.new('Frame'); viewer.Name='ReportViewer'; viewer.Size=UDim2.fromOffset(282,218)
+    viewer.Position=UDim2.new(1,-290,0,137); viewer.BackgroundColor3=Color3.fromRGB(22,28,34); viewer.Visible=false; viewer.Parent=gui
+    local modeButton=button('ReportMode','LineDown',0,84,0); modeButton.Parent=viewer; modeButton.Position=UDim2.fromOffset(4,0)
+    local help=Instance.new('TextLabel'); help.Name='CopyHelp'; help.Size=UDim2.fromOffset(158,22); help.Position=UDim2.fromOffset(90,0)
+    help.Text='Hold text to select / copy'; help.TextSize=10; help.BackgroundTransparency=1; help.TextColor3=Color3.new(1,1,1); help.Parent=viewer
+    local close=button('CloseReport','X',0,24,0); close.Parent=viewer; close.Position=UDim2.fromOffset(254,0)
+    local scroll=Instance.new('ScrollingFrame'); scroll.Name='ReportScroll'; scroll.Size=UDim2.fromOffset(274,164)
+    scroll.Position=UDim2.fromOffset(4,24); scroll.BackgroundTransparency=1; scroll.ScrollBarThickness=4; scroll.Parent=viewer
+    local text=Instance.new('TextBox'); text.Name='ReportText'; text.Position=UDim2.fromOffset(2,0); text.Size=UDim2.new(1,-8,0,164)
+    text.ClearTextOnFocus=false; text.MultiLine=true; text.TextEditable=true; text.TextWrapped=true; text.TextSize=11
+    text.Font=Enum.Font.Code; text.TextXAlignment=Enum.TextXAlignment.Left; text.TextYAlignment=Enum.TextYAlignment.Top
+    text.BackgroundTransparency=1; text.TextColor3=Color3.new(1,1,1); text.Parent=scroll
+    local prev=button('ReportPrevious','<',0,24,0); prev.Parent=viewer; prev.Position=UDim2.fromOffset(4,192)
+    local pageLabel=Instance.new('TextLabel'); pageLabel.Name='ReportPage'; pageLabel.Size=UDim2.fromOffset(44,22); pageLabel.Position=UDim2.fromOffset(30,192)
+    pageLabel.BackgroundTransparency=1; pageLabel.TextSize=10; pageLabel.TextColor3=Color3.new(1,1,1); pageLabel.Parent=viewer
+    local select=button('SelectReport','SELECT',0,60,0); select.Parent=viewer; select.Position=UDim2.fromOffset(76,192)
+    local copyPage=button('CopyReportPage','COPY PAGE',0,106,0); copyPage.Parent=viewer; copyPage.Position=UDim2.fromOffset(140,192)
+    local nextPage=button('ReportNext','>',0,24,0); nextPage.Parent=viewer; nextPage.Position=UDim2.fromOffset(250,192)
+    local mode,pages,page='FOCUS',{},1
+    local function paginate(snapshot)
+        pages={}; local start=1
+        while start<=#snapshot do
+            local last=math.min(#snapshot,start+2999)
+            if last<#snapshot then
+                local cut
+                for n in snapshot:sub(start,last):gmatch('()\n') do cut=n end
+                if cut and cut>1 then last=start+cut-1
+                else
+                    while last>=start do local b=snapshot:byte(last+1); if not b or b<128 or b>=192 then break end; last=last-1 end
+                end
+            end
+            pages[#pages+1]=snapshot:sub(start,last); start=last+1
+        end
+        if #pages==0 then pages={''} end
+    end
+    local function renderPage()
+        pcall(function() text:ReleaseFocus() end)
+        page=math.max(1,math.min(page,#pages)); text.Text=pages[page]
+        local lineCount=1; for _ in text.Text:gmatch('\n') do lineCount=lineCount+1 end
+        local height=math.max(164,(lineCount+math.ceil(#text.Text/35))*14)
+        text.Size=UDim2.new(1,-8,0,height); scroll.CanvasSize=UDim2.fromOffset(0,height); scroll.CanvasPosition=Vector2.new(0,0)
+        pageLabel.Text=page..' / '..#pages; modeButton.Text=mode=='FOCUS' and 'LineDown' or 'FULL'
+        prev.Visible=#pages>1; nextPage.Visible=#pages>1; copyPage.Text='COPY PAGE'
+    end
+    function controller.ShowReport(requestedMode)
+        if stopped or not gui then return false end
+        if viewer.Visible and requestedMode==nil then return true end
+        mode=requestedMode=='FULL' and 'FULL' or 'FOCUS'
+        paginate(mode=='FULL' and controller.GetReport() or controller.GetFocusReport()); page=1; renderPage(); viewer.Visible=true
+        return true
+    end
+    connect(modeButton.Activated,function() controller.ShowReport(mode=='FOCUS' and 'FULL' or 'FOCUS') end)
+    connect(close.Activated,function() viewer.Visible=false; pcall(function() text:ReleaseFocus() end) end)
+    connect(prev.Activated,function() page=page-1; renderPage() end)
+    connect(nextPage.Activated,function() page=page+1; renderPage() end)
+    connect(select.Activated,function() pcall(function() text:CaptureFocus(); text.CursorPosition=#text.Text+1; text.SelectionStart=1 end) end)
+    connect(copyPage.Activated,function()
+        controller.Copy(pages[page]); copyPage.Text=copyResult=='READBACK_MATCHED' and 'VERIFIED' or copyResult=='API_RETURNED_NO_READBACK' and 'SENT?' or 'USE SELECT'
+    end)
+    connect(status.Activated,function()
+        copyButton.Visible=not copyButton.Visible; scanButton.Visible=copyButton.Visible; reportButton.Visible=copyButton.Visible
+        if not copyButton.Visible then viewer.Visible=false; pcall(function() text:ReleaseFocus() end) end
+    end)
+    connect(reportButton.Activated,function()
+        if viewer.Visible then viewer.Visible=false; pcall(function() text:ReleaseFocus() end) else controller.ShowReport() end
+    end)
+    connect(copyButton.Activated,function()
+        controller.Copy(); copyButton.Text=copyResult=='READBACK_MATCHED' and 'VERIFIED' or copyResult=='API_RETURNED_NO_READBACK' and 'SENT?' or 'VIEW TEXT'
+    end)
     connect(scanButton.Activated,function() controller.Rescan() end)
     connect(kill.Activated,function() controller.Stop('USER_END') end)
     local stop=Instance.new('BindableEvent'); stop.Name='Stop'; stop.Parent=gui; connect(stop.Event,function() controller.Stop('EXTERNAL_STOP') end)
@@ -361,6 +484,12 @@ local built,buildError=pcall(function()
     end
     for _,root in ipairs(rootServices) do connect(root.DescendantAdded,added) end
     startSweep()
+    -- Cheap direct lookup gives a root-level LineDown report immediately.
+    -- Nested instances are still discovered by the bounded full traversal.
+    for _,root in ipairs(rootServices) do
+        local named=root:FindFirstChild('LineDown')
+        if named then local ok,err=pcall(inspect,named); if not ok then log('FOCUS_ERROR|'..safe(err)) end end
+    end
     connect(Run.Heartbeat,function()
         local now=os.clock(); if stopped or busy or now-lastTick<.04 then return end
         lastTick=now; busy=true; local began=os.clock()

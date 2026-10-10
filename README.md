@@ -19,7 +19,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **FF3:** V15 preserves the user-confirmed V14 native lock/solver/release path. Automatic throws wait at least three seconds and require a moving receiver at least six yards beyond the observed LOS. No idle, inside-LOS, or guessed-LOS fallback throws. Tap the small status pill for AUTO / THR / COPY, **WR LIST** to block/allow teammates, and **WAIT 3s** to choose a 3/4/5-second minimum hold. Opening the dropdown pauses automatic release. Launch Yuna separately with QB Aimbot on and Mouse Aimbot off. Practice, original V13, and the `ff3-v14` tag are preserved. V15.2 fixes the sticky LOS scan cap caused by unrelated Beams and retained map objects; real LOS is still required. The fix and gates/UI still need live validation. [Policy, usage, and evidence](FF3_AUTO_QB.md).
 
-**LOS search:** the V15.2 live report finished scanning but found zero active markers. Run the separate [search diagnostic](FF3_LOS_SEARCH.md) to record actual shapes, exact failed checks, and changes during plays. It stops Pelican Auto QB and never throws; normal routing stays on V15.2.
+**LOS search:** the V15.2 live report finished scanning but found zero active markers. Run the separate [V2 search diagnostic](FF3_LOS_SEARCH.md) from any role to inspect the user-identified blue LOS `LineDown`, exact failed checks, and changes during plays. It offers a short clipboard export and selectable, paged REPORT fallback. It stops Pelican Auto QB and never throws; normal routing stays on V15.2.
 
 Copy reports before leaving Roblox. Clipboard success indicates API acceptance, not iOS readback. Local tests do not prove in-game performance or mechanics.
 
