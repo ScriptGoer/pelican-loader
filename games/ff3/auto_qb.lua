@@ -39,6 +39,7 @@ if type(blacklist)~='table' or getmetatable(blacklist)~=nil then blacklist={}; e
 local stopped, cleanupComplete, inTick, auto, throwing, expanded = false, false, false, true, true, false
 local lastTick, nextDiscovery, nextSave, cursor = -math.huge, 0, 0, 1
 local gate, copyResult, fileResult = 'WAIT_YUNA', 'NOT_REQUESTED', 'NOT_REQUESTED'
+local fatalError, stopReason = 'NONE', 'NONE'
 local attempts, sent, ambiguous, relinquishments, nativeCalls = 0, 0, 0, 0, 0
 local receiverRejects={}
 local maxTick=0
@@ -56,6 +57,7 @@ local function log(kind, value)
     events[#events+1]=kind..'|'..clean(value)
 end
 local function setGate(value)
+    if stopped then return end
     counts[value]=(counts[value] or 0)+1
     if gate~=value then gate=value; log('GATE',value) end
     if status then status.Text=(choice and choice.player.Name..' ' or '')..value:gsub('_',' '):sub(1,24) end
@@ -375,6 +377,7 @@ end
 function controller.GetReport()
     local rows={VERSION,'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
         'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
+        'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
         'TARGET|'..(choice and choice.player.Name or 'NONE'),'MODE|'..(choice and choice.shot.mode or 'NONE'),
         'ATTEMPTS|'..attempts,'REQUEST_SENT|'..sent,'AMBIGUOUS_REQUESTS|'..ambiguous,
@@ -422,6 +425,7 @@ local function preserve(copy)
 end
 function controller.Stop(reason)
     if cleanupComplete then return true end
+    if not stopped then stopReason=clean(reason or 'USER_END') end
     stopped=true; controller.IsStopped=true
     releaseChoice()
     local remaining={}
@@ -705,7 +709,10 @@ local function solve(player)
     nativeCalls=nativeCalls+1
     local ok,dir,origin,endpoint,power,time,velocity,aimpoint,initialAngle,mode=pcall(profile.solve,q.Angle,q.SelectedType)
     if stopped then return nil,'STOPPED' end
-    if not ok then log('SOLVER_ERROR',dir); return nil,'NATIVE_SOLVER_ERROR' end
+    if not ok then
+        fatalError=clean(dir); log('SOLVER_ERROR',dir)
+        controller.Stop('NATIVE_SOLVER_ERROR'); return nil,'NATIVE_SOLVER_ERROR'
+    end
     if not ownsLock() or not teammate(player) or profile.selector()~=player.Character then return nil,'NATIVE_TARGET_MISMATCH' end
     origin,velocity=nativeVector(origin),nativeVector(velocity)
     if not vector(origin) or not vector(velocity) or not finite(time) or time<.05 or time>CFG.MaxFlight
@@ -749,7 +756,10 @@ local function submit(ball,selected,defenders,now)
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
     end)
     if ok then sent=sent+1; pending.outcome='API_ACCEPTED_UNCONFIRMED'; setGate('REQUEST_SENT_UNCONFIRMED')
-    else ambiguous=ambiguous+1; pending.outcome='AMBIGUOUS_NO_RETRY'; log('REQUEST_ERROR',err); setGate('REQUEST_AMBIGUOUS_NO_RETRY') end
+    else
+        ambiguous=ambiguous+1; pending.outcome='AMBIGUOUS_NO_RETRY'; fatalError=clean(err)
+        log('REQUEST_ERROR',err); controller.Stop('REQUEST_AMBIGUOUS_NO_RETRY'); return
+    end
     preserve(false)
 end
 local function tick(now)
@@ -886,7 +896,9 @@ local function tick(now)
     end)
     inTick=false
     maxTick=math.max(maxTick,os.clock()-begun)
-    if not ok then releaseChoice(); log('TICK_ERROR',err); setGate('RUNTIME_ERROR'); preserve(false) end
+    if not ok then
+        fatalError=clean(err); log('TICK_ERROR',err); controller.Stop('RUNTIME_ERROR'); return
+    end
     if not stopped and now>=nextSave then nextSave=now+10; preserve(false) end
 end
 local function connect(signal,fn)

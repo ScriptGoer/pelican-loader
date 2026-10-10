@@ -2,7 +2,7 @@
 
 V14 is the working baseline: the user reported that automatic throwing worked, then identified throws to idle receivers, receivers behind the LOS, and releases too soon after the snap. V15 changes eligibility, timing, and the compact menu. It preserves V14's shared native receiver lock, source-qualified final solver, native throw-mode settings, and ordinary live request. V14 source is preserved in `archive/ff3-v14/auto_qb.lua` and the public `ff3-v14` tag. Practice, original live V13, and Threshold gameplay modules remain unchanged.
 
-The same public loader now routes live FF3 to `games/ff3/auto_qb.lua` at `ff3-v15.4`. Launch Yuna separately and enable QB Aimbot with Mouse Aimbot off, as for V14.
+The same public loader now routes live FF3 to `games/ff3/auto_qb.lua` at `ff3-v15.4.1`. Launch Yuna separately and enable QB Aimbot with Mouse Aimbot off, as for V14.
 
 ## Automatic receiver policy
 
@@ -65,3 +65,9 @@ The added discovery checks cover the exact reported coordinates/colors/direction
 Additional V15.4 checks cover all four early returns with a large unfinished scene, background validation after scan completion, visibility/movement changes before Yuna, late Yuna startup with a fresh possession hold, tracking after an already-attempted request without a repeat throw, and stopped polling/report persistence.
 
 V14 automatic throwing is user-reported success. V15.4's background ordering, V15.3's named retention and V15.2's scanner fix and V15's LOS, movement policy, blacklist, pacing, and iPhone performance still require live testing. Local results do not establish in-game receiver readiness, catches, or absence of every interception.
+
+## V15.4.1 exception shutdown and unresolved LOS
+
+The subsequent V15.4 live report still has incomplete initial discovery, 21,153 visits, 1,582 pending roots, and zero native solver calls/automatic attempts despite possession readiness. The named export remains false, but that weak-key lookup is not a geometry verdict. [The focused trace](ff3-los-trace.md) separates exact acceptance checks from reference/key behavior and original-root progress from queued churn. Production LOS behavior remains V15.4 pending that evidence.
+
+V15.4.1 only adds immediate stop-and-preserve on tick, native-solver, and ambiguous-request exceptions; STOP_REASON and FATAL_ERROR are reported. The original ambiguous request stays uncertain and is never retried, even on a later play. Twelve actual-controller error-stop checks verify immediate shutdown, exact errors, owned lock/UI cleanup, saved reports, and no retries.
