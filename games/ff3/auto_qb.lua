@@ -385,7 +385,7 @@ function controller.GetReport()
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
-        'LOS_DISCOVERY_PROFILE|V15.3_OBSERVED_ROOT_PARTS_RECHECKED',
+        'LOS_DISCOVERY_PROFILE|V15.4_BACKGROUND_BEFORE_PASSING_GATES',
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
         'TARGET_DEPTH_YARDS|'..(choice and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
@@ -759,6 +759,9 @@ local function tick(now)
     local ok,err=pcall(function()
         if context.IsCancelled and context.IsCancelled() then controller.Stop('CANCELLED'); return end
         scanLines()
+        -- Field context exists for every role. Discover/refresh it before any
+        -- Yuna, active-play, equipped-ball, or already-attempted return below.
+        local lineReady=readLines(now)
         if renderReceivers and receiverMenu and receiverMenu.Visible then renderReceivers(now) end
         if profile and (not aliveConnection(profile.preview) or not aliveConnection(profile.release)) then
             releaseChoice(); profile=nil; nextDiscovery=0; log('PROFILE','Disconnected; rediscovering')
@@ -804,7 +807,7 @@ local function tick(now)
             if now-pending.at>1 then releaseChoice() end
             return
         end
-        if not readLines(now) then releaseChoice(); setGate(lines.status); return end
+        if not lineReady then releaseChoice(); setGate(lines.status); return end
         if possession.lineGeneration~=lines.generation then
             possession.lineGeneration=lines.generation; possession.since=now; releaseChoice()
         end
