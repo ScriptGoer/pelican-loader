@@ -23,6 +23,8 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Focused LOS trace:** the V15.4 report remains stuck before scan completion. Run the [bounded identity/queue trace](FF3_LOS_TRACE.md) to capture the missing checks. It stops Auto QB/older LOS search, never throws, and ends on its first failed check or after 20 seconds. The actual live cause remains unverified.
 
+**Mobile jump:** optional [jump width helper](FF3_MOBILE_JUMP.md) doubles the native jump button leftward while preserving its right edge and height. It runs independently of Auto QB/Yuna, has an original-width toggle and red restore/kill control, and does not change jump mechanics. Actual FF3/iPhone touch layout is unverified.
+
 Copy reports before leaving Roblox. Clipboard success indicates API acceptance, not iOS readback. Local tests do not prove in-game performance or mechanics.
 
 Only runtime source, instructions, and checksums are public. Original handoffs, gameplay reports, test harnesses, and supplied paid-source attachments remain outside this distribution. No credentials or private keys are included.
