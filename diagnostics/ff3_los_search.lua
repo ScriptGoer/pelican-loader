@@ -1,7 +1,7 @@
--- PELICAN_FF3_LOS_SEARCH_V2: bounded public-instance inspection, no game requests.
+-- PELICAN_FF3_LOS_SEARCH_V3: bounded public-instance inspection, no game requests.
 -- V15.2 predicates below are diagnostic comparisons, not new accepted LOS rules.
 -- Starts without Yuna; stops an existing Pelican Auto QB and never restarts it.
-local VERSION,KEY='PELICAN_FF3_LOS_SEARCH_V2','PELICAN_FF3_LOS_SEARCH'
+local VERSION,KEY='PELICAN_FF3_LOS_SEARCH_V3','PELICAN_FF3_LOS_SEARCH'
 if game.PlaceId~=82866880824588 then error('Pelican LOS search requires the observed FF3 live place') end
 local env=type(getgenv)=='function' and getgenv() or _G
 local old=env[KEY]
@@ -26,6 +26,7 @@ local V=Vector3.new
 local function safe(x,n) return tostring(x):gsub('[\r\n|]',' '):sub(1,n or 180) end
 local function num(x) return type(x)=='number' and string.format('%.3f',x) or 'NONE' end
 local function vec(v) return v and num(v.X)..','..num(v.Y)..','..num(v.Z) or 'NONE' end
+local function vec2(v) return v and num(v.X)..','..num(v.Y) or 'NONE' end
 local function rgb(c) return c and num(c.R)..','..num(c.G)..','..num(c.B) or 'NONE' end
 local function path(o) return safe(o:GetFullName(),240) end
 local function role(c)
@@ -149,7 +150,7 @@ local function data(o,kind)
     if kind=='VALUE' then return 'value='..safe(o.Value,96),'NOT_APPLICABLE','CONTEXT_ONLY' end
     local text='class='..o.ClassName
     if o:IsA('GuiObject') then
-        text=text..'; visible='..tostring(o.Visible)..'; absolute='..vec(o.AbsolutePosition)..'; pixels='..vec(o.AbsoluteSize)
+        text=text..'; visible='..tostring(o.Visible)..'; absolute='..vec2(o.AbsolutePosition)..'; pixels='..vec2(o.AbsoluteSize)
             ..'; bg='..rgb(o.BackgroundColor3)..'; bgAlpha='..num(o.BackgroundTransparency)
     end
     if o:IsA('TextLabel') or o:IsA('TextButton') then text=text..'; text='..safe(o.Text,96)

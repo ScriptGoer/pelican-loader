@@ -144,6 +144,20 @@ local function groundShape(o)
     return (o.Position-V(0,2.5,0)).Magnitude<1.5 and c.UpVector.Y>.999
         and math.abs(c.RightVector.X)>.999 and math.abs(c.LookVector.Z)>.999
 end
+local observedLineNames={'LineDown','LineTogo'}
+local function observedLine(o)
+    -- V2 live evidence identifies these root-level Parts. Names retain candidates
+    -- before replication finishes; current geometry still decides acceptance.
+    return instance(o,'BasePart') and o.Parent==workspace and (o.Name=='LineDown' or o.Name=='LineTogo')
+end
+local function retainObservedLines()
+    -- Two direct lookups recover late configuration/replacement without a new
+    -- global sweep, per-Part listeners, or depending on the scan's seen set.
+    for _,name in ipairs(observedLineNames) do
+        local o=workspace:FindFirstChild(name)
+        if observedLine(o) then lines.parts[o]=true end
+    end
+end
 local function partCandidate(o)
     if not instance(o,'BasePart') or not o.Anchored then return false end
     local s=o.Size; local width=math.max(s.X,s.Z)
@@ -189,7 +203,7 @@ local function scanLines()
             if o==workspace or o.Parent then
                 if groundShape(o) then
                     if lines.ground and lines.ground~=o then lines.groundAmbiguous=true else lines.ground=o end
-                elseif markerCandidate(o) then
+                elseif observedLine(o) or markerCandidate(o) then
                     lines.parts[o]=true
                 elseif instance(o,'TextLabel') or instance(o,'TextButton') then
                     if not (gui and o:IsDescendantOf(gui)) then
@@ -269,6 +283,7 @@ local function downReading()
     return result
 end
 local function readLines(now)
+    retainObservedLines()
     local ground=lines.ground
     local function missing(reason)
         lines.status=reason; lines.los=nil; lines.forward=nil; lines.since=0; return false
@@ -343,6 +358,7 @@ local function onField(point)
 end
 local function onLineAdded(o)
     if stopped then return end
+    if observedLine(o) then lines.parts[o]=true end
     if groundShape(o) or partCandidate(o) then enqueueLine(o)
     elseif instance(o,'Beam') then
         -- Ignore Yuna's constantly recreated trajectory visuals. Only observed
@@ -369,6 +385,7 @@ function controller.GetReport()
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
+        'LOS_DISCOVERY_PROFILE|V15.3_OBSERVED_ROOT_PARTS_RECHECKED',
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
         'TARGET_DEPTH_YARDS|'..(choice and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
@@ -376,6 +393,11 @@ function controller.GetReport()
         'RECEIVER_READINESS|CURRENT_POSITION_BEYOND_LOS; OBSERVED_RECENT_CONTINUOUS_MOVEMENT',
         'RUNTIME_VALIDATION|UNVERIFIED_IN_ROBLOX','JUMP_CATCH_CALIBRATION|MISSING; NO_ADDED_JUMP_BULLET',
         'RELEASE|SOURCE_NATIVE_SOLVER_OUTPUT; ONE_REQUEST_PER_POSSESSION; NO_AUTOMATIC_RETRY'}
+    for _,name in ipairs(observedLineNames) do
+        local o=workspace:FindFirstChild(name)
+        rows[#rows+1]='LOS_NAMED_LINE|'..name..' class='..(o and o.ClassName or 'MISSING')
+            ..' retained='..tostring(o~=nil and lines.parts[o]==true)
+    end
     if pending then rows[#rows+1]='LAST_REQUEST|'..pending.target..' '..pending.mode..' '..pending.outcome end
     local blocked={}; for k,v in pairs(blacklist) do if v then blocked[#blocked+1]=k end end; table.sort(blocked)
     rows[#rows+1]='BLACKLIST|'..table.concat(blocked,',')
