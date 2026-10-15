@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v15.4.1` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v15.4.2` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V16 is withdrawn after its first supplied live failure. Default routing restores native-mode V15.4.1 with exception shutdown. Turn Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, and **Auto Throw Type back ON** for the original automatic mode behavior; stop Pelican and rerun the loader. This route preserves Yuna's settings and mode policy. LOS/motion eligibility, blacklist, compact UI, original pacing, and one-attempt protection remain. [Recovery, report findings and limits](FF3_AUTO_QB.md).
+**FF3:** V16 is withdrawn after its first supplied live failure. Default routing uses native-mode V15.4.2: the V15.4.1 aiming baseline plus validated observed-ground recovery and a bounded initial-discovery timeout. Turn Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, and **Auto Throw Type back ON** for the original automatic mode behavior; stop Pelican and rerun the loader. This route preserves Yuna's settings and mode policy. It requires Auto Throw Type ON and never flips it. Initial ground+scan discovery stops with a saved reason after 20 seconds; ordinary hidden markers after discovery remain safe waits. LOS/motion eligibility, blacklist, compact UI, original pacing, and one-attempt protection remain. [Recovery, report findings and limits](FF3_AUTO_QB.md).
 
 **LOS search:** the V15.2 live report finished scanning but found zero active markers. The V2 live search report confirms `workspace.LineDown` and `workspace.LineTogo` are Parts whose visible geometry passes existing checks. Run the separate [V3 search diagnostic](FF3_LOS_SEARCH.md) from any role to inspect the user-identified blue LOS `LineDown`, exact failed checks, and changes during plays. It offers a short clipboard export and selectable, paged REPORT fallback. It stops Pelican Auto QB and never throws; V3 fixes GUI Vector2 sampling errors, and normal routing restores the native-mode baseline after withdrawing V16. The earlier zero-marker failure's exact live trigger remains uncertain.
 

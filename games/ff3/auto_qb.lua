@@ -9,7 +9,7 @@ local VERSION, KEY = 'PELICAN_FF3_V15', 'PELICAN_FF3_AUTO_QB'
 local CFG = {Interval=.12, DiscoveryInterval=2, MaxRoster=64,
     Gravity=28, MaxFlight=4.5, MaxRange=330, SelectMargin=3, SelectLane=2,
     ThrowMargin=6, ThrowLane=4, Settle=.65, MinPlayAge=3, MinDownfieldYards=6,
-    MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4}
+    MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20}
 local Players, Run, Input = game:GetService('Players'), game:GetService('RunService'), game:GetService('UserInputService')
 local me = Players.LocalPlayer
 if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V15 requires the observed FF3 live place') end
@@ -43,6 +43,7 @@ local fatalError, stopReason = 'NONE', 'NONE'
 local attempts, sent, ambiguous, relinquishments, nativeCalls = 0, 0, 0, 0, 0
 local receiverRejects={}
 local maxTick=0
+local fieldStarted, initialFieldDiscovered = os.clock(), false
 local usedTools = setmetatable({}, {__mode='k'})
 local possession = {tool=nil, model=nil, wasReady=false, epoch=0, since=0}
 local lines={status='SEARCHING',ground=nil,los=nil,forward=nil,at=0,since=0,generation=0,
@@ -138,13 +139,47 @@ end
 -- LOS geometry is preserved from the earlier FF3 reports: the observed ground
 -- and full-width blue/yellow strips (or straight Beams). Direction is never
 -- inferred from camera facing, receiver movement, team names, or the QB spawn.
-local function groundShape(o)
-    if not instance(o,'BasePart') or not o.Parent or not o.Anchored then return false end
+local function groundIssue(o)
+    if not o then return 'MISSING' end
+    if not instance(o,'BasePart') then return 'NOT_BASEPART' end
+    if not o.Parent or not o:IsDescendantOf(workspace) then return 'DETACHED' end
+    if not o.Anchored then return 'NOT_ANCHORED' end
     local s=o.Size
-    if math.abs(s.X-225)>=.6 or math.abs(s.Y-1)>=.3 or math.abs(s.Z-420)>=.6 then return false end
+    if math.abs(s.X-225)>=.6 or math.abs(s.Y-1)>=.3 or math.abs(s.Z-420)>=.6 then return 'SIZE_MISMATCH' end
     local c=o.CFrame
-    return (o.Position-V(0,2.5,0)).Magnitude<1.5 and c.UpVector.Y>.999
-        and math.abs(c.RightVector.X)>.999 and math.abs(c.LookVector.Z)>.999
+    if (o.Position-V(0,2.5,0)).Magnitude>=1.5 then return 'WORLD_POSITION_MISMATCH' end
+    if c.UpVector.Y<=.999 or math.abs(c.RightVector.X)<=.999 or math.abs(c.LookVector.Z)<=.999 then return 'ORIENTATION_MISMATCH' end
+    return 'ACCEPTED'
+end
+local function groundShape(o) return groundIssue(o)=='ACCEPTED' end
+local function observedGround()
+    -- Exact path confirmed by the earlier live G166 report; a name never
+    -- substitutes for the same current geometry/ancestry validation.
+    local models=workspace:FindFirstChild('Models')
+    if not models then return nil,'MISSING_MODELS' end
+    local field=models:FindFirstChild('Field')
+    if not field then return nil,'MISSING_FIELD' end
+    local ground=field:FindFirstChild('Ground')
+    return ground,groundIssue(ground)
+end
+local function retainObservedGround()
+    local observed,why=observedGround()
+    lines.knownGroundIssue=why
+    if why=='ACCEPTED' and (not lines.ground or not groundShape(lines.ground)) then
+        lines.ground=observed; lines.groundSource='OBSERVED_PATH'
+    end
+end
+local function groundReason()
+    if lines.groundAmbiguous then return 'AMBIGUOUS_GROUND_REFERENCES' end
+    if not lines.ground then return 'NOT_DISCOVERED' end
+    return groundIssue(lines.ground)
+end
+local function describeGround(o)
+    if not o then return 'NONE' end
+    if not instance(o,'BasePart') then return 'class='..clean(o.ClassName) end
+    return string.format('class=%s size=%.3f,%.3f,%.3f position=%.3f,%.3f,%.3f anchored=%s',
+        o.ClassName,o.Size.X,o.Size.Y,o.Size.Z,o.Position.X,o.Position.Y,o.Position.Z,tostring(o.Anchored))
+        ..string.format(' upY=%.4f rightX=%.4f lookZ=%.4f',o.CFrame.UpVector.Y,o.CFrame.RightVector.X,o.CFrame.LookVector.Z)
 end
 local observedLineNames={'LineDown','LineTogo'}
 local function observedLine(o)
@@ -204,7 +239,8 @@ local function scanLines()
             scan.seen[o]=true; scan.visited=scan.visited+1
             if o==workspace or o.Parent then
                 if groundShape(o) then
-                    if lines.ground and lines.ground~=o then lines.groundAmbiguous=true else lines.ground=o end
+                    if lines.ground and groundShape(lines.ground) and lines.ground~=o then lines.groundAmbiguous=true; lines.ambiguousGround=describeGround(o)
+                    else lines.ground=o; lines.groundSource='SCAN' end
                 elseif observedLine(o) or markerCandidate(o) then
                     lines.parts[o]=true
                 elseif instance(o,'TextLabel') or instance(o,'TextButton') then
@@ -285,6 +321,7 @@ local function downReading()
     return result
 end
 local function readLines(now)
+    retainObservedGround()
     retainObservedLines()
     local ground=lines.ground
     local function missing(reason)
@@ -388,7 +425,16 @@ function controller.GetReport()
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
-        'LOS_DISCOVERY_PROFILE|V15.4_BACKGROUND_BEFORE_PASSING_GATES',
+        'LOS_DISCOVERY_PROFILE|V15.4.2_OBSERVED_GROUND_PATH_NATIVE_MODES',
+        'GROUND_REASON|'..groundReason(),'GROUND_SOURCE|'..(lines.groundSource or 'NONE'),
+        'GROUND_CACHED|'..describeGround(lines.ground),
+        'GROUND_AMBIGUITY_OTHER|'..(lines.ambiguousGround or 'NONE'),
+        'GROUND_KNOWN_PATH|workspace.Models.Field.Ground',
+        'GROUND_KNOWN_REASON|'..select(2,observedGround()),
+        'GROUND_KNOWN|'..describeGround((observedGround())),
+        'INITIAL_FIELD_DISCOVERED|'..tostring(initialFieldDiscovered),
+        'FIELD_DISCOVERY_DEADLINE_SECONDS|'..CFG.FieldDiscoverySeconds,
+        'NATIVE_MODE_OWNERSHIP|YUNA; NO_SELECTEDTYPE_OR_AUTO_MODE_WRITES',
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
         'TARGET_DEPTH_YARDS|'..(choice and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
@@ -400,6 +446,12 @@ function controller.GetReport()
         local o=workspace:FindFirstChild(name)
         rows[#rows+1]='LOS_NAMED_LINE|'..name..' class='..(o and o.ClassName or 'MISSING')
             ..' retained='..tostring(o~=nil and lines.parts[o]==true)
+    end
+    if profile then
+        rows[#rows+1]='NATIVE_CURRENT_SETTINGS|autoType='..tostring(profile.q.AutoThrowType.Enabled)
+            ..' selectedType='..clean(profile.q.SelectedType)..' angle='..clean(profile.q.Angle)
+            ..' manual='..clean(profile.q.ManualType)..' power='..clean(profile.q.Power)
+            ..' locked='..tostring(profile.q.Locked)..' lockedName='..clean(profile.q.LockedOntoName)
     end
     if pending then rows[#rows+1]='LAST_REQUEST|'..pending.target..' '..pending.mode..' '..pending.outcome end
     local blocked={}; for k,v in pairs(blacklist) do if v then blocked[#blocked+1]=k end end; table.sort(blocked)
@@ -596,6 +648,7 @@ local function ready()
     local q=profile.q
     if not q.Enabled then return nil,'ENABLE_YUNA_QB_AIMBOT' end
     if q.MouseAimbot.Enabled then return nil,'YUNA_MOUSE_AIM_ACTIVE' end
+    if q.AutoThrowType.Enabled~=true then return nil,'ENABLE_YUNA_AUTO_THROW_TYPE' end
     if profile.state.Status.Value~='InPlay' or profile.state.Throwable.Value~=true then return nil,'WAIT_THROWABLE_PLAY' end
     if not me.Team or me.Neutral then return nil,'WAIT_TEAM' end
     local model,root,head,hum=body(me)
@@ -772,6 +825,16 @@ local function tick(now)
         -- Field context exists for every role. Discover/refresh it before any
         -- Yuna, active-play, equipped-ball, or already-attempted return below.
         local lineReady=readLines(now)
+        if not initialFieldDiscovered and lines.initialComplete and groundReason()=='ACCEPTED' then
+            initialFieldDiscovered=true
+        end
+        -- Bound initial discovery, not normal hidden markers/dead plays after
+        -- discovering the field. No Yuna setting needs to change while waiting.
+        if not initialFieldDiscovered and now-fieldStarted>=CFG.FieldDiscoverySeconds then
+            fatalError=clean('Field discovery timeout; ground='..groundReason()
+                ..'; known='..select(2,observedGround())..'; scanComplete='..tostring(lines.initialComplete==true))
+            log('FIELD_DISCOVERY_ERROR',fatalError); controller.Stop('FIELD_DISCOVERY_TIMEOUT'); return
+        end
         if renderReceivers and receiverMenu and receiverMenu.Visible then renderReceivers(now) end
         if profile and (not aliveConnection(profile.preview) or not aliveConnection(profile.release)) then
             releaseChoice(); profile=nil; nextDiscovery=0; log('PROFILE','Disconnected; rediscovering')
