@@ -43,7 +43,8 @@ local fatalError, stopReason = 'NONE', 'NONE'
 local attempts, sent, ambiguous, relinquishments, nativeCalls = 0, 0, 0, 0, 0
 local receiverRejects={}
 local maxTick=0
-local fieldStarted, initialFieldDiscovered = os.clock(), false
+local fieldWaitSince, fieldWaitSeconds, initialFieldDiscovered, failureNotified = nil, 0, false, false
+local function resetFieldWait() fieldWaitSince=nil; fieldWaitSeconds=0 end
 local usedTools = setmetatable({}, {__mode='k'})
 local possession = {tool=nil, model=nil, wasReady=false, epoch=0, since=0}
 local lines={status='SEARCHING',ground=nil,los=nil,forward=nil,at=0,since=0,generation=0,
@@ -434,6 +435,9 @@ function controller.GetReport()
         'GROUND_KNOWN|'..describeGround((observedGround())),
         'INITIAL_FIELD_DISCOVERED|'..tostring(initialFieldDiscovered),
         'FIELD_DISCOVERY_DEADLINE_SECONDS|'..CFG.FieldDiscoverySeconds,
+        'FIELD_WAIT_POLICY|READY_QB_POSSESSION_ONLY; NO_PREGAME_STARTUP_COUNTDOWN',
+        'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
+        'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|YUNA; NO_SELECTEDTYPE_OR_AUTO_MODE_WRITES',
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
@@ -478,7 +482,7 @@ end
 function controller.Stop(reason)
     if cleanupComplete then return true end
     if not stopped then stopReason=clean(reason or 'USER_END') end
-    stopped=true; controller.IsStopped=true
+    stopped=true; controller.IsStopped=true; fieldWaitSince=nil
     releaseChoice()
     local remaining={}
     for _,connection in ipairs(connections) do
@@ -490,11 +494,20 @@ function controller.Stop(reason)
     cleanupComplete=#remaining==0 and gui==nil and lease==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
+    -- The loader's init pcall cannot see a later heartbeat failure. Notify it
+    -- after cleanup so its retained error/report view stays visible. Reentry
+    -- during loader rollback is idempotent and never resubmits this notice.
+    if fatalError~='NONE' and not failureNotified then
+        failureNotified=true
+        local message=stopReason..': '..fatalError
+        if type(context.ReportRuntimeError)=='function' then pcall(context.ReportRuntimeError,message)
+        elseif type(warn)=='function' then pcall(warn,'PELICAN stopped: '..message..'; report saved') end
+    end
     return cleanupComplete
 end
 function controller.SetAuto(value)
     auto=value==true
-    if not auto then releaseChoice() end
+    if not auto then resetFieldWait(); releaseChoice() end
     if autoButton then autoButton.Text=auto and 'AUTO ON' or 'AUTO OFF' end
     log('AUTO',auto)
 end
@@ -828,13 +841,6 @@ local function tick(now)
         if not initialFieldDiscovered and lines.initialComplete and groundReason()=='ACCEPTED' then
             initialFieldDiscovered=true
         end
-        -- Bound initial discovery, not normal hidden markers/dead plays after
-        -- discovering the field. No Yuna setting needs to change while waiting.
-        if not initialFieldDiscovered and now-fieldStarted>=CFG.FieldDiscoverySeconds then
-            fatalError=clean('Field discovery timeout; ground='..groundReason()
-                ..'; known='..select(2,observedGround())..'; scanComplete='..tostring(lines.initialComplete==true))
-            log('FIELD_DISCOVERY_ERROR',fatalError); controller.Stop('FIELD_DISCOVERY_TIMEOUT'); return
-        end
         if renderReceivers and receiverMenu and receiverMenu.Visible then renderReceivers(now) end
         if profile and (not aliveConnection(profile.preview) or not aliveConnection(profile.release)) then
             releaseChoice(); profile=nil; nextDiscovery=0; log('PROFILE','Disconnected; rediscovering')
@@ -842,7 +848,7 @@ local function tick(now)
         if not profile and now>=nextDiscovery then
             nextDiscovery=now+CFG.DiscoveryInterval
             local why; profile,why=discover()
-            if not profile then setGate(why); return end
+            if not profile then resetFieldWait(); setGate(why); return end
             log('PROFILE','Shared selector settings + native final solver + live release matched')
         end
         -- A continuous equipped/throwable possession permits exactly one request.
@@ -857,7 +863,7 @@ local function tick(now)
                 possession.epoch=possession.epoch+1
                 possession.tool,possession.model=currentTool,currentModel
                 possession.since=now
-                releaseChoice()
+                resetFieldWait(); releaseChoice()
                 log('POSSESSION',possession.epoch)
             end
             possession.wasReady=true
@@ -866,7 +872,7 @@ local function tick(now)
             possession.wasReady=false
         end
         local ball,why=ready()
-        if not ball then releaseChoice(); setGate(why); return end
+        if not ball then resetFieldWait(); releaseChoice(); setGate(why); return end
         if ball.nativeThrow and usedTools[ball.tool]~=possession.epoch then
             usedTools[ball.tool]=possession.epoch
             pending={tool=ball.tool,model=ball.model,target=choice and choice.player.Name or 'NATIVE',
@@ -874,19 +880,37 @@ local function tick(now)
             log('MANUAL','Native Throw animation owns this possession; no competing AUTO request')
         end
         if pending and usedTools[ball.tool]==possession.epoch then
+            resetFieldWait()
             setGate(pending.outcome=='NATIVE_MANUAL_THROW_UNCONFIRMED' and pending.outcome
                 or pending.outcome=='AMBIGUOUS_NO_RETRY' and 'REQUEST_AMBIGUOUS_NO_RETRY' or 'REQUEST_SENT_UNCONFIRMED')
             -- Do not keep a lock invisibly after a rejected/unknown request.
             if now-pending.at>1 then releaseChoice() end
             return
         end
-        if not lineReady then releaseChoice(); setGate(lines.status); return end
+        if lease and not ownsLock() then resetFieldWait(); releaseChoice(); setGate('EXTERNAL_NATIVE_LOCK_EDIT'); return end
+        if profile.q.Locked and not lease then resetFieldWait(); setGate('USER_NATIVE_LOCK_ACTIVE'); return end
+        if not lineReady and receiverMenu and receiverMenu.Visible then
+            resetFieldWait(); releaseChoice(); setGate('RECEIVER_MENU_OPEN'); return
+        end
+        if not lineReady then
+            -- Readiness above requires Yuna enabled, a live throwable play,
+            -- local equipped ball, and no native/manual request owning the play.
+            -- Pregame, missing Yuna/ball, dead plays and AUTO OFF never consume
+            -- this timer. Each new possession starts with the full allowance.
+            fieldWaitSince=fieldWaitSince or now
+            fieldWaitSeconds=math.max(0,now-fieldWaitSince)
+            if fieldWaitSeconds>=CFG.FieldDiscoverySeconds then
+                fatalError=clean('Field readiness timeout during throwable QB possession; status='..lines.status
+                    ..'; ground='..groundReason()..'; scanComplete='..tostring(lines.initialComplete==true))
+                log('FIELD_DISCOVERY_ERROR',fatalError); controller.Stop('FIELD_DISCOVERY_TIMEOUT'); return
+            end
+            releaseChoice(); setGate(lines.status); return
+        end
+        resetFieldWait()
         if possession.lineGeneration~=lines.generation then
             possession.lineGeneration=lines.generation; possession.since=now; releaseChoice()
         end
         if downfield(ball.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
-        if lease and not ownsLock() then releaseChoice(); setGate('EXTERNAL_NATIVE_LOCK_EDIT'); return end
-        if profile.q.Locked and not lease then setGate('USER_NATIVE_LOCK_ACTIVE'); return end
         local roster=Players:GetPlayers()
         if #roster>CFG.MaxRoster then releaseChoice(); setGate('ROSTER_LIMIT'); return end
         local receivers,defenders,seenRoster={},{},{}

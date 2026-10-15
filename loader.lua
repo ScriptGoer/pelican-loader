@@ -12,7 +12,7 @@ local manifest = {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "ff3-v15.4.2",
+            Name = "FF3 live", Game = "FF3", Ref = "ff3-v15.4.3",
             Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V15",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
@@ -228,6 +228,8 @@ local function fail(kind, message)
     stopInternal(kind, true)
     setStatus("PELICAN " .. kind)
     if gui then pcall(function() gui.Enabled = true end) end
+    if panel then pcall(function() panel.Visible = true end) end
+    if details then pcall(function() details.Text = session.GetReport():sub(1, 3600) end) end
     return session
 end
 
