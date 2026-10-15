@@ -24,7 +24,7 @@ A failed named-object check or runtime exception stops the trace and preserves i
 
 The final report is automatically copied through the supported clipboard API and written, when available, to **PELICAN_FF3_LOS_TRACE_REPORT.txt**; the executor-session fallback is `getgenv().PELICAN_FF3_LOS_TRACE_REPORT`. Send that report before quitting Roblox. API acceptance does not prove iOS clipboard readback. If the file/clipboard APIs are unavailable, the session report exists only until the executor session ends.
 
-This trace collects the missing checks. It does not claim a corrected live LOS or require repeating selection/aim/catch tests. The historical v15.4.1 change only added exception shutdown/reporting. The current loader uses the separately documented V16 planner.
+This trace collects the missing checks. It does not claim a corrected live LOS or require repeating selection/aim/catch tests. The historical v15.4.1 change only added exception shutdown/reporting. The current loader has withdrawn V16 and restored the native-mode baseline.
 
 ## Stop on exceptions
 
