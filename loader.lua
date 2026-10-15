@@ -12,8 +12,8 @@ local manifest = {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "ff3-v17",
-            Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V17",
+            Name = "FF3 live", Game = "FF3", Ref = "ff3-v18",
+            Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V18",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
         [81310542478972] = {
@@ -314,6 +314,8 @@ session.Context.LoaderBaseUrl = manifest.BaseUrl
 session.Context.LoaderRef = "main"
 if options.Threshold ~= nil and type(options.Threshold) ~= "table" then return fail("CONFIG", "Threshold options must be a table") end
 if options.ThresholdResume ~= nil and type(options.ThresholdResume) ~= "table" then return fail("CONFIG", "ThresholdResume must be a table") end
+if options.FF3 ~= nil and type(options.FF3) ~= "table" then return fail("CONFIG", "FF3 options must be a table") end
+session.Context.FF3Options = options.FF3 or {}
 session.Context.ThresholdOptions = options.Threshold or {}
 session.Context.ThresholdResume = options.ThresholdResume
 
