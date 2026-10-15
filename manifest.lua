@@ -8,8 +8,8 @@ return {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "ff3-v18",
-            Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V18",
+            Name = "FF3 live", Game = "FF3", Ref = "ff3-v19",
+            Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V19",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
         [81310542478972] = {
