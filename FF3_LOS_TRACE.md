@@ -1,4 +1,6 @@
-# Focused FF3 LOS trace
+# Historical focused FF3 LOS trace
+
+This V1 diagnostic is preserved from V15.4.1. The later supplied V15.4 gameplay report records completed discovery and 15 requests; the user reports working Auto QB. V16 addresses receiver/mode decisions. Do not repeat this LOS diagnostic solely to test the V16 planner. Its generator now pins the exact archived V15.4.1 input.
 
 The V15.4 live report reaches passing readiness (possession epoch/age recorded) but remains at LOS_SEARCHING. It visits 21,153 objects with 1,582 pending roots, never marks initial discovery complete, and makes zero native solver calls or automatic attempts. This establishes that the current block is before receiver aiming/release; becoming QB does not resolve it. No runtime exception is recorded in that report.
 
@@ -22,7 +24,7 @@ A failed named-object check or runtime exception stops the trace and preserves i
 
 The final report is automatically copied through the supported clipboard API and written, when available, to **PELICAN_FF3_LOS_TRACE_REPORT.txt**; the executor-session fallback is `getgenv().PELICAN_FF3_LOS_TRACE_REPORT`. Send that report before quitting Roblox. API acceptance does not prove iOS clipboard readback. If the file/clipboard APIs are unavailable, the session report exists only until the executor session ends.
 
-This trace collects the missing checks. It does not claim a corrected live LOS or require repeating selection/aim/catch tests. The normal loader's v15.4.1 change is only exception shutdown/reporting; LOS discovery behavior remains V15.4 pending trace evidence.
+This trace collects the missing checks. It does not claim a corrected live LOS or require repeating selection/aim/catch tests. The historical v15.4.1 change only added exception shutdown/reporting. The current loader uses the separately documented V16 planner.
 
 ## Stop on exceptions
 
