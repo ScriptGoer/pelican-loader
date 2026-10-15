@@ -12,8 +12,8 @@ local manifest = {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "ff3-v15.4.3",
-            Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V15",
+            Name = "FF3 live", Game = "FF3", Ref = "ff3-v17",
+            Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V17",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
         [81310542478972] = {
