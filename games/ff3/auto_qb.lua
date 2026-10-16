@@ -1,18 +1,18 @@
--- PELICAN_FF3_V20: coverage-aware native receiver/mode planning alongside Yuna.
+-- PELICAN_FF3_V21: coverage-aware native receiver/mode planning alongside Yuna.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
 -- InputBegan release. Read-only closure discovery; no getter replacement/hooks.
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
-local VERSION, KEY = 'PELICAN_FF3_V20', 'PELICAN_FF3_AUTO_QB'
+local VERSION, KEY = 'PELICAN_FF3_V21', 'PELICAN_FF3_AUTO_QB'
 local CFG = {Interval=.12, DiscoveryInterval=2, MaxRoster=64,
     Gravity=28,
     ThrowMargin=6, ThrowLane=4, Settle=0, MinPlayAge=0, MinDownfieldYards=6,
     MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20, PlanCalls=6, PlanSeconds=.008, CacheAge=.36, SafeGap=.4, ReceiverSwitchYards=5}
 local Players, Run, Input = game:GetService('Players'), game:GetService('RunService'), game:GetService('UserInputService')
 local me = Players.LocalPlayer
-if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V20 requires the observed FF3 live place') end
+if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V21 requires the observed FF3 live place') end
 local env = type(getgenv)=='function' and getgenv() or _G
 local prior = env[KEY]
 if prior and (type(prior.Stop)~='function' or prior.Stop('REPLACED')~=true) then error('PELICAN: previous Auto QB cleanup failed') end
@@ -49,6 +49,9 @@ local modeTransaction
 local lastDecision, decisionHistory, candidateEvidence = nil, {}, {}
 local sequence, ownedAnimation, observedThrow
 local cancelSequence, disposeAnimation
+local clearGuide, cancelJump, forecastGuide, drawGuide, updateJump
+local assistance={jumpCount=0,guideChecks=0,maxGuideSeconds=0,jumpMotion={ascent=false,airborne=false},
+    cancelledBurns=setmetatable({}, {__mode='k'}),jumpStatus='NOT_REQUESTED',jumpMethod='NONE'}
 local animationStatus, animationSource = 'NOT_REQUESTED', 'NONE'
 local lastSequenceOutcome='NONE'
 local frameCalls,maxFrameCalls,maxHeartbeat = 0,0,0
@@ -78,6 +81,9 @@ end
 local function finite(x) return type(x)=='number' and x==x and math.abs(x)<1e8 end
 local ff3Options=context.FF3Options or {}
 if type(ff3Options)~='table' then error('PELICAN: FF3 options must be a table') end
+for _,key in ipairs({'MovementGuide','PredictiveJump'}) do
+    if ff3Options[key]~=nil and type(ff3Options[key])~='boolean' then error('PELICAN: '..key..' must be boolean') end
+end
 for _,key in ipairs({'ReceiverSwitchYards'}) do
     local value=ff3Options[key]
     if value~=nil then
@@ -162,6 +168,8 @@ local function restoreModeTransaction()
     return owned
 end
 local function releaseChoice(keepWindows)
+    if clearGuide then clearGuide() end
+    if cancelJump then cancelJump('SELECTION_RELEASED') end
     if cancelSequence then cancelSequence('SELECTION_RELEASED') end
     choice=nil; restoreModeTransaction(); restoreLock(); if not keepWindows then clearWindows() end
 end
@@ -531,14 +539,23 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v20.2','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v21','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
         'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
-        'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|0',
-        'AUTO_JUMP_POLICY|REMOVED; NO_APEX_GATE',
-        'RELEASE_TIMING|IMMEDIATE_ON_VALID_WINDOW; NO_PLAY_SAFE_HOLD_OR_ANIMATION_WAIT',
+        'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
+        'AUTO_JUMP_POLICY|DEEP_OBSERVED_PEAK; PREDICTIVE_PREP; ONE_REQUEST_PER_POSSESSION',
+        'DEEP_POLICY|FLIGHT_EXCEEDS_CURRENT_NORMAL_JUMP_AIRTIME; NO_YARD_CUTOFF',
+        'BURN_CUT_CANCEL_DEGREES|45',
+        'GUIDE_MODEL|ADVISORY_NATIVE_CONTINUATION; HORIZONS_0.25_0.5_0.75; NO_AUTO_MOVEMENT; NEVER_RELEASE_AUTHORITY',
+        'JUMP_PEAK_AGE|'..(assistance.jumpMotion.apexAt and string.format('%.4f',os.clock()-assistance.jumpMotion.apexAt) or 'NONE'),
+        'AUTO_JUMP_STATUS|'..assistance.jumpStatus,'AUTO_JUMP_METHOD|'..assistance.jumpMethod,
+        'GUIDE_VISIBLE|'..tostring(assistance.guideUI~=nil and assistance.guideUI.Visible),
+        'GUIDE_TARGET|'..(assistance.guide and assistance.guide.player.Name or 'NONE'),
+        'GUIDE_OPEN_IN_SECONDS|'..(assistance.guide and string.format('%.2f',assistance.guide.lead) or 'NONE'),
+        'GUIDE_FORECAST_CHECKS|'..assistance.guideChecks,'GUIDE_MAX_SECONDS|'..string.format('%.6f',assistance.maxGuideSeconds),
+        'RELEASE_TIMING|SHORT_IMMEDIATE; DEEP_OBSERVED_PEAK; GUIDE_NEVER_GATES_RELEASE',
         'RELEASE_PREPARED|'..tostring(sequence~=nil),'RELEASE_PREPARE_OUTCOME|'..lastSequenceOutcome,'THROW_ANIMATION_STATUS|'..animationStatus,'THROW_ANIMATION_SOURCE|'..animationSource,
         'THROW_ANIMATION_PLAYING|'..tostring(ownedAnimation~=nil and ownedAnimation.track.IsPlaying==true),
         'THROW_ANIMATION_ASSET|'..(ownedAnimation and clean(ownedAnimation.asset) or 'NONE'),
@@ -607,8 +624,8 @@ function controller.Stop(reason)
         if not ok then remaining[#remaining+1]=connection end
     end
     connections=remaining; log('STOP',reason or 'USER_END'); gate='STOPPED'
-    if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil end end
-    cleanupComplete=#remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil
+    if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil;assistance.guideUI=nil;assistance.guideArrow=nil end end
+    cleanupComplete=#remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -630,7 +647,10 @@ function controller.SetAuto(value)
 end
 function controller.SetThrow(value)
     throwing=value==true
-    if not throwing and cancelSequence then cancelSequence('THROW_OFF') end
+    if not throwing then
+        if cancelSequence then cancelSequence('THROW_OFF') end
+        if cancelJump then cancelJump('THROW_OFF') end
+    end
     if throwButton then throwButton.Text=throwing and 'THR ON' or 'THR OFF' end
     log('THROW',throwing)
 end
@@ -1099,7 +1119,7 @@ local function coverage(shot,s,defenders)
         and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane or false
 end
 local function throwable(shot)
-    return shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane
+    return not shot.releaseBlocked and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane
         and (not shot.safetyOverTop or shot.mode=='Bullet')
 end
 local function better(a,b)
@@ -1246,6 +1266,7 @@ local function evaluate(receivers,indices,defenders,now)
         for _,mode in ipairs(plannerModes) do
             local shot=g.cache.shots[mode]
             if shot and now-shot.at<=CFG.CacheAge then
+                shot.releaseBlocked=assistance.cancelledBurns[r.player]==possession.epoch
                 local eligible,rejection=receiverReady(r.player,r.sample,now,shot.arrival)
                 if eligible then eligible,rejection=receivePossible(shot,r.sample) end
                 if eligible then
@@ -1280,8 +1301,167 @@ local function evaluate(receivers,indices,defenders,now)
     end
     return best
 end
+-- Advisory only: forecasts run after release work, reuse the native tuple,
+-- and never authorize/delay a throw or move the player's character.
+clearGuide=function()
+    assistance.guide=nil; assistance.guidePending=nil
+    if assistance.guideUI then assistance.guideUI.Visible=false end
+end
+cancelJump=function(reason)
+    local plan=assistance.jumpPlan
+    if plan and plan.owned and plan.hum.Jump==true then
+        local restored=pcall(function() plan.hum.Jump=plan.before end)
+        if not restored then assistance.jumpStatus='JUMP_RESTORE_FAILED';return false end
+    end
+    assistance.jumpPlan=nil
+    if plan then assistance.jumpStatus=reason or 'CANCELLED' end
+    return true
+end
+local function ascentTime(hum)
+    local gravity=workspace.Gravity
+    if not finite(gravity) or gravity<=0 then return end
+    if hum.UseJumpPower==true and finite(hum.JumpPower) and hum.JumpPower>0 then return hum.JumpPower/gravity end
+    if hum.UseJumpPower==false and finite(hum.JumpHeight) and hum.JumpHeight>0 then return math.sqrt(2*hum.JumpHeight/gravity) end
+end
+forecastGuide=function(data,now)
+    clearGuide()
+    if ff3Options.MovementGuide==false and ff3Options.PredictiveJump==false or not data or stopped or not auto or pending or usedTools[data.ball.tool]==possession.epoch
+        or receiverMenu and receiverMenu.Visible then return end
+    local r,ball=data.r,data.ball
+    local shot,s=r.shot,r.sample
+    if assistance.cancelledBurns[r.player]==possession.epoch then return end
+    if not shot or not shot.time or throwable(shot) or not receiverReady(r.player,s,now) then return end
+    local velocity=flat(s.v)
+    if velocity.Magnitude<CFG.MinMoveSpeed or not finite(ball.hum.WalkSpeed) or ball.hum.WalkSpeed<=0 then return end
+    local direction=velocity.Unit
+    local run=direction*ball.hum.WalkSpeed
+    local started=os.clock()
+    -- Planning horizons are advisory policy, not game catch-window calibration.
+    for _,lead in ipairs({.25,.5,.75}) do
+        if os.clock()-started>.001 then break end
+        local futureQB=ball.root.Position+run*lead
+        local arrival=shot.arrival+velocity*lead
+        if onField(futureQB) and onField(arrival) and (lines.goalToGo or downfield(futureQB)<=.5)
+            and (lines.goalToGo or downfield(arrival)>=CFG.MinDownfieldYards*3) then
+            local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,
+                velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
+            -- This is an estimated continuation, not an extra native solve.
+            -- Reject estimates exceeding the source's maximum release power.
+            if future.velocity.Magnitude<=100 then
+                local defenders={}
+                for i,d in ipairs(data.defenders) do defenders[i]={p=predict(d,lead),v=d.v,turn=d.turn,
+                    observedSpeed=d.observedSpeed,hum=d.hum,name=d.name} end
+                local receiver={p=predict(s,lead),v=s.v,turn=s.turn}
+                risk(future,receiver,defenders);coverage(future,receiver,defenders);assistance.guideChecks=assistance.guideChecks+1
+                if throwable(future) then
+                    assistance.guide={player=r.player,model=s.model,qbModel=ball.model,epoch=possession.epoch,
+                        generation=lines.generation,direction=direction,at=now,lead=lead,mode=shot.mode}
+                    local apex=ascentTime(ball.hum)
+                    if throwing and ff3Options.PredictiveJump~=false and apex and apex>0 and apex<=2
+                        and shot.mode~='Bullet' and shot.time>apex*2 and assistance.jumpEpoch~=possession.epoch then
+                        local at=now+math.max(0,lead-apex)
+                        if assistance.jumpPlan and assistance.jumpPlan.player==r.player and assistance.jumpPlan.model==ball.model then at=math.min(at,assistance.jumpPlan.at) end
+                        assistance.jumpPlan={player=r.player,model=ball.model,hum=ball.hum,epoch=possession.epoch,at=at}
+                        assistance.jumpStatus='PREDICTED_OPENING_PREPARED'
+                    end
+                    break
+                end
+            end
+        end
+    end
+    assistance.maxGuideSeconds=math.max(assistance.maxGuideSeconds,os.clock()-started)
+    if not assistance.guide and not sequence and assistance.jumpPlan and not assistance.jumpPlan.requested then cancelJump('PREDICTION_CLOSED') end
+end
+local function observeJump(now)
+    if not profile or not auto then assistance.jumpMotion={ascent=false,airborne=false};return end
+    local model,root,_,hum=body(me)
+    if not model then assistance.jumpMotion={ascent=false,airborne=false};return end
+    local state=hum:GetState()
+    local airborne=hum.FloorMaterial==Enum.Material.Air
+        and (state==Enum.HumanoidStateType.Jumping or state==Enum.HumanoidStateType.Freefall)
+    local vy=root.AssemblyLinearVelocity.Y
+    if not finite(vy) then error('Invalid QB vertical motion') end
+    local old=assistance.jumpMotion
+    if old.model~=model or old.hum~=hum then old={} end
+    local ascent=airborne and (old.airborne and old.ascent or vy>0) or false
+    local apex=airborne and old.airborne and old.apexAt or nil
+    if airborne and vy>0 then ascent=true end
+    if airborne and old.airborne and ascent and not apex and old.vy and old.vy>0 and vy<=0 then
+        apex=old.at+(now-old.at)*clamp(old.vy/(old.vy-vy),0,1)
+        assistance.jumpStatus='PEAK_OBSERVED';log('JUMP_PEAK',string.format('qbY=%.3f vy=%.3f',root.Position.Y,vy))
+    end
+    assistance.jumpMotion={model=model,hum=hum,airborne=airborne,ascent=ascent,apexAt=apex,vy=vy,at=now}
+end
+local function atPeak(now)
+    return assistance.jumpMotion.airborne and assistance.jumpMotion.ascent and assistance.jumpMotion.apexAt~=nil
+        and assistance.jumpMotion.vy<=0 and now-assistance.jumpMotion.apexAt>=0 and now-assistance.jumpMotion.apexAt<=.10
+end
+local function deepThrow(shot,hum)
+    local ascent=ascentTime(hum)
+    -- A timing policy relative to this character's normal jump, not an
+    -- invented official FF3 yardage/catch threshold. Missing jump parameters
+    -- conservatively keep elevated native modes behind observed peak release.
+    return ascent and shot.time>ascent*2 or not ascent and shot.mode~='Bullet'
+end
+updateJump=function(now)
+    local plan=assistance.jumpPlan
+    if not plan then return end
+    if stopped or not auto or not throwing or pending or plan.epoch~=possession.epoch or me.Character~=plan.model
+        or not choice or choice.player~=plan.player or not teammate(plan.player) or not ownsLock() or receiverMenu and receiverMenu.Visible then
+        cancelJump('CONTEXT_CHANGED'); return
+    end
+    if plan.requested then
+        if plan.hum.Jump~=true or assistance.jumpMotion.ascent then plan.owned=false end
+        if assistance.jumpMotion.model==plan.model and assistance.jumpMotion.ascent then plan.sawAscent=true;assistance.jumpStatus=assistance.jumpMotion.apexAt and 'PEAK_OBSERVED' or 'ASCENT_OBSERVED' end
+        if plan.sawAscent and not assistance.jumpMotion.airborne then cancelJump('LANDED_WITHOUT_REQUEST');return end
+        if not plan.sawAscent and now-plan.requested>=1 then
+            fatalError='Normal jump request produced no observed ascent; no ground deep fallback'
+            controller.Stop('AUTO_JUMP_NOT_OBSERVED')
+        end
+        return
+    end
+    local deep=sequence and sequence.deep
+    if not deep and (not assistance.guide or now-assistance.guide.at>.35) or now<plan.at then return end
+    local current=ready()
+    if not current or current.nativeThrow then cancelJump('QB_NOT_READY');return end
+    local hum=plan.hum
+    if hum.Jump==true then assistance.jumpStatus='USER_JUMP_ALREADY_PENDING';return end
+    if hum.FloorMaterial==Enum.Material.Air then return end
+    if hum.Sit or hum.PlatformStand or not hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
+        assistance.jumpStatus='NORMAL_JUMP_UNAVAILABLE';return
+    end
+    assistance.jumpEpoch=possession.epoch;assistance.jumpCount=assistance.jumpCount+1
+    plan.before=hum.Jump;plan.owned=hum.Jump~=true;hum.Jump=true
+    -- Normal local character API; no velocity, jump power, gravity or hooks.
+    assistance.jumpMethod='HUMANOID_JUMP'
+    if type(hum.ChangeState)=='function' then hum:ChangeState(Enum.HumanoidStateType.Jumping);assistance.jumpMethod='HUMANOID_JUMP_AND_CHANGE_STATE' end
+    plan.requested=now;assistance.jumpStatus='REQUESTED_WAIT_OBSERVED_PEAK'
+    log('AUTO_JUMP','method='..assistance.jumpMethod..'; peak required for deep release')
+end
+
+drawGuide=function(now)
+    if not assistance.guideUI then return end
+    if ff3Options.MovementGuide==false then assistance.guideUI.Visible=false;return end
+    local g=assistance.guide
+    if not g or stopped or not auto or pending or now-g.at>.35 or g.epoch~=possession.epoch
+        or g.generation~=lines.generation or g.qbModel~=me.Character or g.model~=g.player.Character
+        or not teammate(g.player) or not choice or choice.player~=g.player or receiverMenu and receiverMenu.Visible then
+        assistance.guideUI.Visible=false;return
+    end
+    local camera=workspace.CurrentCamera
+    if not camera then assistance.guideUI.Visible=false;return end
+    local right,forward=flat(camera.CFrame.RightVector),flat(camera.CFrame.LookVector)
+    if right.Magnitude<.001 or forward.Magnitude<.001 then assistance.guideUI.Visible=false;return end
+    local x,z=g.direction:Dot(right.Unit),g.direction:Dot(forward.Unit)
+    assistance.guideArrow.Rotation=math.deg(math.atan2 and math.atan2(x,z) or math.atan(x,z))
+    assistance.guideUI.Visible=true
+end
+
 local function holdManual(r,reason)
-    if cancelSequence then cancelSequence('MANUAL_LOCK_ONLY') end
+    if sequence and sequence.deep and r and sequence.player==r.player and reason=='MANUAL_LOCK_COVERED' then
+        assistance.cancelledBurns[r.player]=possession.epoch;log('BURN_CANCEL',r.player.Name..' BURN_COVERAGE_CLOSED')
+        cancelSequence('BURN_COVERAGE_CLOSED')
+    elseif cancelSequence then cancelSequence('MANUAL_LOCK_ONLY') end
     if stopped then return end
     if not r or not teammate(r.player) then releaseChoice(); setGate('NO_ACTIVE_DOWNFIELD_RECEIVER'); return end
     local eligible,rejection=receiverReady(r.player,r.sample,os.clock())
@@ -1337,8 +1517,12 @@ local function releaseNow(ball,selected,defenders,now)
     local shot,why=solve(selected.player,selected.shot.mode)
     if not shot then setGate(why); return end
     if stopped then return end
+    if assistance.cancelledBurns[selected.player]==possession.epoch then setGate('BURN_CANCELLED_THIS_POSSESSION');return end
     if os.clock()-now>.28 then setGate('DECISION_STALE_AFTER_NATIVE_SOLVER'); return end
     if not readLines(os.clock()) then releaseChoice(); setGate(lines.status); return end
+    local receiver,freshDefenders,changed=currentDefenders(selected.player,os.clock())
+    if not receiver or not freshDefenders then setGate(changed or 'PLAYER_OBSERVATIONS_CHANGED');return end
+    selected.sample,defenders=receiver,freshDefenders
     eligible,rejection=receiverReady(selected.player,selected.sample,os.clock(),shot.arrival)
     if not eligible then releaseChoice(); setGate(rejection); return end
     eligible,rejection=receivePossible(shot,selected.sample)
@@ -1347,6 +1531,15 @@ local function releaseNow(ball,selected,defenders,now)
     if sequence.fastBurn and not lines.goalToGo and not shot.clearBurn then setGate('BURN_COVERAGE_CHANGED'); return end
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
     if shot.margin<CFG.ThrowMargin or shot.lane<CFG.ThrowLane then setGate('DEFENDER_INTERCEPTION_RISK'); return end
+    if deepThrow(shot,current.hum) and not sequence.deep then setGate('DEEP_TRAJECTORY_CHANGED_REQUIRE_PEAK');return end
+    local _,receiverRoot=body(selected.player)
+    if sequence.deep then
+        local movement=receiverRoot and flat(receiverRoot.AssemblyLinearVelocity)
+        if not movement or movement.Magnitude<CFG.MinMoveSpeed or movement.Unit:Dot(sequence.route)<=math.cos(math.pi/4) then
+            setGate('RECEIVER_BROKE_BURN');return
+        end
+    end
+    if sequence.deep and not atPeak(os.clock()) then setGate('WAIT_OBSERVED_JUMP_PEAK');return end
     if not throwing or not auto or not ownsLock() or not teammate(selected.player) or receiverMenu and receiverMenu.Visible then return end
     current,reason=ready()
     if not current or current.tool~=ball.tool or current.remote~=ball.remote then setGate(reason or 'POSSESSION_CHANGED'); return end
@@ -1361,7 +1554,7 @@ local function releaseNow(ball,selected,defenders,now)
     local evidence=string.format('%s %s %s t=%.3f power=%.2f arrival=%.2f,%.2f,%.2f margin=%.2f lane=%.2f residual=%.2f',
         selected.player.Name,shot.mode,shot.window,shot.time,shot.power,shot.arrival.X,shot.arrival.Y,shot.arrival.Z,
         shot.margin,shot.lane,shot.receiverResidual)
-    lastDecision={summary=evidence,actors={},release=string.format('distanceYards=%.2f clearBurn=%s safetyOverTop=%s qbY=%.3f qbVy=%.3f animation=%s',shot.passYards,tostring(shot.clearBurn),tostring(shot.safetyOverTop),current.root.Position.Y,current.root.AssemblyLinearVelocity.Y,animationStatus)}
+    lastDecision={summary=evidence,actors={},release=string.format('distanceYards=%.2f clearBurn=%s safetyOverTop=%s qbY=%.3f qbVy=%.3f peakAge=%s animation=%s',shot.passYards,tostring(shot.clearBurn),tostring(shot.safetyOverTop),current.root.Position.Y,current.root.AssemblyLinearVelocity.Y,assistance.jumpMotion.apexAt and string.format('%.4f',now-assistance.jumpMotion.apexAt) or 'NONE',animationStatus)}
     local function actor(name,s)
         return string.format('%s p=%.2f,%.2f,%.2f v=%.2f,%.2f,%.2f runSpeed=%.2f',
             name,s.p.X,s.p.Y,s.p.Z,s.v.X,s.v.Y,s.v.Z,runSpeed(s))
@@ -1384,6 +1577,11 @@ local function releaseNow(ball,selected,defenders,now)
     end
     preserve(false)
 end
+local function abortPreparedBurn(seq,reason)
+    assistance.cancelledBurns[seq.player]=possession.epoch
+    log('BURN_CANCEL',seq.player.Name..' '..reason)
+    cancelSequence(reason);releaseChoice();setGate(reason)
+end
 local function driveSequence(now)
     local seq=sequence
     if not seq then return end
@@ -1394,33 +1592,69 @@ local function driveSequence(now)
         or not teammate(seq.player) or receiverMenu and receiverMenu.Visible then
         cancelSequence(why or 'RELEASE_CONTEXT_CHANGED'); return
     end
-    if not seq.animationStarted then
-        seq.animation=startAnimation(ball,now); seq.animationStarted=true
+    if seq.deep then
+        local _,root=body(seq.player)
+        local velocity=root and flat(root.AssemblyLinearVelocity)
+        if not velocity or velocity.Magnitude<CFG.MinMoveSpeed or velocity.Unit:Dot(seq.route)<=math.cos(math.pi/4) then
+            abortPreparedBurn(seq,'RECEIVER_BROKE_BURN');return
+        end
+        -- Revalidate coverage at the existing decision rate while airborne;
+        -- per-frame work is only local motion/peak observation and cancellation.
+        if now-seq.checked>=CFG.Interval then
+            seq.checked=now
+            if not readLines(now) then cancelSequence(lines.status);releaseChoice();setGate(lines.status);return end
+            local receiver,defenders,rejection=currentDefenders(seq.player,now)
+            if not receiver or not defenders then abortPreparedBurn(seq,'BURN_OBSERVATIONS_CHANGED');return end
+            seq.selected.sample=receiver
+            local eligible=receiverReady(seq.player,receiver,now)
+            local shot=eligible and solve(seq.player,seq.selected.shot.mode) or nil
+            if stopped then return end
+            if not shot or not receivePossible(shot,receiver) then abortPreparedBurn(seq,'BURN_TRAJECTORY_LOST');return end
+            risk(shot,receiver,defenders);coverage(shot,receiver,defenders)
+            if not throwable(shot) or seq.fastBurn and not lines.goalToGo and not shot.clearBurn then
+                abortPreparedBurn(seq,'BURN_COVERAGE_CLOSED');return
+            end
+            seq.selected.shot=shot
+        end
+        if not assistance.jumpMotion.ascent and now-seq.started>=1 and (not assistance.jumpPlan or not assistance.jumpPlan.requested) then
+            abortPreparedBurn(seq,'UNOBSERVED_JUMP_WINDOW');return
+        end
+        if not atPeak(now) then
+            if assistance.jumpMotion.apexAt and now-assistance.jumpMotion.apexAt>.10 then abortPreparedBurn(seq,'JUMP_PEAK_MISSED');return end
+            if not assistance.jumpMotion.airborne then
+                if assistance.jumpEpoch==possession.epoch and not assistance.jumpPlan then abortPreparedBurn(seq,'JUMP_ALREADY_USED');return end
+                if not assistance.jumpPlan then assistance.jumpPlan={player=seq.player,model=ball.model,hum=ball.hum,epoch=possession.epoch,at=now} end
+                updateJump(now)
+                if assistance.jumpStatus=='NORMAL_JUMP_UNAVAILABLE' then abortPreparedBurn(seq,'NORMAL_JUMP_UNAVAILABLE');return end
+            end
+            if stopped then return end
+            setGate('WAIT_OBSERVED_JUMP_PEAK');return
+        end
     end
-    -- Animation starts without delaying an available passing window.
+    if not seq.animationStarted then seq.animation=startAnimation(ball,now);seq.animationStarted=true end
     if stopped or sequence~=seq then return end
     local receiver,defenders,rejection=currentDefenders(seq.player,now)
-    if not receiver or not defenders then cancelSequence(rejection or 'RECEIVER_OBSERVATION_LOST'); setGate(rejection or 'RECEIVER_OBSERVATION_LOST'); return end
+    if not receiver or not defenders then cancelSequence(rejection or 'RECEIVER_OBSERVATION_LOST');setGate(rejection or 'RECEIVER_OBSERVATION_LOST');return end
     seq.selected.sample=receiver
     releaseNow(ball,seq.selected,defenders,now)
     if stopped or sequence~=seq then return end
-    if usedTools[ball.tool]==possession.epoch then
-        -- Let the owned animation finish normally after a successful API call.
-        sequence=nil; lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
+    if usedTools[ball.tool]==possession.epoch then sequence=nil;lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
     else
-        cancelSequence('FINAL_RELEASE_CHECK_BLOCKED')
-        opportunities[seq.player]=nil; shotCache[seq.player]=nil
+        if seq.deep then abortPreparedBurn(seq,'FINAL_PEAK_RELEASE_BLOCKED')
+        else cancelSequence('FINAL_RELEASE_CHECK_BLOCKED');opportunities[seq.player]=nil;shotCache[seq.player]=nil end
     end
 end
 local function submit(ball,selected,defenders,now)
     local fastBurn=selected.shot.clearBurn==true
+    local deep=deepThrow(selected.shot,ball.hum)
     if sequence and (sequence.player~=selected.player or sequence.model~=selected.player.Character
-        or sequence.epoch~=possession.epoch or sequence.fastBurn~=fastBurn) then cancelSequence('TARGET_OR_DISTANCE_CHANGED') end
+        or sequence.epoch~=possession.epoch or sequence.deep~=deep) then cancelSequence('TARGET_OR_TRAJECTORY_CHANGED') end
     if not sequence then
+        local velocity=flat(selected.sample.v)
         sequence={player=selected.player,model=selected.player.Character,qbModel=ball.model,hum=ball.hum,tool=ball.tool,epoch=possession.epoch,
-            selected=selected,fastBurn=fastBurn,started=now}
+            selected=selected,fastBurn=fastBurn,deep=deep,route=velocity.Magnitude>0 and velocity.Unit or V(),checked=now,started=now}
         lastSequenceOutcome='PREPARING'
-        log('PREPARE',selected.player.Name..' '..(fastBurn and 'CLEAR_BURN_IMMEDIATE' or 'NATIVE_RELEASE'))
+        log('PREPARE',selected.player.Name..' '..(deep and 'DEEP_OBSERVED_PEAK' or 'SHORT_IMMEDIATE'))
     else sequence.selected=selected end
     driveSequence(now)
 end
@@ -1434,6 +1668,7 @@ local function tick(now)
         scanLines()
         -- Field context exists for every role. Discover/refresh it before any
         -- Yuna, active-play, equipped-ball, or already-attempted return below.
+        assistance.guidePending=nil;assistance.guideDirty=true
         local lineReady=readLines(now)
         if not initialFieldDiscovered and (lineReady or lines.initialComplete and groundReason()=='ACCEPTED') then
             initialFieldDiscovered=true
@@ -1567,7 +1802,7 @@ local function tick(now)
         if not final then
             if shotCache[best.player] then shotCache[best.player].shots[best.shot.mode]=nil end
             opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..failed); return end
-        best.shot=final
+        best.shot=final;final.releaseBlocked=assistance.cancelledBurns[best.player]==possession.epoch
         if shotCache[best.player] then shotCache[best.player].shots[final.mode]=best.shot end
         local eligible,rejection=receiverReady(best.player,best.sample,now,final.arrival)
         if not eligible then holdManual(best,'MANUAL_LOCK_'..rejection); return end
@@ -1575,7 +1810,8 @@ local function tick(now)
         if not eligible then shotCache[best.player]=nil; opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..rejection); return end
         risk(best.shot,best.sample,defenders); coverage(best.shot,best.sample,defenders)
         if not throwable(best.shot) then
-            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_COVERED'); return
+            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_COVERED')
+            assistance.guidePending={r=best,ball=ball,defenders=defenders};return
         end
         best.manualOnly=false
         classify(best.shot,best.sample,defenders)
@@ -1603,8 +1839,16 @@ local function button(text,x,width,y)
     b.Parent=gui; return b
 end
 local built,buildError=pcall(function()
-    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V20'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
+    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V21'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('WAIT YUNA',-166,138)
+    assistance.guideUI=Instance.new('Frame');assistance.guideUI.Name='RunGuide';assistance.guideUI.Size=UDim2.fromOffset(36,42)
+    assistance.guideUI.Position=UDim2.new(.5,-18,0,136);assistance.guideUI.BackgroundTransparency=1;assistance.guideUI.Visible=false;assistance.guideUI.Parent=gui
+    assistance.guideArrow=Instance.new('TextLabel');assistance.guideArrow.Name='Arrow';assistance.guideArrow.Text='↑';assistance.guideArrow.TextSize=26
+    assistance.guideArrow.Size=UDim2.fromOffset(32,28);assistance.guideArrow.Position=UDim2.fromOffset(2,0);assistance.guideArrow.BackgroundTransparency=1
+    assistance.guideArrow.Font=Enum.Font.GothamMedium;assistance.guideArrow.TextColor3=Color3.fromRGB(125,230,190);assistance.guideArrow.Parent=assistance.guideUI
+    local guideCaption=Instance.new('TextLabel');guideCaption.Text='RUN';guideCaption.TextSize=9;guideCaption.BackgroundTransparency=1
+    guideCaption.Position=UDim2.fromOffset(0,28);guideCaption.Size=UDim2.fromOffset(36,12);guideCaption.Font=Enum.Font.GothamMedium
+    guideCaption.TextColor3=Color3.new(1,1,1);guideCaption.Parent=assistance.guideUI
     local kill=button('X',-26,22); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
     receiverButton=button('WR LIST',-166,162,112); receiverButton.Name='Receivers'
@@ -1642,7 +1886,7 @@ local built,buildError=pcall(function()
     connect(prev.Activated,function() page=math.max(1,page-1); renderReceivers() end)
     connect(nextPage.Activated,function() page=page+1; renderReceivers() end)
     connect(receiverButton.Activated,function()
-        receiverMenu.Visible=not receiverMenu.Visible; if cancelSequence then cancelSequence('RECEIVER_MENU') end; clearWindows(); if choice then choice.openSince=nil end
+        receiverMenu.Visible=not receiverMenu.Visible; if cancelSequence then cancelSequence('RECEIVER_MENU') end;clearGuide();cancelJump('RECEIVER_MENU'); clearWindows(); if choice then choice.openSince=nil end
         if receiverMenu.Visible then renderReceivers() end
     end)
     autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false; receiverMenu.Visible=false
@@ -1669,12 +1913,22 @@ local built,buildError=pcall(function()
     connect(Run.Heartbeat,function()
         if stopped then return end
         local now=os.clock(); frameCalls=0
-        local ok,err=pcall(function() driveSequence(now) end)
+        local ok,err=pcall(function() observeJump(now);driveSequence(now) end)
         if not ok then fatalError=clean(err); log('RELEASE_ERROR',err); controller.Stop('RELEASE_SEQUENCE_ERROR'); return end
         tick(now)
+        if stopped then return end
+        -- Release work above always gets priority over advisory forecasting.
+        local guideOK,guideError=pcall(function()
+            if assistance.guideDirty then
+                assistance.guideDirty=false;local data=assistance.guidePending;forecastGuide(data,os.clock())
+                if not assistance.guide and not sequence and assistance.jumpPlan and not assistance.jumpPlan.requested then cancelJump('PREDICTION_CLOSED') end
+            end
+            updateJump(os.clock());drawGuide(os.clock())
+        end)
+        if not guideOK then fatalError=clean(guideError);log('GUIDE_ERROR',guideError);controller.Stop('GUIDE_RUNTIME_ERROR');return end
         maxHeartbeat=math.max(maxHeartbeat,os.clock()-now)
     end)
 end)
 if not built then controller.Stop('STARTUP_ERROR'); error(buildError) end
-log('START','Validated direct field; immediate safe release; covered manual lock')
+log('START','Observed deep peak; cancel sold burn; advisory parallel-run forecast; Goal LOS bypass')
 return controller
