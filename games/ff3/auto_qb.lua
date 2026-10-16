@@ -1,19 +1,18 @@
--- PELICAN_FF3_V19: coverage-aware native receiver/mode planning alongside Yuna.
+-- PELICAN_FF3_V20: coverage-aware native receiver/mode planning alongside Yuna.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
 -- InputBegan release. Read-only closure discovery; no getter replacement/hooks.
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
-local VERSION, KEY = 'PELICAN_FF3_V19', 'PELICAN_FF3_AUTO_QB'
+local VERSION, KEY = 'PELICAN_FF3_V20', 'PELICAN_FF3_AUTO_QB'
 local CFG = {Interval=.12, DiscoveryInterval=2, MaxRoster=64,
-    Gravity=28, MaxFlight=4.5, MaxRange=330, SelectMargin=3, SelectLane=2,
-    ThrowMargin=6, ThrowLane=4, Settle=.24, MinPlayAge=2, MinDownfieldYards=6,
-    MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20, PlanCalls=6, PlanSeconds=.008, CacheAge=.36, SafeGap=.4, ReceiverSwitchYards=5,
-    AnimationRelease=.19, AnimationTimeout=1.25}
+    Gravity=28,
+    ThrowMargin=6, ThrowLane=4, Settle=0, MinPlayAge=0, MinDownfieldYards=6,
+    MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20, PlanCalls=6, PlanSeconds=.008, CacheAge=.36, SafeGap=.4, ReceiverSwitchYards=5}
 local Players, Run, Input = game:GetService('Players'), game:GetService('RunService'), game:GetService('UserInputService')
 local me = Players.LocalPlayer
-if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V19 requires the observed FF3 live place') end
+if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V20 requires the observed FF3 live place') end
 local env = type(getgenv)=='function' and getgenv() or _G
 local prior = env[KEY]
 if prior and (type(prior.Stop)~='function' or prior.Stop('REPLACED')~=true) then error('PELICAN: previous Auto QB cleanup failed') end
@@ -34,7 +33,7 @@ end
 local controller = {Version=VERSION, IsStopped=false}
 local connections, events, counts, samples = {}, {}, {}, {}
 local profile, lease, choice, pending, gui, status, autoButton, throwButton, copyButton
-local receiverButton, paceButton, receiverMenu, renderReceivers
+local receiverButton, receiverMenu, renderReceivers
 local blacklist=env.PELICAN_FF3_WR_BLACKLIST
 if type(blacklist)~='table' or getmetatable(blacklist)~=nil then blacklist={}; env.PELICAN_FF3_WR_BLACKLIST=blacklist end
 local stopped, cleanupComplete, inTick, auto, throwing, expanded = false, false, false, true, true, false
@@ -60,8 +59,9 @@ local usedTools = setmetatable({}, {__mode='k'})
 local possession = {tool=nil, model=nil, wasReady=false, epoch=0, since=0}
 local lines={status='SEARCHING',ground=nil,los=nil,forward=nil,at=0,since=0,generation=0,
     parts=setmetatable({}, {__mode='k'}),markerCount=0,labels={},
-    scan={q={workspace,pg,core},tail=core and 3 or 2,i=1,stack={},
+    scan={q=core and {pg,core,workspace} or {pg,workspace},tail=core and 3 or 2,i=1,stack={},
         queued=setmetatable({}, {__mode='k'}),seen=setmetatable({}, {__mode='k'}),visited=0},
+    readySource='NONE',fastStatus='NOT_CHECKED',rootChecked=-math.huge,rootDirty=true,rootNames={},
     complete=false,capped=false,negativeText=setmetatable({}, {__mode='k'})}
 local V = Vector3.new
 local function clean(x) return tostring(x):gsub('[\r\n|]', ' '):sub(1,180) end
@@ -334,6 +334,40 @@ local function marker(o,ground)
     end
     return role,p.Z,p.X-dx/2,p.X+dx/2
 end
+local function namedFieldReady(now,ground)
+    local known,why=observedGround()
+    if why~='ACCEPTED' or known~=ground then lines.fastStatus='KNOWN_GROUND_UNVERIFIED'; return false end
+    local blue=workspace:FindFirstChild('LineDown')
+    local yellow=workspace:FindFirstChild('LineTogo')
+    if lines.rootNames.blue~=blue or lines.rootNames.yellow~=yellow then lines.rootDirty=true end
+    if lines.rootDirty or now-lines.rootChecked>=.5 then
+        local children=workspace:GetChildren()
+        if #children>4096 then lines.fastStatus='ROOT_CHECK_LIMIT'; return false end
+        local blueCount,yellowCount=0,0
+        for _,child in ipairs(children) do
+            if child.Name=='LineDown' then blueCount=blueCount+1 end
+            if child.Name=='LineTogo' then yellowCount=yellowCount+1 end
+            if markerCandidate(child) then lines.parts[child]=true end
+            if child~=ground and groundShape(child) then
+                lines.groundAmbiguous=true; lines.ambiguousGround=describeGround(child)
+            end
+        end
+        lines.rootNames={blue=blue,yellow=yellow,blueCount=blueCount,yellowCount=yellowCount}
+        lines.rootDirty=false; lines.rootChecked=now
+    end
+    if lines.groundAmbiguous then lines.fastStatus='GROUND_AMBIGUOUS'; return false end
+    if lines.rootNames.blueCount~=1 or lines.rootNames.yellowCount~=1 then lines.fastStatus='NAMED_ROOTS_MISSING_OR_DUPLICATE'; return false end
+    for _,entry in ipairs({{blue,'BLUE'},{yellow,'YELLOW'}}) do
+        local object,expected=entry[1],entry[2]
+        if not observedLine(object) then lines.fastStatus='NAMED_ROOT_CLASS_OR_ANCESTRY'; return false end
+        local role,_,lo,hi=marker(object,ground)
+        if role~=expected or hi-lo<130 or hi-lo>175 or math.abs((lo+hi)/2)>=5 then
+            lines.fastStatus='NAMED_ROOT_GEOMETRY_COLOR_OR_VISIBILITY'; return false
+        end
+    end
+    lines.fastStatus='VALIDATED_NAMED_ROOT_PAIR'
+    return true
+end
 local function downReading()
     local result
     for _,o in ipairs(lines.labels) do
@@ -365,13 +399,15 @@ local function readLines(now)
     retainObservedLines()
     local ground=lines.ground
     local function missing(reason)
-        lines.status=reason; lines.los=nil; lines.forward=nil; lines.since=0; return false
+        lines.status=reason; lines.los=nil; lines.forward=nil; lines.since=0; lines.readySource='NONE'; return false
     end
     -- The bound applies to actual marker geometry, never the number of visited
     -- map objects or unrelated Beams. It recovers as markers disappear/hide.
     lines.capped=false; lines.markerCount=0
     if not ground or not groundShape(ground) or lines.groundAmbiguous then return missing('LOS_GROUND_UNKNOWN') end
-    if not lines.initialComplete then return missing('LOS_SEARCHING') end
+    local namedReady=namedFieldReady(now,ground)
+    if not lines.initialComplete and not namedReady then return missing('LOS_SEARCHING') end
+    if lines.groundAmbiguous then return missing('LOS_GROUND_UNKNOWN') end
     local clusters={BLUE={},YELLOW={},GOAL={}}; local inspected=0
     for o in pairs(lines.parts) do
         inspected=inspected+1
@@ -424,6 +460,7 @@ local function readLines(now)
     if not same or not sameMeaning then lines.since=now end
     lines.confirmedLos,lines.confirmedForward,lines.confirmedTargetZ,lines.confirmedGround=los,forward,yellow.z,ground
     lines.los,lines.forward,lines.at=los,forward,now
+    lines.readySource=namedReady and 'VALIDATED_NAMED_ROOT_PAIR' or 'COMPLETE_BACKGROUND_SCAN'
     lines.status=now-lines.since>=.25 and 'OBSERVED_LINES_STABLE' or 'LOS_SETTLING'
     return lines.status=='OBSERVED_LINES_STABLE'
 end
@@ -437,6 +474,7 @@ local function onField(point)
 end
 local function onLineAdded(o)
     if stopped then return end
+    if o.Parent==workspace then lines.rootDirty=true end
     if observedLine(o) then lines.parts[o]=true end
     if groundShape(o) or partCandidate(o) then enqueueLine(o)
     elseif instance(o,'Beam') then
@@ -456,6 +494,7 @@ function controller.GetReport()
         'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
         'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
+        'LOCK_ONLY|'..tostring(choice~=nil and choice.manualOnly==true),
         'TARGET|'..(choice and choice.player.Name or 'NONE'),'MODE|'..(choice and choice.shot.mode or 'NONE'),
         'ATTEMPTS|'..attempts,'REQUEST_SENT|'..sent,'AMBIGUOUS_REQUESTS|'..ambiguous,
         'NATIVE_SOLVER_CALLS|'..nativeCalls,'EXTERNAL_LOCK_EDITS|'..relinquishments,'MAX_TICK_SECONDS|'..string.format('%.6f',maxTick),
@@ -465,7 +504,8 @@ function controller.GetReport()
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
-        'LOS_DISCOVERY_PROFILE|V15.4.2_OBSERVED_GROUND_PATH_NATIVE_MODES',
+        'LOS_DISCOVERY_PROFILE|V20_VALIDATED_NAMED_FIELD_AND_BACKGROUND_SCAN',
+        'LOS_READY_SOURCE|'..lines.readySource,'LOS_FAST_PATH_STATUS|'..lines.fastStatus,
         'GROUND_REASON|'..groundReason(),'GROUND_SOURCE|'..(lines.groundSource or 'NONE'),
         'GROUND_CACHED|'..describeGround(lines.ground),
         'GROUND_AMBIGUITY_OTHER|'..(lines.ambiguousGround or 'NONE'),
@@ -478,14 +518,14 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v19','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v20','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
-        'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|'..CFG.MaxFlight,'MODEL_MAX_RANGE_STUDS|'..CFG.MaxRange,
+        'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
-        'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|CLEAR_BURN_FIRST; SHORT_COMPLETIONS_OTHERWISE',
+        'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|0',
         'AUTO_JUMP_POLICY|REMOVED; NO_APEX_GATE',
-        'BURN_RELEASE_POLICY|NO_PLAY_AGE_OR_SAFE_HOLD_OR_ANIMATION_DELAY; FRESH_SAFETY_RECHECK',
+        'RELEASE_TIMING|IMMEDIATE_ON_VALID_WINDOW; NO_PLAY_SAFE_HOLD_OR_ANIMATION_WAIT',
         'RELEASE_PREPARED|'..tostring(sequence~=nil),'RELEASE_PREPARE_OUTCOME|'..lastSequenceOutcome,'THROW_ANIMATION_STATUS|'..animationStatus,'THROW_ANIMATION_SOURCE|'..animationSource,
         'THROW_ANIMATION_PLAYING|'..tostring(ownedAnimation~=nil and ownedAnimation.track.IsPlaying==true),
         'THROW_ANIMATION_ASSET|'..(ownedAnimation and clean(ownedAnimation.asset) or 'NONE'),
@@ -855,16 +895,6 @@ local function startAnimation(ball,now)
     animationStatus='OWN_NATIVE_THROW_STARTED'; animationSource=ownedAnimation.source
     return {track=track,at=now}
 end
-local function animationReady(now)
-    if not sequence.animation then return true end
-    local track=sequence.animation.track
-    if finite(track.TimePosition) and track.TimePosition>=CFG.AnimationRelease then return true end
-    if now-sequence.animation.at>=CFG.AnimationTimeout then
-        fatalError='Native Throw animation did not reach its source-observed release time'
-        controller.Stop('THROW_ANIMATION_NOT_ADVANCING')
-    end
-    return false
-end
 
 local function ready()
     if stopped or (context.IsCancelled and context.IsCancelled()) then return nil,'STOPPED' end
@@ -1030,7 +1060,7 @@ local function receivePossible(shot,s)
     if distance>budget+math.max(.01,budget*.0001) then return false,'RECEIVER_CANNOT_REACH_NATIVE_ARRIVAL' end
     return true
 end
-local function safetyAhead(s,defenders,time)
+local function safetyAhead(s,defenders,time,shot)
     local v=flat(s.v)
     if v.Magnitude<=0 or not lines.forward or v:Dot(lines.forward)<=0 then return false end
     local route=v.Unit
@@ -1039,14 +1069,18 @@ local function safetyAhead(s,defenders,time)
         local along=relative:Dot(route)
         if along>=0 and relative:Dot(lines.forward)>0 then
             local lateral=(relative-route*along).Magnitude
-            if lateral<=runSpeed(d)*time+(4.5+d.turn*3) then return true,d.name end
+            if lateral<=runSpeed(d)*time+(4.5+d.turn*3) then
+                local arrival=shot and shot.arrival or predict(s,time)
+                local clearance=flat(arrival-d.p).Magnitude-runSpeed(d)*time-(4.5+d.turn*3)
+                if clearance<CFG.ThrowMargin or shot and lane(shot,d)<CFG.ThrowLane then return true,d.name end
+            end
         end
     end
     return false
 end
 local function coverage(shot,s,defenders)
     local forward=lines.forward and flat(s.v):Dot(lines.forward)>0
-    shot.safetyOverTop,shot.safetyName=safetyAhead(s,defenders,shot.time)
+    shot.safetyOverTop,shot.safetyName=safetyAhead(s,defenders,shot.time,shot)
     local ahead=flat(shot.arrival-s.p):Dot(flat(s.v))>0
     shot.clearBurn=forward and ahead and not shot.safetyOverTop
         and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane or false
@@ -1124,9 +1158,9 @@ local function solve(player,mode)
     origin,velocity=nativeVector(origin),nativeVector(velocity)
     if not vector(origin) or not vector(velocity) or not finite(time) or time<.05
         or not finite(power) or power<=0 or power>100 or velocity.Magnitude<1 or not modes[returnedMode] then return nil,'NATIVE_SOLVER_INVALID' end
-    if time>CFG.MaxFlight then return nil,'NATIVE_FLIGHT_OUTSIDE_MODEL_HORIZON' end
-    if flat(player.Character:FindFirstChild('HumanoidRootPart').Position-origin).Magnitude>CFG.MaxRange then return nil,'NATIVE_RANGE' end
     local arrival=origin+velocity*time-V(0,.5*CFG.Gravity*time*time,0)
+    local ground=lines.ground
+    if ground and arrival.Y<ground.Position.Y+ground.Size.Y*.5-.01 then return nil,'NATIVE_ARRIVAL_BELOW_FIELD' end
     aimpoint=nativeVector(aimpoint)
     if not vector(aimpoint) then return nil,'NATIVE_AIMPOINT_INVALID' end
     -- #7 precedes native vertical lead and AntiOOB. Only compare X/Z and
@@ -1203,7 +1237,7 @@ local function evaluate(receivers,indices,defenders,now)
                 if eligible then
                     risk(shot,r.sample,defenders); coverage(shot,r.sample,defenders)
                     candidateEvidence[#candidateEvidence+1]=string.format('%s %s t=%.3f p=%.2f margin=%.2f lane=%.2f release=%s clearBurn=%s safetyOverTop=%s',r.player.Name,mode,shot.time,shot.power,shot.margin,shot.lane,tostring(throwable(shot)),tostring(shot.clearBurn),tostring(shot.safetyOverTop))
-                    if shot.margin>=CFG.SelectMargin and shot.lane>=CFG.SelectLane and (not shot.safetyOverTop or shot.mode=='Bullet') and better(shot,bestShot) then bestShot=shot end
+                    if better(shot,bestShot) then bestShot=shot end
                 else receiverRejects[r.player.Name..'/'..mode]=rejection end
             end
         end
@@ -1226,8 +1260,33 @@ local function evaluate(receivers,indices,defenders,now)
         if iReady and not (best.shot.clearBurn and not incumbent.shot.clearBurn)
             and (not bReady or incumbent.shot.passYards-best.shot.passYards<CFG.ReceiverSwitchYards) then
             best=incumbent
-        elseif not bReady and not iReady then best=incumbent end
+        elseif not bReady and not iReady
+            and best.shot.margin-incumbent.shot.margin<CFG.ThrowMargin
+            and best.shot.lane-incumbent.shot.lane<CFG.ThrowLane then best=incumbent end
     end
+    return best
+end
+local function holdManual(r,reason)
+    if cancelSequence then cancelSequence('MANUAL_LOCK_ONLY') end
+    if stopped then return end
+    if not r or not teammate(r.player) then releaseChoice(); setGate('NO_ACTIVE_DOWNFIELD_RECEIVER'); return end
+    local eligible,rejection=receiverReady(r.player,r.sample,os.clock())
+    if not eligible then releaseChoice(); setGate(rejection); return end
+    if not lock(r.player) then releaseChoice(); setGate('NATIVE_LOCK_BUSY'); return end
+    local stable=choice and choice.player==r.player and choice.model==r.player.Character
+    r.model=r.player.Character; r.manualOnly=true; r.openSince=nil
+    r.shot=r.shot or {mode='NATIVE',window='MANUAL_ONLY'}
+    choice=r
+    if not stable then log('MANUAL_SELECT',r.player.Name) end
+    setGate(reason or 'MANUAL_LOCK_COVERED')
+end
+local function fallbackReceiver(receivers)
+    local best,incumbent
+    for _,r in ipairs(receivers) do
+        if not best or r.rank>best.rank then best=r end
+        if choice and choice.player==r.player and choice.model==r.player.Character then incumbent=r end
+    end
+    if best and incumbent and best.rank-incumbent.rank<CFG.ReceiverSwitchYards*3 then return incumbent end
     return best
 end
 local function currentDefenders(player,now)
@@ -1273,7 +1332,6 @@ local function releaseNow(ball,selected,defenders,now)
     risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)
     if sequence.fastBurn and not shot.clearBurn then setGate('BURN_COVERAGE_CHANGED'); return end
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
-    if not shot.clearBurn and now-possession.since<CFG.MinPlayAge then setGate('LET_ROUTES_DEVELOP'); return end
     if shot.margin<CFG.ThrowMargin or shot.lane<CFG.ThrowLane then setGate('DEFENDER_INTERCEPTION_RISK'); return end
     if not throwing or not auto or not ownsLock() or not teammate(selected.player) or receiverMenu and receiverMenu.Visible then return end
     current,reason=ready()
@@ -1325,9 +1383,7 @@ local function driveSequence(now)
     if not seq.animationStarted then
         seq.animation=startAnimation(ball,now); seq.animationStarted=true
     end
-    -- A no-safety burn is released immediately; animation still plays, but its
-    -- cosmetic windup cannot hold an already verified fleeting opening.
-    if not seq.fastBurn and not animationReady(now) then setGate('WAIT_NATIVE_THROW_ANIMATION'); return end
+    -- Animation starts without delaying an available passing window.
     if stopped or sequence~=seq then return end
     local receiver,defenders,rejection=currentDefenders(seq.player,now)
     if not receiver or not defenders then cancelSequence(rejection or 'RECEIVER_OBSERVATION_LOST'); setGate(rejection or 'RECEIVER_OBSERVATION_LOST'); return end
@@ -1365,7 +1421,7 @@ local function tick(now)
         -- Field context exists for every role. Discover/refresh it before any
         -- Yuna, active-play, equipped-ball, or already-attempted return below.
         local lineReady=readLines(now)
-        if not initialFieldDiscovered and lines.initialComplete and groundReason()=='ACCEPTED' then
+        if not initialFieldDiscovered and (lineReady or lines.initialComplete and groundReason()=='ACCEPTED') then
             initialFieldDiscovered=true
         end
         if renderReceivers and receiverMenu and receiverMenu.Visible then renderReceivers(now) end
@@ -1456,15 +1512,15 @@ local function tick(now)
                     -- The qualified native lock accepts a teammate independently
                     -- of cursor/camera position. Read the field, not just the view.
                     if eligible then
-                        local estimate=clamp(flat(s.p-ball.head.Position).Magnitude/95,.05,CFG.MaxFlight)
+                        local estimate=math.max(.05,flat(s.p-ball.head.Position).Magnitude/95)
                         receivers[#receivers+1]={player=player,sample=s,estimate=estimate,rank=0}
                     else receiverRejects[player.Name]=rejection; opportunities[player]=nil; shotCache[player]=nil end
                 elseif player.Team~=me.Team then defenders[#defenders+1]=s end
             end
         end
         for player in pairs(samples) do if not seenRoster[player] then samples[player]=nil; opportunities[player]=nil; shotCache[player]=nil end end
-        if observationMissing then releaseChoice(); setGate('SAMPLING_PLAYERS'); return end
         if receiverMenu and receiverMenu.Visible then releaseChoice(); setGate('RECEIVER_MENU_OPEN'); return end
+        if observationMissing then holdManual(fallbackReceiver(receivers),'MANUAL_LOCK_WAIT_DEFENDER_OBSERVATIONS'); return end
         for _,r in ipairs(receivers) do
             local separation=45
             for _,d in ipairs(defenders) do separation=math.min(separation,flat(predict(r.sample,r.estimate)-predict(d,r.estimate)).Magnitude) end
@@ -1486,7 +1542,7 @@ local function tick(now)
         end
         local best=evaluate(receivers,indices,defenders,now)
         if stopped then return end
-        if not best then releaseChoice(true); setGate('NO_SAFE_NATIVE_TRAJECTORY'); return end
+        if not best then holdManual(fallbackReceiver(receivers),'MANUAL_LOCK_NO_VALID_AUTO_TRAJECTORY'); return end
         local previous=choice
         local stable=previous and previous.player==best.player and previous.model==best.player.Character
         best.since=stable and choice.since or now; best.model=best.player.Character
@@ -1496,26 +1552,22 @@ local function tick(now)
         local final,failed=solve(best.player,best.shot.mode)
         if not final then
             if shotCache[best.player] then shotCache[best.player].shots[best.shot.mode]=nil end
-            opportunities[best.player]=nil; releaseChoice(true); setGate(failed); return end
+            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..failed); return end
         best.shot=final
         if shotCache[best.player] then shotCache[best.player].shots[final.mode]=best.shot end
         local eligible,rejection=receiverReady(best.player,best.sample,now,final.arrival)
-        if not eligible then releaseChoice(); setGate(rejection); return end
+        if not eligible then holdManual(best,'MANUAL_LOCK_'..rejection); return end
         eligible,rejection=receivePossible(best.shot,best.sample)
-        if not eligible then shotCache[best.player]=nil; opportunities[best.player]=nil; releaseChoice(); setGate(rejection); return end
+        if not eligible then shotCache[best.player]=nil; opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..rejection); return end
         risk(best.shot,best.sample,defenders); coverage(best.shot,best.sample,defenders)
         if not throwable(best.shot) then
-            best.openSince=nil; opportunities[best.player]=nil
-            if shotCache[best.player] then shotCache[best.player].shots[best.shot.mode]=nil end
+            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_COVERED'); return
         end
+        best.manualOnly=false
         classify(best.shot,best.sample,defenders)
         if not stable then log('SELECT',best.player.Name..' '..best.shot.mode) end
         if not throwing then setGate('SELECT_ONLY'); return end
         if receiverMenu and receiverMenu.Visible then setGate('RECEIVER_MENU_OPEN'); return end
-        if not best.shot.clearBurn then
-            if now-possession.since<CFG.MinPlayAge then setGate('LET_ROUTES_DEVELOP'); return end
-            if not best.openSince or now-best.openSince+1e-6<CFG.Settle then setGate('WAIT_STABLE_OPEN_RECEIVER'); return end
-        end
         submit(ball,best,defenders,now)
     end)
     inTick=false
@@ -1537,12 +1589,11 @@ local function button(text,x,width,y)
     b.Parent=gui; return b
 end
 local built,buildError=pcall(function()
-    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V19'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
+    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V20'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('WAIT YUNA',-166,138)
     local kill=button('X',-26,22); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
-    receiverButton=button('WR LIST',-166,78,112); receiverButton.Name='Receivers'
-    paceButton=button('WAIT 2s',-85,81,112); paceButton.Name='Pace'
+    receiverButton=button('WR LIST',-166,162,112); receiverButton.Name='Receivers'
     receiverMenu=Instance.new('Frame'); receiverMenu.Name='ReceiverList'; receiverMenu.Size=UDim2.fromOffset(162,134)
     receiverMenu.Position=UDim2.new(1,-166,0,137); receiverMenu.BackgroundColor3=Color3.fromRGB(24,30,28); receiverMenu.Parent=gui
     local title=Instance.new('TextLabel'); title.Name='Title'; title.Size=UDim2.fromOffset(158,22); title.Position=UDim2.fromOffset(2,0)
@@ -1580,11 +1631,10 @@ local built,buildError=pcall(function()
         receiverMenu.Visible=not receiverMenu.Visible; if cancelSequence then cancelSequence('RECEIVER_MENU') end; clearWindows(); if choice then choice.openSince=nil end
         if receiverMenu.Visible then renderReceivers() end
     end)
-    connect(paceButton.Activated,function() CFG.MinPlayAge=CFG.MinPlayAge>=4 and 2 or CFG.MinPlayAge+1; paceButton.Text='WAIT '..CFG.MinPlayAge..'s'; log('PACE',CFG.MinPlayAge) end)
-    autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false; paceButton.Visible=false; receiverMenu.Visible=false
+    autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false; receiverMenu.Visible=false
     connect(status.Activated,function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
-        receiverButton.Visible=expanded; paceButton.Visible=expanded
+        receiverButton.Visible=expanded
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
@@ -1612,5 +1662,5 @@ local built,buildError=pcall(function()
     end)
 end)
 if not built then controller.Stop('STARTUP_ERROR'); error(buildError) end
-log('START','Native modes; clear burn with no safety releases without yardage/jump/hold delay')
+log('START','Validated direct field; immediate safe release; covered manual lock')
 return controller
