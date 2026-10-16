@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v20` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v20.1` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V20 validates the known field/LineDown/LineTogo layout before unrelated map traversal finishes, releases valid passing windows without development/safe-hold/animation waits, removes fixed deep flight/range cutoffs and checks predicted defender reach before calling an over-top safety. Covered eligible receivers remain locked for manual throws; automatic release still requires a valid window. Ordinary short-pass preference and clear-burn priority remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. AFK/blacklist/LOS gates, native setting restoration, one-attempt ownership, red kill and genuine-error reports remain. [Behavior, validation, assumptions and rollback](FF3_AUTO_QB.md). Local synthetic checks do not establish live catches or phone performance.
+**FF3:** V20.1 pauses Auto QB on visible goal-to-go downs, releases its receiver lock and resumes on normal downs. Normal Yuna manual input stays available, and the LOS timeout is disarmed during this intentional pause. It validates the known field/LineDown/LineTogo layout before unrelated map traversal finishes, releases valid passing windows without development/safe-hold/animation waits, removes fixed deep flight/range cutoffs and checks predicted defender reach before calling an over-top safety. Covered eligible receivers remain locked for manual throws; automatic release still requires a valid window. Ordinary short-pass preference and clear-burn priority remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. AFK/blacklist/LOS gates, native setting restoration, one-attempt ownership, red kill and genuine-error reports remain. [Behavior, validation, assumptions and rollback](FF3_AUTO_QB.md). Local synthetic checks do not establish live catches or phone performance.
 
 **LOS search:** the V15.2 live report finished scanning but found zero active markers. The V2 live search report confirms `workspace.LineDown` and `workspace.LineTogo` are Parts whose visible geometry passes existing checks. Run the separate [V3 search diagnostic](FF3_LOS_SEARCH.md) from any role to inspect the user-identified blue LOS `LineDown`, exact failed checks, and changes during plays. It offers a short clipboard export and selectable, paged REPORT fallback. It stops Pelican Auto QB and never throws; V3 fixes GUI Vector2 sampling errors, and normal routing uses the V20 planner while the diagnostic retains its historical discovery path. The earlier zero-marker failure's exact live trigger remains uncertain.
 

@@ -61,7 +61,7 @@ local lines={status='SEARCHING',ground=nil,los=nil,forward=nil,at=0,since=0,gene
     parts=setmetatable({}, {__mode='k'}),markerCount=0,labels={},
     scan={q=core and {pg,core,workspace} or {pg,workspace},tail=core and 3 or 2,i=1,stack={},
         queued=setmetatable({}, {__mode='k'}),seen=setmetatable({}, {__mode='k'}),visited=0},
-    readySource='NONE',fastStatus='NOT_CHECKED',rootChecked=-math.huge,rootDirty=true,rootNames={},
+    goalToGo=false,readySource='NONE',fastStatus='NOT_CHECKED',rootChecked=-math.huge,rootDirty=true,rootNames={},
     complete=false,capped=false,negativeText=setmetatable({}, {__mode='k'})}
 local V = Vector3.new
 local function clean(x) return tostring(x):gsub('[\r\n|]', ' '):sub(1,180) end
@@ -261,6 +261,13 @@ local function enqueueLine(o)
     if scan.seen[o] or scan.queued[o] then return end
     scan.tail=scan.tail+1; scan.q[scan.tail]=o; scan.queued[o]=true; lines.complete=false
 end
+local function downValue(raw)
+    local text=raw:gsub('<[^>]*>',''):gsub('^%s+',''):gsub('%s+$','')
+    local lower=text:lower()
+    if lower:match('^%d+%a*%s*&%s*goal$') or lower:match('^%d+%a*%s+and%s+goal$') then return 'GOAL' end
+    local yards=tonumber(text:match('^[1-4]%a%a%s*&%s*(%d+)$'))
+    if yards and yards>=1 and yards<=30 then return yards end
+end
 local function scanLines()
     local scan=lines.scan; local work=0; local deadline=os.clock()+.0015
     while work<96 and os.clock()<deadline do
@@ -286,7 +293,7 @@ local function scanLines()
                 elseif instance(o,'TextLabel') or instance(o,'TextButton') then
                     if not (gui and o:IsDescendantOf(gui)) then
                         if #lines.labels<256 then lines.labels[#lines.labels+1]=o
-                        elseif o.Text:lower():match('^[1-4]%a%a%s*&%s*') then
+                        elseif downValue(o.Text) then
                             for i,old in ipairs(lines.labels) do
                                 if not old.Parent or lines.negativeText[old] then lines.labels[i]=o; break end
                             end
@@ -369,15 +376,12 @@ local function namedFieldReady(now,ground)
     return true
 end
 local function downReading()
-    local result
+    local result,conflict,goalToGo
     for _,o in ipairs(lines.labels) do
         if o.Parent and lines.negativeText[o]~=o.Text then
             local raw=o.Text
-            local text=raw:gsub('<[^>]*>',''):gsub('^%s+',''):gsub('%s+$','')
-            local yards=text:match('^[1-4]%a%a%s*&%s*(%d+)$')
-            yards=yards and tonumber(yards)
-            if text:lower():match('^[1-4]%a%a%s*&%s*goal$') then yards='GOAL' end
-            if yards=='GOAL' or type(yards)=='number' and yards>=1 and yards<=30 then
+            local yards=downValue(raw)
+            if yards then
                 local shown=o:IsDescendantOf(pg) or core and o:IsDescendantOf(core); local at=o
                 for _=1,16 do
                     if not at then break end
@@ -386,13 +390,15 @@ local function downReading()
                 end
                 local cam=workspace.CurrentCamera
                 if shown and (not cam or o.AbsolutePosition.Y<cam.ViewportSize.Y*.4) then
-                    if result and result~=yards then return nil,'CONFLICTING_DOWN_HUD' end
+                    if yards=='GOAL' then goalToGo=true end
+                    if result and result~=yards then conflict='CONFLICTING_DOWN_HUD' end
                     result=yards
                 end
             else lines.negativeText[o]=raw end
         end
     end
-    return result
+    if conflict then return nil,conflict,goalToGo==true end
+    return result,nil,goalToGo==true
 end
 local function readLines(now)
     retainObservedGround()
@@ -401,6 +407,10 @@ local function readLines(now)
     local function missing(reason)
         lines.status=reason; lines.los=nil; lines.forward=nil; lines.since=0; lines.readySource='NONE'; return false
     end
+    local yards,conflict,goalToGo=downReading()
+    lines.goalToGo=goalToGo
+    if goalToGo then return missing('GOAL_TO_GO_PAUSED') end
+    if conflict then return missing(conflict) end
     -- The bound applies to actual marker geometry, never the number of visited
     -- map objects or unrelated Beams. It recovers as markers disappear/hide.
     lines.capped=false; lines.markerCount=0
@@ -435,16 +445,9 @@ local function readLines(now)
     end
     if #valid.BLUE~=1 then return missing('LOS_BLUE_MISSING_OR_AMBIGUOUS') end
     local blue,yellow=valid.BLUE[1],valid.YELLOW[1]
-    local yards,conflict=downReading()
-    if conflict then return missing(conflict) end
-    if yards=='GOAL' and math.abs(blue.z)>=120 and math.abs(blue.z)<150 then
-        yellow=nil
-        for _,g in ipairs(valid.GOAL) do if g.z*blue.z>0 then if yellow then return missing('LOS_GOAL_AMBIGUOUS') end; yellow=g end end
-        if not yellow then return missing('LOS_GOAL_UNKNOWN') end
-    elseif #valid.YELLOW~=1 then return missing('LOS_YELLOW_MISSING_OR_AMBIGUOUS') end
+    if #valid.YELLOW~=1 then return missing('LOS_YELLOW_MISSING_OR_AMBIGUOUS') end
     local delta=yellow.z-blue.z
-    local minGap,maxGap=yards=='GOAL' and .5 or 2,yards=='GOAL' and 31 or 90
-    if math.abs(delta)<minGap or math.abs(delta)>maxGap then return missing('LOS_LINE_DISTANCE_INVALID') end
+    if math.abs(delta)<2 or math.abs(delta)>90 then return missing('LOS_LINE_DISTANCE_INVALID') end
     if type(yards)=='number' and math.abs(math.abs(delta)/3-yards)>.8 then return missing('LOS_DOWN_HUD_MISMATCH') end
     local cf=ground.CFrame
     local los=ground.Position+cf.UpVector*.5-cf.LookVector*blue.z
@@ -505,6 +508,7 @@ function controller.GetReport()
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
         'LOS_DISCOVERY_PROFILE|V20_VALIDATED_NAMED_FIELD_AND_BACKGROUND_SCAN',
+        'GOAL_TO_GO_PAUSED|'..tostring(lines.goalToGo),'GOAL_TO_GO_POLICY|PAUSE_AUTO_AND_RELEASE_LOCK; RESUME_NORMAL_DOWNS',
         'LOS_READY_SOURCE|'..lines.readySource,'LOS_FAST_PATH_STATUS|'..lines.fastStatus,
         'GROUND_REASON|'..groundReason(),'GROUND_SOURCE|'..(lines.groundSource or 'NONE'),
         'GROUND_CACHED|'..describeGround(lines.ground),
@@ -518,7 +522,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v20','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v20.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
@@ -1316,7 +1320,7 @@ local function releaseNow(ball,selected,defenders,now)
     local current,reason=ready()
     if not current or current.tool~=ball.tool then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
-    if not readLines(now) then setGate(lines.status); return end
+    if not readLines(now) then releaseChoice(); setGate(lines.status); return end
     if downfield(current.root.Position)>.5 then setGate('QB_PAST_LOS'); return end
     local eligible,rejection=receiverReady(selected.player,selected.sample,now)
     if not eligible then releaseChoice(); setGate(rejection); return end
@@ -1454,6 +1458,7 @@ local function tick(now)
             if pending and possession.wasReady then pending.outcome='POSSESSION_ENDED; THROW_NOT_VERIFIED' end
             possession.wasReady=false
         end
+        if lines.goalToGo then resetFieldWait(); releaseChoice(); setGate('GOAL_TO_GO_PAUSED'); return end
         local ball,why=ready()
         if not ball then resetFieldWait(); releaseChoice(); setGate(why); return end
         if not refreshNativeInputs() then resetFieldWait(); releaseChoice(); setGate('NATIVE_LEAD_CHANGED'); return end
