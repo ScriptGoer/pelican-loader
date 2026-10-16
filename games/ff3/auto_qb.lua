@@ -408,8 +408,17 @@ local function readLines(now)
         lines.status=reason; lines.los=nil; lines.forward=nil; lines.since=0; lines.readySource='NONE'; return false
     end
     local yards,conflict,goalToGo=downReading()
+    if lines.goalToGo~=goalToGo then lines.generation=lines.generation+1 end
     lines.goalToGo=goalToGo
-    if goalToGo then return missing('GOAL_TO_GO_PAUSED') end
+    if goalToGo then
+        -- Goal-to-go disables only LOS-derived checks. Never reuse a previous
+        -- play's line/direction or guess an attack direction from route/camera.
+        lines.los=nil; lines.forward=nil; lines.since=0; lines.at=now
+        if not ground or not groundShape(ground) or lines.groundAmbiguous then return missing('FIELD_GROUND_UNKNOWN') end
+        lines.readySource='HUD_GOAL_TO_GO_LOS_BYPASS'
+        lines.status='GOAL_TO_GO_LOS_BYPASSED'
+        return true
+    end
     if conflict then return missing(conflict) end
     -- The bound applies to actual marker geometry, never the number of visited
     -- map objects or unrelated Beams. It recovers as markers disappear/hide.
@@ -508,7 +517,7 @@ function controller.GetReport()
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
         'LOS_DISCOVERY_PROFILE|V20_VALIDATED_NAMED_FIELD_AND_BACKGROUND_SCAN',
-        'GOAL_TO_GO_PAUSED|'..tostring(lines.goalToGo),'GOAL_TO_GO_POLICY|PAUSE_AUTO_AND_RELEASE_LOCK; RESUME_NORMAL_DOWNS',
+        'GOAL_TO_GO_LOS_BYPASSED|'..tostring(lines.goalToGo),'GOAL_TO_GO_POLICY|BYPASS_LOS_ONLY; AUTO_QB_ACTIVE; RESTORE_NORMAL_DOWNS',
         'LOS_READY_SOURCE|'..lines.readySource,'LOS_FAST_PATH_STATUS|'..lines.fastStatus,
         'GROUND_REASON|'..groundReason(),'GROUND_SOURCE|'..(lines.groundSource or 'NONE'),
         'GROUND_CACHED|'..describeGround(lines.ground),
@@ -522,7 +531,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v20.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v20.2','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
@@ -536,9 +545,9 @@ function controller.GetReport()
         'WINDOW|'..(choice and choice.shot.window or 'NONE'),'PLANNER_MAX_CALLS|'..maxPlanCalls,'PLANNER_DEFERRED|'..planDeferred,
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
-        'TARGET_DEPTH_YARDS|'..(choice and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
+        'TARGET_DEPTH_YARDS|'..(choice and not lines.goalToGo and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
         'OPEN_HOLD_SECONDS|'..(choice and choice.openSince and string.format('%.2f',os.clock()-choice.openSince) or 'NONE'),
-        'RECEIVER_READINESS|CURRENT_POSITION_BEYOND_LOS; OBSERVED_RECENT_CONTINUOUS_MOVEMENT',
+        'RECEIVER_READINESS|'..(lines.goalToGo and 'GOAL_LOS_EXEMPT' or 'CURRENT_POSITION_BEYOND_LOS')..'; OBSERVED_RECENT_CONTINUOUS_MOVEMENT',
         'RUNTIME_VALIDATION|UNVERIFIED_IN_ROBLOX','JUMP_CATCH_CALIBRATION|MISSING; NO_ADDED_JUMP_BULLET',
         'RELEASE|SOURCE_NATIVE_SOLVER_OUTPUT; ONE_REQUEST_PER_POSSESSION; NO_AUTOMATIC_RETRY'}
     for _,name in ipairs(observedLineNames) do
@@ -956,18 +965,18 @@ end
 local function receiverReady(player,s,now,point)
     if controller.IsBlacklisted(player) then return false,'BLACKLISTED' end
     if not teammate(player) then return false,'NOT_CURRENT_TEAMMATE' end
-    if not lines.los or lines.status~='OBSERVED_LINES_STABLE' or now-lines.at>.3 then return false,'LOS_UNVERIFIED' end
+    if not lines.goalToGo and (not lines.los or lines.status~='OBSERVED_LINES_STABLE' or now-lines.at>.3) then return false,'LOS_UNVERIFIED' end
     if not s or s.n<2 or now-s.at>.3 then return false,'MOVEMENT_UNVERIFIED' end
     local model,root=body(player)
     if not model or model~=s.model then return false,'MOVEMENT_UNVERIFIED' end
     if not onField(root.Position) then return false,'OFF_FIELD' end
-    if downfield(root.Position)<CFG.MinDownfieldYards*3 then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
+    if not lines.goalToGo and downfield(root.Position)<CFG.MinDownfieldYards*3 then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
     if not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
     if not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
     local travel=0
     for i=2,#s.path do travel=travel+flat(s.path[i].p-s.path[i-1].p).Magnitude end
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
-    if point and (downfield(point)<CFG.MinDownfieldYards*3 or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
+    if point and (not lines.goalToGo and downfield(point)<CFG.MinDownfieldYards*3 or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
     return true
 end
 local function predict(s,t) return s.p+s.v*t end
@@ -1121,6 +1130,7 @@ local function classify(shot,s,defenders)
         if not nearDist or dist<nearDist then nearest,nearDist=db,dist end
     end
     if not nearest then shot.window='OPEN'
+    elseif not lines.forward then shot.window='COVERAGE_WINDOW'
     elseif flat(shot.arrival-nearest):Dot(route)>0 and route:Dot(lines.forward)>0 then shot.window='BURN_WINDOW'
     elseif flat(nearest-shot.arrival):Dot(lines.forward)>0 then shot.window='UNDERNEATH_WINDOW'
     else shot.window='LATERAL_WINDOW' end
@@ -1321,7 +1331,7 @@ local function releaseNow(ball,selected,defenders,now)
     if not current or current.tool~=ball.tool then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
     if not readLines(now) then releaseChoice(); setGate(lines.status); return end
-    if downfield(current.root.Position)>.5 then setGate('QB_PAST_LOS'); return end
+    if not lines.goalToGo and downfield(current.root.Position)>.5 then setGate('QB_PAST_LOS'); return end
     local eligible,rejection=receiverReady(selected.player,selected.sample,now)
     if not eligible then releaseChoice(); setGate(rejection); return end
     local shot,why=solve(selected.player,selected.shot.mode)
@@ -1334,14 +1344,14 @@ local function releaseNow(ball,selected,defenders,now)
     eligible,rejection=receivePossible(shot,selected.sample)
     if not eligible then releaseChoice(); setGate(rejection); return end
     risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)
-    if sequence.fastBurn and not shot.clearBurn then setGate('BURN_COVERAGE_CHANGED'); return end
+    if sequence.fastBurn and not lines.goalToGo and not shot.clearBurn then setGate('BURN_COVERAGE_CHANGED'); return end
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
     if shot.margin<CFG.ThrowMargin or shot.lane<CFG.ThrowLane then setGate('DEFENDER_INTERCEPTION_RISK'); return end
     if not throwing or not auto or not ownsLock() or not teammate(selected.player) or receiverMenu and receiverMenu.Visible then return end
     current,reason=ready()
     if not current or current.tool~=ball.tool or current.remote~=ball.remote then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
-    if downfield(current.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
+    if not lines.goalToGo and downfield(current.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
     local unit=shot.velocity.Unit
     -- Readable live InputBegan request, exactly: Vector3.new(70000000) is X only.
     -- No retry: FireServer acceptance does not confirm a throw or server state.
@@ -1458,7 +1468,6 @@ local function tick(now)
             if pending and possession.wasReady then pending.outcome='POSSESSION_ENDED; THROW_NOT_VERIFIED' end
             possession.wasReady=false
         end
-        if lines.goalToGo then resetFieldWait(); releaseChoice(); setGate('GOAL_TO_GO_PAUSED'); return end
         local ball,why=ready()
         if not ball then resetFieldWait(); releaseChoice(); setGate(why); return end
         if not refreshNativeInputs() then resetFieldWait(); releaseChoice(); setGate('NATIVE_LEAD_CHANGED'); return end
@@ -1499,7 +1508,7 @@ local function tick(now)
         if possession.lineGeneration~=lines.generation then
             possession.lineGeneration=lines.generation; possession.since=now; releaseChoice()
         end
-        if downfield(ball.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
+        if not lines.goalToGo and downfield(ball.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
         local roster=Players:GetPlayers()
         if #roster>CFG.MaxRoster then releaseChoice(); setGate('ROSTER_LIMIT'); return end
         local receivers,defenders,seenRoster={},{},{}
@@ -1530,7 +1539,7 @@ local function tick(now)
             local separation=45
             for _,d in ipairs(defenders) do separation=math.min(separation,flat(predict(r.sample,r.estimate)-predict(d,r.estimate)).Magnitude) end
             r.rank=separation-r.estimate*3
-            r.burnLook=flat(r.sample.v):Dot(lines.forward)>0 and not safetyAhead(r.sample,defenders,r.estimate)
+            r.burnLook=lines.forward~=nil and flat(r.sample.v):Dot(lines.forward)>0 and not safetyAhead(r.sample,defenders,r.estimate)
         end
         table.sort(receivers,function(a,b) if a.burnLook~=b.burnLook then return a.burnLook end; if a.estimate~=b.estimate then return a.estimate<b.estimate end; if a.rank==b.rank then return a.player.Name<b.player.Name end; return a.rank>b.rank end)
         if #receivers==0 then releaseChoice(); setGate('NO_ACTIVE_DOWNFIELD_RECEIVER'); return end
