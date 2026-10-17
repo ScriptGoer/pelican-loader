@@ -1,21 +1,21 @@
-# Yuna GUI interaction recorder V1
+# Yuna GUI interaction recorder V2
 
 Standalone, opt-in observation tool for the observed FF3 live place. It can run alongside Auto QB and the stats recorder. It does not change the loader, Auto QB or Yuna settings. The user chose this capture workflow instead of the source-dependent auto-config approach.
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/yuna-gui-recorder-v1/diagnostics/yuna_gui_recorder.lua"))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/yuna-gui-recorder-v2/diagnostics/yuna_gui_recorder.lua"))()
 ```
 
 ## Capture the startup sequence
 
 1. Execute the recorder before Yuna, or with Yuna already running.
-2. Let Yuna finish loading. The recorder recognizes a Yuna ScreenGui name or a simple Yuna title where available. If it remains WAIT YUNA, tap **PICK**, then tap a harmless tab inside Yuna. That real tab action is also recorded; it is not consumed or repeated.
+2. Let Yuna finish loading. The recorder recognizes a Yuna ScreenGui name or a simple Yuna title where available. If it remains WAIT YUNA, tap **PICK**, then tap a harmless tab inside Yuna. Check that the green outline marks the Yuna control you tapped, then tap **USE**. Tap another Yuna control to change a bad preview. Preview input is selection evidence, not a recorded setup action; repeat any menu navigation needed for the actual setup after USE.
 3. Wait for **YUNA REC**, then perform the exact setup you want repeated: for example, wire button twice, QB Aimbot on, then any other settings. Include the menu/tab navigation needed to reach each control. Use the desired final state, not exploratory clicks if possible.
 4. Tap **DONE**. This finishes capture, saves the evidence and copies the text report. Tap **YUNA COPY** to copy again. Send the report before leaving Roblox. If available, also send the JSON recording for exact structured paths and state history.
 
 **VIEW** provides a paged, selectable report when clipboard access is unavailable. **X** saves and fully stops/removes the recorder. COPY success means API acceptance without iOS readback. Reexecution requires confirmed prior cleanup.
 
-The small toolbar sits at the left, below the existing stats bar. It does not consume, synthesize or block Yuna input. PICK chooses one ScreenGui; if a separate Yuna window lives in another ScreenGui, use PICK again and identify it explicitly. Other game/UI input and the recorder's own controls are excluded from capture. Native button signals can still be observed for controls activated without a pointer gesture, and are labelled separately.
+The small toolbar sits at the left, below the existing stats bar. It does not consume, synthesize or block Yuna input. PICK previews one ScreenGui and USE confirms the outlined control before capture. If a separate Yuna window lives in another ScreenGui, use PICK again and confirm that window explicitly. Other game/UI input and the recorder's own controls are excluded from capture. Native button signals can still be observed for controls activated without a pointer gesture, and are labelled separately.
 
 ## What is recorded
 
@@ -37,11 +37,11 @@ Default waiting and capture limits are 180 seconds each. Capture time starts aft
 
 ## Performance and lifecycle
 
-Discovery scans only GUI containers: PlayerGui, accessible CoreGui and optional `gethui()`. It does not require gethui, scan Workspace, hook input, invoke feature callbacks, modify anti-cheat code or send game requests. API access is feature-checked. Hit testing uses `GetGuiObjectsAtPosition` with observed screen coordinates. Per-container hit-test results, errors, root inset settings and the current GUI inset are included for diagnosis. Cross-container overlay order and exact iPhone/executor coordinate behavior remain unverified.
+Discovery scans only GUI containers: PlayerGui, accessible CoreGui and optional `gethui()`. A gethui Folder is a discovery/container reference; hit queries use the ancestor GUI API rather than calling a nonexistent method on Folder. It does not require gethui, scan Workspace, hook input, invoke feature callbacks, modify anti-cheat code or send game requests. API access is feature-checked. Hit testing uses `GetGuiObjectsAtPosition` with observed screen coordinates. Per-container hit-test results, errors, root inset settings, candidate roots and the current GUI inset are included for diagnosis. The picker prefers actual gethui descendants, then CoreGui, then PlayerGui, preserving the native hit order within each layer instead of comparing display-order numbers across layers. The observed FF3 LoadingScreen shape (Frame with Play/Practice/Pro buttons) is refused as a Yuna target. Exact iPhone/executor draw order and coordinate behavior remain unverified; manual preview plus USE provides an explicit visual check.
 
 Scanning runs at 10 Hz in batches of up to 64 objects, with a one-millisecond budget checked between objects. A single API call cannot be preempted by that budget. Discovery queues are capped at 8,000 objects; capped initial discovery offers PICK instead of an unbounded search. Selected-root limits include 512 observed buttons, 1,500 node descriptors, 500 events, four active gestures, 12 pending state checks and a report-size stop. Local snapshots visit at most 24 objects. Reports save on changes, at most twice per second during normal capture. Expensive property capture runs around interactions, not every rendered frame.
 
-A structural quiet period of 0.75 seconds is a **readiness hint**, not proof that Yuna finished initializing its feature callbacks. You should visually wait for full load before recording setup. Fatal access/runtime errors stop the data listeners, show YUNA ERROR and open the saved report view. Three PICK taps returning no GUI object finish with a concrete error. Missing file/clipboard APIs retain the report viewer. Teleport and X save and stop. Failed cleanup is retained for retry and blocks replacement rather than stacking another recorder.
+A structural quiet period of 0.75 seconds is a **readiness hint**, not proof that Yuna finished initializing its feature callbacks. You should visually wait for full load before recording setup. Fatal access/runtime errors stop the data listeners, show YUNA ERROR and open the saved report view. DONE without any confirmed window reports NO_CONFIRMED_YUNA_WINDOW. The toolbar uses the executor UI container when writable, with PlayerGui as a fallback, and the preview outline disappears on confirmation/finish. Three PICK taps returning no GUI object finish with a concrete error. Missing file/clipboard APIs retain the report viewer. Teleport and X save and stop. Failed cleanup is retained for retry and blocks replacement rather than stacking another recorder.
 
 ## Replay status
 
@@ -51,6 +51,8 @@ A structural quiet period of 0.75 seconds is a **readiness hint**, not proof tha
 
 The supplied 25.73-second stats capture contains 268 GUI stat entries but no Yuna button/control entries or exact username matches. It exposed ranked display labels and repeated Template/TextTemplate paths, which cannot associate the exported values with reliable player identities/columns. That report does not establish that Yuna was absent. It is preserved privately; it prompted this focused interaction recorder and indexed paths, not speculative stat bans.
 
-The actual recorder passes 49 mocked assertions: late Yuna startup, title discovery, distinct physical taps/native signals, same-name rows, delayed state changes, privacy, drag limits, external GUI exclusion, dynamically created controls, root recreation, report retention, complete stop/replacement, timeout/error handling, optional export and hidden containers, thirty rapid taps with state compaction, and failed cleanup blocking replacement. Regression checks pass for existing stats recorder (19), AWAY (35), X reload (9), guide/peak (66), loader (116) and bundle startup/cleanup (55). New source and tests parse/run through Lua 5.4; a native Luau compiler is unavailable.
+The actual recorder passes 59 mocked assertions: late Yuna startup, title discovery, distinct physical taps/native signals, same-name rows, delayed state changes, privacy, drag limits, external GUI exclusion, dynamically created controls, root recreation, report retention, complete stop/replacement, timeout/error handling, optional export and hidden containers, thirty rapid taps with state compaction, and failed cleanup blocking replacement. Current regression checks pass for the existing stats recorder (19), X reload (9), loader (116) and bundle startup/cleanup (55). New source and tests parse/run through Lua 5.4; a native Luau compiler is unavailable.
+
+The first user-supplied V1 GUI capture selected the FF3 loading menu, not Yuna. It proved the hit APIs were accessible but did not record the required setup sequence. V2 adds ten checks for cross-layer priority, preserving native hit order, visual confirmation, candidate diagnostics, game-menu rejection and refusing completion without a confirmed window. The source sort bug is proven; because V1 did not save rejected hit-root details, the exact frontmost object at those old touches remains uncertain. The raw capture is preserved privately.
 
 No live Yuna/Roblox/executor capture or replay has been performed by Codex. Exact touch hit testing, all real Yuna widgets, hidden GUI accessibility, true initialization readiness and phone performance still need the user's capture. Public distribution contains the recorder, instructions and checksums only; original reports and private test fixtures remain private.

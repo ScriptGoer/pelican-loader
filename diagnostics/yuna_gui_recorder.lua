@@ -12,7 +12,7 @@ if env[KEY] then assert(type(env[KEY].Stop)=='function' and env[KEY].Stop('REPLA
 local duration,waitTimeout=options.Duration or 180,options.WaitTimeout or 180
 assert(type(duration)=='number' and duration>=5 and duration<=600,'Duration must be 5 to 600 seconds')
 assert(type(waitTimeout)=='number' and waitTimeout>=5 and waitTimeout<=600,'WaitTimeout must be 5 to 600 seconds')
-local controller={Version='PELICAN_YUNA_GUI_RECORDER_V1',IsStopped=false}
+local controller={Version='PELICAN_YUNA_GUI_RECORDER_V2',IsStopped=false}
 local started,endedAt,captureStart=os.clock()
 local recording,clean,picking=true,false,false
 local selected,generation,quietSince=nil,0,started
@@ -23,6 +23,7 @@ local boundCount,events,nodes,roots=0,{}, {},{}
 local pending,gestures,recentGestures={},{},{}
 local queue,index,scanSeen={},1,{}
 local containers,capabilities={},{}
+local core,hidden,candidate,outline,pickButton
 local hitCapabilities={}
 local inset='UNAVAILABLE'
 pcall(function() local point=game:GetService('GuiService'):GetGuiInset();inset=point.X..','..point.Y end)
@@ -58,6 +59,11 @@ end
 local function own(o) return gui and (o==gui or o:IsDescendantOf(gui)) end
 local function rootOf(o)
     for _=1,32 do if not o then return end;if is(o,'ScreenGui') then return o end;o=o.Parent end
+end
+local function gameMenu(root)
+    if not root or not root:IsDescendantOf(pg) or root.Name~='LoadingScreen' then return false end
+    local frame=root:FindFirstChild('Frame')
+    return frame and frame:FindFirstChild('Play') and frame:FindFirstChild('Practice') and frame:FindFirstChild('Pro')
 end
 local function visible(o)
     if not o or not o.Parent then return false end
@@ -208,6 +214,8 @@ local function clearBindings()
 end
 selectRoot=function(root,source)
     assert(is(root,'ScreenGui') and root.Parent and not own(root),'Select a live Yuna ScreenGui')
+    assert(not gameMenu(root),'FF3 LoadingScreen is game UI, not Yuna')
+    candidate=nil;if outline then outline.Visible=false end;if pickButton then pickButton.Text='PICK' end
     if selected==root then picking=false;return true end
     assert(clearBindings(),'Old Yuna observer cleanup unconfirmed')
     selected=root;generation=generation+1;quietSince=os.clock();readyHint=false;picking=false
@@ -226,30 +234,63 @@ local function addContainer(o,name)
     containers[#containers+1]=o;capabilities[#capabilities+1]=name..'='..o.ClassName
 end
 addContainer(pg,'PlayerGui')
-local coreOK,core=pcall(function() return game:GetService('CoreGui') end);if coreOK then addContainer(core,'CoreGui') end
-if type(gethui)=='function' then local ok,value=pcall(gethui);if ok then addContainer(value,'gethui') else capabilities[#capabilities+1]='gethui=FAILED' end
+local coreOK,coreValue=pcall(function() return game:GetService('CoreGui') end);if coreOK then core=coreValue;addContainer(core,'CoreGui') end
+if type(gethui)=='function' then local ok,value=pcall(gethui);if ok and is(value,'Instance') then hidden=value;addContainer(value,'gethui') else capabilities[#capabilities+1]='gethui=FAILED' end
 else capabilities[#capabilities+1]='gethui=UNAVAILABLE' end
+local function layer(root)
+    if hidden and (root==hidden or root:IsDescendantOf(hidden)) then return 3,'EXECUTOR_UI' end
+    if core and root:IsDescendantOf(core) then return 2,'CORE_GUI' end
+    if root:IsDescendantOf(pg) then return 1,'PLAYER_GUI' end
+    return 0,'OTHER'
+end
 local function hit(input)
     local candidates,seen={},{}
     local point=input.Position
     local supported=0
     for i,container in ipairs(containers) do
-        local ok,result=pcall(function() return container:GetGuiObjectsAtPosition(point.X,point.Y) end)
+        local ok,result=false,'DISCOVERY_ONLY_CONTAINER'
+        if not is(container,'Folder') then ok,result=pcall(function() return container:GetGuiObjectsAtPosition(point.X,point.Y) end) end
         if ok and type(result)=='table' then
             hitCapabilities[i]=container.ClassName..'=OK; hits='..#result
             supported=supported+1
             for rank,o in ipairs(result) do
                 if not seen[o] and is(o,'GuiObject') and visible(o) then
                     seen[o]=true;local root=rootOf(o)
-                    if root then candidates[#candidates+1]={object=o,order=root.DisplayOrder or 0,rank=rank} end
+                    if root then
+                        local tier,scope=layer(root)
+                        candidates[#candidates+1]={object=o,tier=tier,scope=scope,rank=rank,api=i}
+                    end
                 end
             end
+        elseif result=='DISCOVERY_ONLY_CONTAINER' then hitCapabilities[i]=container.ClassName..'=DISCOVERY_ONLY; use ancestor hit API'
         else hitCapabilities[i]=container.ClassName..'=FAILED; '..safe(result,180) end
     end
     if supported==0 then error('GUI_HIT_TEST_UNAVAILABLE; cannot identify touches reliably') end
-    table.sort(candidates,function(a,b) if a.order~=b.order then return a.order>b.order end;return a.rank<b.rank end)
+    -- CoreGui and PlayerGui display-order values are not comparable. Preserve
+    -- each API's own hit order; prefer the executor's actual container, then
+    -- CoreGui, before considering PlayerGui behind them.
+    table.sort(candidates,function(a,b)
+        if a.tier~=b.tier then return a.tier>b.tier end
+        if a.api~=b.api then return a.api<b.api end
+        return a.rank<b.rank
+    end)
+    if picking then
+        local listed={}
+        for _,entry in ipairs(candidates) do
+            local root=rootOf(entry.object)
+            if root and not own(entry.object) and not listed[root] then
+                listed[root]=true
+                event('PICK_HIT',{reason=entry.scope..' root='..safe(root.Name,100)..' displayOrder='..tostring(root.DisplayOrder)
+                    ..' target='..entry.object.ClassName..':'..safe(entry.object.Name,80)..' label='..(label(entry.object) or '')})
+            end
+        end
+    end
     for _,entry in ipairs(candidates) do
         if own(entry.object) then return nil,'OWN_HUD' end
+        if picking and gameMenu(rootOf(entry.object)) then
+            event('PICK_REJECTED',{reason='FF3_LOADING_SCREEN; not Yuna'})
+            return nil,'GAME_MENU'
+        end
         if picking or belongs(entry.object) then return entry.object end
         -- Another GUI is in front: do not attribute its input to Yuna below it.
         return nil,'OTHER_GUI'
@@ -271,13 +312,27 @@ local function beginInput(input)
     if kind~='Touch' and kind~='MouseButton1' then return end
     local target,why=hit(input)
     if not target then
+        if picking and why=='GAME_MENU' then
+            candidate=nil;if outline then outline.Visible=false end;if pickButton then pickButton.Text='PICK' end
+            status.Text='GAME UI'
+        end
         if picking and why=='NO_HIT' then
             pickMisses=pickMisses+1;event('PICK_MISS',{reason='No GUI object returned at tap',point={x=math.floor(input.Position.X),y=math.floor(input.Position.Y),u=0,v=0}})
             if pickMisses>=3 then error('GUI_PICK_NO_HIT_AFTER_THREE_TAPS') end
         end
         return
     end
-    if picking then selectRoot(rootOf(target),'USER_PICK') end
+    if picking then
+        candidate={root=rootOf(target),target=target}
+        if outline then
+            outline.Position=UDim2.fromOffset(target.AbsolutePosition.X,target.AbsolutePosition.Y)
+            outline.Size=UDim2.fromOffset(math.max(8,target.AbsoluteSize.X),math.max(8,target.AbsoluteSize.Y));outline.Visible=true
+        end
+        if pickButton then pickButton.Text='USE' end
+        status.Text='CHECK BOX'
+        event('PICK_CANDIDATE',{reason='Confirm outlined Yuna control; root='..safe(candidate.root.Name,100)})
+        return
+    end
     if not belongs(target) then return end
     local count=0;for _ in pairs(gestures) do count=count+1 end;if count>=4 then return end
     local e=event('POINTER_BEGIN',{target=node(target),input=kind,point=coordinates(input,target)})
@@ -321,7 +376,8 @@ function controller.GetReport()
         'FATAL_ERROR|'..fatal,'FINISH|'..finishReason,'CLEANUP_CONFIRMED|'..tostring(clean),
         'INPUT_SCOPE|SELECTED_YUNA_SCREEN_GUI_ONLY; NO_KEY_CODES; NO_TEXTBOX_CONTENT',
         'ORDERING|INPUT_AND_GUI_SIGNALS_PRESERVED; SIGNALS_ARE_NOT_EXTRA_CLICKS',
-        'HIT_TEST|API_SCREEN_COORDINATES; CROSS_CONTAINER_ORDER_UNVERIFIED',
+        'HIT_TEST|EXECUTOR_THEN_COREGUI_THEN_PLAYERGUI; NATIVE_API_ORDER_WITHIN_LAYER',
+        'SELECTION_CONFIRMED|'..tostring(selected~=nil),'PICK_CONFIRMATION_PENDING|'..tostring(candidate~=nil),
         'REPLAY|NOT_IMPLEMENTED; NO_CALLBACK_INVOCATION_OR_SYNTHETIC_INPUT'}
     for _,root in ipairs(roots) do rows[#rows+1]='ROOT|'..root.generation..' source='..root.source..' name='..root.name..' parentClass='..root.parentClass
         ..' ignoreGuiInset='..tostring(root.ignoreGuiInset)..' displayOrder='..tostring(root.displayOrder) end
@@ -373,12 +429,16 @@ finish=function(reason)
     end)
     if not ok and fatal=='NONE' then fatal=safe(err,350) end
     recording=false;endedAt=os.clock();finishReason=reason or 'USER_DONE';pending={};gestures={}
+    candidate=nil;if outline then outline.Visible=false end;if pickButton then pickButton.Text='PICK' end
     dataConnections=disconnect(dataConnections);clearBindings()
     if status then status.Text=fatal=='NONE' and 'YUNA COPY' or 'YUNA ERROR' end
     save(true)
     if fatal~='NONE' and panel then panel.Visible=true;if render then render() end end
 end
-function controller.Finish() finish('USER_DONE');if render then render() end;return not recording end
+function controller.Finish()
+    if recording and not selected then fatal='NO_CONFIRMED_YUNA_WINDOW';finish('NO_CONFIRMED_YUNA_WINDOW') else finish('USER_DONE') end
+    if render then render() end;return not recording
+end
 function controller.Stop(reason)
     if clean then return true end
     finish(reason or 'USER_END')
@@ -411,7 +471,7 @@ local function scan()
                 local root=rootOf(o)
                 local name=root and root.Name:lower()
                 local title=label(o)
-                if root and root.Enabled and (name:find('yuna',1,true) or title and visible(o) and title:lower():match('^%s*yuna[%s%p%d]*$')) then
+                if root and not candidate and not gameMenu(root) and root.Enabled and (name:find('yuna',1,true) or title and visible(o) and title:lower():match('^%s*yuna[%s%p%d]*$')) then
                     selectRoot(root,'YUNA_NAME_OR_TITLE');return
                 end
             elseif belongs(o) and is(o,'GuiButton') then observeButton(o) end
@@ -431,7 +491,8 @@ local function heartbeat()
     end
     if now-lastScan>=.1 then lastScan=now;scan() end
     if selected and not readyHint and now-quietSince>=.75 and index>#queue then readyHint=true;event('STRUCTURE_QUIET_HINT') end
-    if selected then status.Text=picking and 'PICK YUNA' or readyHint and 'YUNA REC' or 'YUNA LOAD'
+    if candidate then status.Text='CHECK BOX'
+    elseif selected then status.Text=picking and 'PICK YUNA' or readyHint and 'YUNA REC' or 'YUNA LOAD'
     else status.Text=(picking or discoveryCapped) and 'PICK YUNA' or 'WAIT YUNA' end
     for i=#pending,1,-1 do
         local p=pending[i];local delay=p.step==1 and .15 or .6
@@ -454,18 +515,30 @@ render=function()
     box.Text=report:sub((page-1)*5000+1,page*5000);pageLabel.Text=page..'/'..pages
 end
 local built,problem=pcall(function()
-    gui=Instance.new('ScreenGui');gui.Name=controller.Version;gui.ResetOnSpawn=false;gui.DisplayOrder=10020;gui.Parent=pg
+    gui=Instance.new('ScreenGui');gui.Name=controller.Version;gui.ResetOnSpawn=false;gui.DisplayOrder=10020;gui.IgnoreGuiInset=true
+    local hosted=false
+    if hidden then hosted=pcall(function() gui.Parent=hidden end) end
+    if not hosted then gui.Parent=pg end
     local function button(name,text,x,width)
         local b=Instance.new('TextButton');b.Name=name;b.Text=text;b.Size=UDim2.fromOffset(width,22);b.Position=UDim2.fromOffset(x,192)
         b.TextSize=10;b.Font=Enum.Font.GothamMedium;b.BackgroundColor3=Color3.fromRGB(27,37,34);b.TextColor3=Color3.new(1,1,1);b.Parent=gui;return b
     end
-    status=button('Status','WAIT YUNA',8,82);local pick=button('Pick','PICK',92,36);local done=button('DoneCopy','DONE',130,40)
+    status=button('Status','WAIT YUNA',8,82);local pick=button('Pick','PICK',92,36);pickButton=pick;local done=button('DoneCopy','DONE',130,40)
     local view=button('View','VIEW',172,36);local stop=button('Stop','X',210,22);stop.BackgroundColor3=Color3.fromRGB(195,40,40)
     panel=Instance.new('Frame');panel.Size=UDim2.fromOffset(300,210);panel.Position=UDim2.fromOffset(8,218);panel.Visible=false;panel.Parent=gui
     box=Instance.new('TextBox');box.Size=UDim2.fromOffset(292,175);box.Position=UDim2.fromOffset(4,4);box.TextSize=10;box.MultiLine=true;box.TextEditable=false;box.ClearTextOnFocus=false;box.TextWrapped=true;box.Parent=panel
     local prev,nextPage=button('Previous','<',0,32),button('Next','>',0,32);prev.Parent=panel;nextPage.Parent=panel;prev.Position=UDim2.fromOffset(4,184);nextPage.Position=UDim2.fromOffset(40,184)
     pageLabel=Instance.new('TextLabel');pageLabel.Size=UDim2.fromOffset(100,22);pageLabel.Position=UDim2.fromOffset(90,184);pageLabel.Parent=panel
-    connect(uiConnections,pick.Activated,function() if recording then picking=not picking;pickMisses=0;status.Text=picking and 'PICK YUNA' or selected and 'YUNA REC' or 'WAIT YUNA' end end)
+    outline=Instance.new('Frame');outline.Name='PickedControl';outline.BackgroundTransparency=1;outline.BorderSizePixel=3
+    outline.BorderColor3=Color3.new(0,1,0);outline.Active=false;outline.Visible=false;outline.Parent=gui
+    connect(uiConnections,pick.Activated,function()
+        if not recording then return end
+        if candidate then
+            local root=candidate.root
+            assert(root.Parent and visible(root),'Selected window disappeared; PICK again')
+            selectRoot(root,'USER_CONFIRMED_PICK')
+        else picking=not picking;pickMisses=0;status.Text=picking and 'PICK YUNA' or selected and 'YUNA REC' or 'WAIT YUNA' end
+    end)
     connect(uiConnections,done.Activated,function() controller.Finish();save(true) end)
     connect(uiConnections,status.Activated,function() save(true);render() end)
     connect(uiConnections,view.Activated,function() panel.Visible=not panel.Visible;render() end)
