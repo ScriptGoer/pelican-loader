@@ -1,18 +1,18 @@
--- PELICAN_FF3_V21: coverage-aware native receiver/mode planning alongside Yuna.
+-- PELICAN_FF3_V22: coverage-aware native receiver/mode planning alongside Yuna.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
 -- InputBegan release. Read-only closure discovery; no getter replacement/hooks.
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
-local VERSION, KEY = 'PELICAN_FF3_V21', 'PELICAN_FF3_AUTO_QB'
+local VERSION, KEY = 'PELICAN_FF3_V22', 'PELICAN_FF3_AUTO_QB'
 local CFG = {Interval=.12, DiscoveryInterval=2, MaxRoster=64,
     Gravity=28,
     ThrowMargin=6, ThrowLane=4, Settle=0, MinPlayAge=0, MinDownfieldYards=6,
     MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20, PlanCalls=6, PlanSeconds=.008, CacheAge=.36, SafeGap=.4, ReceiverSwitchYards=5}
 local Players, Run, Input = game:GetService('Players'), game:GetService('RunService'), game:GetService('UserInputService')
 local me = Players.LocalPlayer
-if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V21 requires the observed FF3 live place') end
+if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V22 requires the observed FF3 live place') end
 local env = type(getgenv)=='function' and getgenv() or _G
 local prior = env[KEY]
 if prior and (type(prior.Stop)~='function' or prior.Stop('REPLACED')~=true) then error('PELICAN: previous Auto QB cleanup failed') end
@@ -33,7 +33,7 @@ end
 local controller = {Version=VERSION, IsStopped=false}
 local connections, events, counts, samples = {}, {}, {}, {}
 local profile, lease, choice, pending, gui, status, autoButton, throwButton, copyButton
-local receiverButton, receiverMenu, renderReceivers
+local receiverButton, receiverMenu, renderReceivers, awayButton
 local blacklist=env.PELICAN_FF3_WR_BLACKLIST
 if type(blacklist)~='table' or getmetatable(blacklist)~=nil then blacklist={}; env.PELICAN_FF3_WR_BLACKLIST=blacklist end
 local stopped, cleanupComplete, inTick, auto, throwing, expanded = false, false, false, true, true, false
@@ -539,7 +539,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v21.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v22','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
@@ -566,6 +566,7 @@ function controller.GetReport()
         'OPEN_HOLD_SECONDS|'..(choice and choice.openSince and string.format('%.2f',os.clock()-choice.openSince) or 'NONE'),
         'RECEIVER_READINESS|'..(lines.goalToGo and 'GOAL_LOS_EXEMPT' or 'CURRENT_POSITION_BEYOND_LOS')..'; OBSERVED_RECENT_CONTINUOUS_MOVEMENT',
         'RUNTIME_VALIDATION|UNVERIFIED_IN_ROBLOX','JUMP_CATCH_CALIBRATION|MISSING; NO_ADDED_JUMP_BULLET',
+        'THROW_AWAY|MANUAL_ONLY; SOURCE_MODEL_95_GRAVITY_28; GROUNDING_RULE_UNVERIFIED',
         'RELEASE|SOURCE_NATIVE_SOLVER_OUTPUT; ONE_REQUEST_PER_POSSESSION; NO_AUTOMATIC_RETRY'}
     for _,name in ipairs(observedLineNames) do
         local o=workspace:FindFirstChild(name)
@@ -929,14 +930,36 @@ local function startAnimation(ball,now)
     return {track=track,at=now}
 end
 
-local function ready()
+-- Manual UI actions can arrive between decision ticks. Share possession
+-- observation so they cannot reserve epoch zero or reuse an old play epoch.
+local function observePossession(now)
+    local nativeReady=profile and profile.state.Status.Value=='InPlay' and profile.state.Throwable.Value==true
+    local model=body(me)
+    local ball=model and equipped(model)
+    local tool=ball and ball.tool
+    if nativeReady and tool then
+        if not possession.wasReady or possession.tool~=tool or possession.model~=model then
+            possession.epoch=possession.epoch+1
+            possession.tool,possession.model=tool,model
+            possession.since=now
+            resetFieldWait(); releaseChoice()
+            log('POSSESSION',possession.epoch)
+        end
+        possession.wasReady=true
+    else
+        if pending and possession.wasReady then pending.outcome='POSSESSION_ENDED; THROW_NOT_VERIFIED' end
+        possession.wasReady=false
+    end
+end
+local function ready(manual)
     if stopped or (context.IsCancelled and context.IsCancelled()) then return nil,'STOPPED' end
-    if not auto then return nil,'AUTO_OFF' end
+    if not manual and not auto then return nil,'AUTO_OFF' end
     if not profile then return nil,'WAIT_YUNA_SOURCE_PROFILE' end
+    if manual and (not aliveConnection(profile.preview) or not aliveConnection(profile.release)) then return nil,'WAIT_YUNA_SOURCE_PROFILE' end
     local q=profile.q
-    if not q.Enabled then return nil,'ENABLE_YUNA_QB_AIMBOT' end
-    if q.MouseAimbot.Enabled then return nil,'YUNA_MOUSE_AIM_ACTIVE' end
-    if q.AutoThrowType.Enabled~=true then return nil,'ENABLE_YUNA_AUTO_THROW_TYPE' end
+    if not manual and not q.Enabled then return nil,'ENABLE_YUNA_QB_AIMBOT' end
+    if not manual and q.MouseAimbot.Enabled then return nil,'YUNA_MOUSE_AIM_ACTIVE' end
+    if not manual and q.AutoThrowType.Enabled~=true then return nil,'ENABLE_YUNA_AUTO_THROW_TYPE' end
     if profile.state.Status.Value~='InPlay' or profile.state.Throwable.Value~=true then return nil,'WAIT_THROWABLE_PLAY' end
     if not me.Team or me.Neutral then return nil,'WAIT_TEAM' end
     local model,root,head,hum=body(me)
@@ -955,6 +978,81 @@ local function ready()
     ball.model,ball.root,ball.head,ball.hum=model,root,head,hum
     return ball
 end
+-- Deliberate manual throw-away. Uses the existing observed request shape,
+-- never the teammate selector and never an automatic covered-pass fallback.
+function controller.ThrowAway()
+    if stopped then return false end
+    local success,result=pcall(function()
+        observePossession(os.clock())
+        local ball,why=ready(true)
+        if not ball then setGate(why);return false end
+        if ball.nativeThrow or usedTools[ball.tool]==possession.epoch then setGate('THROW_ALREADY_OWNED');return false end
+        if groundReason()~='ACCEPTED' or not onField(ball.root.Position) then setGate('THROW_AWAY_FIELD_UNVERIFIED');return false end
+        local ground=lines.ground
+        local groundFrame,generation=ground.CFrame,lines.generation
+        local origin=ball.head.Position
+        local p=groundFrame:PointToObjectSpace(origin)
+        local power=95 -- preserved native Fit/Bullet nominal power, not a setting change
+        local range=power*power/CFG.Gravity
+        local best
+        for _,side in ipairs({-1,1}) do
+            local z=p.Z
+            if lines.los and lines.forward then
+                local los=groundFrame:PointToObjectSpace(lines.los)
+                local forward=-lines.forward:Dot(groundFrame.LookVector)
+                -- Keep the modeled exit downfield of the verified blue line.
+                z=clamp(los.Z+forward*CFG.MinDownfieldYards*3,-170,170)
+            end
+            local target=groundFrame:PointToWorldSpace(V(side*85,p.Y,z))
+            local delta=flat(target-origin);local distance=delta.Magnitude
+            if distance>.05 and distance<range*.95 then
+                local modeledRange=math.min(distance*2,range*.95)
+                local angle=math.min(math.rad(80),(math.pi-math.asin(CFG.Gravity*modeledRange/(power*power)))/2)
+                local velocity=delta.Unit*(power*math.cos(angle))+V(0,power*math.sin(angle),0)
+                local edgeFraction=(side*80-p.X)/(side*85-p.X)
+                local time=distance*edgeFraction/(power*math.cos(angle))
+                local crossing=origin+velocity*time-V(0,.5*CFG.Gravity*time*time,0)
+                local downfieldExit=lines.goalToGo or not lines.los or not lines.forward or downfield(crossing)>0
+                if time>0 and crossing.Y>origin.Y and downfieldExit and (not best or crossing.Y>best.height) then
+                    best={velocity=velocity,height=crossing.Y,time=time,angle=angle,point=crossing}
+                end
+            end
+        end
+        if not best then setGate('THROW_AWAY_NO_HIGH_EXIT');return false end
+        -- A second readiness observation precedes reservation; ordinary native
+        -- manual input/other attempts always prevent a competing request.
+        local current=ready(true)
+        if not current or current.tool~=ball.tool or current.nativeThrow or usedTools[ball.tool]==possession.epoch then return false end
+        releaseChoice();if receiverMenu then receiverMenu.Visible=false end
+        usedTools[ball.tool]=possession.epoch
+        local epoch=possession.epoch
+        pending={tool=ball.tool,model=ball.model,target='OUT_OF_BOUNDS',mode='MANUAL_HIGH_AWAY',at=os.clock(),outcome='PREPARING'}
+        startAnimation(ball,os.clock())
+        if stopped then return false end
+        local final=ready(true)
+        if not final or final.tool~=ball.tool or final.remote~=ball.remote or final.model~=ball.model or final.nativeThrow
+            or possession.epoch~=epoch or not possession.wasReady then
+            if pending then pending.outcome='CANCELLED_BEFORE_REQUEST' end
+            disposeAnimation();setGate('THROW_AWAY_CONTEXT_CHANGED');return false
+        end
+        -- Animation loading can yield; do not send a direction solved from a
+        -- stale launch point or field reference after it returns.
+        if lines.ground~=ground or ground.CFrame~=groundFrame or lines.generation~=generation or groundReason()~='ACCEPTED'
+            or (final.head.Position-origin).Magnitude>.5 then
+            pending.outcome='CANCELLED_BEFORE_REQUEST';disposeAnimation();setGate('THROW_AWAY_CONTEXT_CHANGED');return false
+        end
+        local unit=best.velocity.Unit
+        attempts=attempts+1;pending.outcome='REQUESTING'
+        log('THROW_AWAY',string.format('manual power=95 angle=%.2f modeledExitY=%.2f exitT=%.3f grounding=UNVERIFIED',math.deg(best.angle),best.height,best.time))
+        local ok,err=pcall(function() ball.remote:FireServer('Clicked',origin-unit*5+V(70000000,0,0),origin+unit*10000,power,1) end)
+        if ok then sent=sent+1;pending.outcome='API_ACCEPTED_UNCONFIRMED';setGate('THROW_AWAY_SENT_UNCONFIRMED')
+        else ambiguous=ambiguous+1;pending.outcome='AMBIGUOUS_NO_RETRY';fatalError=clean(err);controller.Stop('REQUEST_AMBIGUOUS_NO_RETRY');return false end
+        preserve(false);return true
+    end)
+    if not success then fatalError=clean(result);log('THROW_AWAY_ERROR',result);controller.Stop('THROW_AWAY_RUNTIME_ERROR');return false end
+    return result
+end
+
 local function sample(player,now)
     local model,root,head,hum=body(player)
     if not model then samples[player]=nil; return end
@@ -1686,23 +1784,7 @@ local function tick(now)
         -- A continuous equipped/throwable possession permits exactly one request.
         -- A later authoritative play transition or actual change of equipped
         -- ball/character permits a new attempt, including reuse of the same Tool.
-        local nativeReady=profile and profile.state.Status.Value=='InPlay' and profile.state.Throwable.Value==true
-        local currentModel=body(me)
-        local currentBall=currentModel and equipped(currentModel)
-        local currentTool=currentBall and currentBall.tool
-        if nativeReady and currentTool then
-            if not possession.wasReady or possession.tool~=currentTool or possession.model~=currentModel then
-                possession.epoch=possession.epoch+1
-                possession.tool,possession.model=currentTool,currentModel
-                possession.since=now
-                resetFieldWait(); releaseChoice()
-                log('POSSESSION',possession.epoch)
-            end
-            possession.wasReady=true
-        else
-            if pending and possession.wasReady then pending.outcome='POSSESSION_ENDED; THROW_NOT_VERIFIED' end
-            possession.wasReady=false
-        end
+        observePossession(now)
         local ball,why=ready()
         if not ball then resetFieldWait(); releaseChoice(); setGate(why); return end
         if not refreshNativeInputs() then resetFieldWait(); releaseChoice(); setGate('NATIVE_LEAD_CHANGED'); return end
@@ -1839,7 +1921,7 @@ local function button(text,x,width,y)
     b.Parent=gui; return b
 end
 local built,buildError=pcall(function()
-    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V21'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
+    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V22'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('WAIT YUNA',-166,138)
     assistance.guideUI=Instance.new('Frame');assistance.guideUI.Name='RunGuide';assistance.guideUI.Size=UDim2.fromOffset(36,42)
     assistance.guideUI.Position=UDim2.new(.5,-18,0,136);assistance.guideUI.BackgroundTransparency=1;assistance.guideUI.Visible=false;assistance.guideUI.Parent=gui
@@ -1851,7 +1933,9 @@ local built,buildError=pcall(function()
     guideCaption.TextColor3=Color3.new(1,1,1);guideCaption.Parent=assistance.guideUI
     local kill=button('X',-26,22); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
-    receiverButton=button('WR LIST',-166,162,112); receiverButton.Name='Receivers'
+    receiverButton=button('WR LIST',-166,106,112); receiverButton.Name='Receivers'
+    awayButton=button('AWAY',-58,54,112);awayButton.Name='ThrowAway'
+    connect(awayButton.Activated,controller.ThrowAway)
     receiverMenu=Instance.new('Frame'); receiverMenu.Name='ReceiverList'; receiverMenu.Size=UDim2.fromOffset(162,134)
     receiverMenu.Position=UDim2.new(1,-166,0,137); receiverMenu.BackgroundColor3=Color3.fromRGB(24,30,28); receiverMenu.Parent=gui
     local title=Instance.new('TextLabel'); title.Name='Title'; title.Size=UDim2.fromOffset(158,22); title.Position=UDim2.fromOffset(2,0)
@@ -1889,10 +1973,10 @@ local built,buildError=pcall(function()
         receiverMenu.Visible=not receiverMenu.Visible; if cancelSequence then cancelSequence('RECEIVER_MENU') end;clearGuide();cancelJump('RECEIVER_MENU'); clearWindows(); if choice then choice.openSince=nil end
         if receiverMenu.Visible then renderReceivers() end
     end)
-    autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false; receiverMenu.Visible=false
+    autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false;awayButton.Visible=false; receiverMenu.Visible=false
     connect(status.Activated,function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
-        receiverButton.Visible=expanded
+        receiverButton.Visible=expanded;awayButton.Visible=expanded
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
