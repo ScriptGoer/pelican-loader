@@ -1,3 +1,4 @@
+local function runLoader(...)
 -- PELICAN: one exact-place entry point. No universe/name fallback, credentials,
 -- retries, old-version fallback, or Yuna launch. See docs/loader.md.
 local options = ...
@@ -12,7 +13,7 @@ local manifest = {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "ff3-v21",
+            Name = "FF3 live", Game = "FF3", Ref = "ff3-v21.1",
             Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V21",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
@@ -49,6 +50,7 @@ local session = {
     Context = {},
 }
 local events, uiConnections, cleanupHooks = {}, {}, {}
+local players
 local controller, gui, status, panel, details, copyButton
 local initActive, initializationStarted, cleanupRegistered = false, false, false
 local cleanupComplete, stopRequested = false, false
@@ -57,6 +59,7 @@ local lastReport, lastError, moduleVersion = "", "", ""
 local placeId, gameId, ref, baseUrl, route, moduleUrl, sources
 local sourceMode = "HTTP"
 local copyResult = "NOT_REQUESTED"
+local reloadBusy, reloadCancelled = false, false
 
 local function bounded(value, limit)
     local ok, result = pcall(tostring, value)
@@ -211,6 +214,7 @@ local function stopInternal(reason, keepUI)
 end
 
 function session.Stop(reason)
+    reloadCancelled = true
     local userEnd = reason == "USER_END"
     local cleaned = stopInternal(reason or "STOP", userEnd)
     if userEnd then
@@ -239,6 +243,44 @@ session.Context.RequestStop = function(reason)
     if reason == "USER_END" then copyReport() end
     return cleaned
 end
+-- Deferred restart cannot stack controllers or erase the previous final report.
+function session.Reload()
+    if reloadBusy or stopRequested or session.State ~= "RUNNING" or environment[KEY] ~= session then return false end
+    local schedule = task and (task.defer or task.spawn)
+    if type(schedule) ~= "function" then fail("RELOAD", "Executor task scheduling unavailable"); return false end
+    reloadBusy = true
+    record("RELOAD", "REQUESTED")
+    local cleaned = stopInternal("RELOAD", true)
+    environment.PELICAN_PREVIOUS_LOADER_REPORT = session.GetReport()
+    if not cleaned then fail("RELOAD_CLEANUP", "Cleanup not confirmed; replacement blocked"); return false end
+    session.State = "RELOADING"
+    setStatus("PELICAN reloading")
+    if gui then pcall(function() gui.Enabled = true end) end
+    local scheduled, schedulingError = pcall(schedule, function()
+        if reloadCancelled or environment[KEY] ~= session then return end
+        local nextLoader = runLoader
+        if sources == nil then
+            local fetched, text = pcall(function() return game:HttpGet(baseUrl .. "/main/loader.lua") end)
+            if reloadCancelled or environment[KEY] ~= session then return end
+            if not fetched or type(text) ~= "string" or text == "" then fail("RELOAD_FETCH", fetched and "Empty loader source" or text); return end
+            local compiled, chunk, problem = pcall(loadstring, text, "@reload/loader.lua")
+            if not compiled or type(chunk) ~= "function" then fail("RELOAD_COMPILE", compiled and problem or chunk); return end
+            nextLoader = chunk
+        end
+        if reloadCancelled or environment[KEY] ~= session then return end
+        local restarted, replacement = pcall(nextLoader, options)
+        if not restarted or type(replacement) ~= "table" or environment[KEY] ~= replacement then
+            buildUI(players and players.LocalPlayer)
+            fail("RELOAD_INIT", restarted and "Loader did not return the owned replacement session" or replacement)
+            return
+        end
+        session.Replacement = replacement
+    end)
+    if not scheduled then fail("RELOAD_SCHEDULE", schedulingError); return false end
+    return true
+end
+session.Context.RequestReload = session.Reload
+
 session.Context.IsCancelled = function() return stopRequested end
 session.Context.ReportRuntimeError = function(message)
     -- Async module tasks must call this explicitly; the loader's init pcall
@@ -268,7 +310,6 @@ session.Context.RegisterCleanup = function(callback)
     return true
 end
 
-local players
 local serviceOK, serviceResult = pcall(function() return game:GetService("Players") end)
 if serviceOK then players = serviceResult end
 if players then buildUI(players.LocalPlayer) end
@@ -401,3 +442,6 @@ session.State = "RUNNING"
 record("INIT_OK", "Controller returned; this does not verify gameplay behavior")
 if gui then pcall(function() gui.Enabled = false end) end
 return session
+
+end
+return runLoader(...)

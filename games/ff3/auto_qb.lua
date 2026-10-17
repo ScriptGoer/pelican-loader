@@ -539,7 +539,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v21','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v21.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
@@ -1898,8 +1898,10 @@ local built,buildError=pcall(function()
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
     connect(throwButton.Activated,function() controller.SetThrow(not throwing) end)
     connect(copyButton.Activated,function() preserve(true); copyButton.Text=copyResult=='API_ACCEPTED' and 'SENT' or 'FAIL' end)
+    kill.Name='Reload'
     connect(kill.Activated,function()
-        if context.RequestStop then context.RequestStop('USER_END') else controller.Stop('USER_END') end
+        if type(context.RequestReload)=='function' then context.RequestReload()
+        else log('RELOAD_UNAVAILABLE','Start through the repository loader');setGate('RELOAD_REQUIRES_LOADER');preserve(true) end
     end)
     local stop=Instance.new('BindableEvent'); stop.Name='Stop'; stop.Parent=gui; connect(stop.Event,function() controller.Stop('EXTERNAL_STOP') end)
     if me.OnTeleport then connect(me.OnTeleport,function(state)

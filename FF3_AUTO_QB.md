@@ -1,6 +1,14 @@
-# FF3 V21: observed deep jump peaks and an advisory run arrow
+# FF3 V21.1: observed deep jump peaks and an advisory run arrow
 
 V21 restores automatic jumping and observed peak release for deep throws, as the user explicitly requested. If the receiver sells the burn during preparation, the pending pass is cancelled. A separate small RUN arrow suggests parallel QB movement only when the current eligible receiver is covered but a short continuation predicts an opening. The arrow never authorizes a release or makes the throw wait for movement.
+
+## V21.1 X reload
+
+The Auto QB X now reloads instead of ending the script. It immediately stops the current controller, confirms cleanup and saves the final full loader/module report in `getgenv().PELICAN_PREVIOUS_LOADER_REPORT`. HTTP startup then fetches and executes the current `main/loader.lua` from the validated repository BaseUrl with the same supplied loader options. Bundled startup restarts the captured loader and source map without an HTTP fallback. Fresh controller toggles reset as on a manual load; the existing session blacklist remains preserved.
+
+Repeated taps schedule only one replacement. Failed cleanup prevents even the loader fetch, and a stop/manual reexecution cancels stale queued work. Fetch/compile/init/scheduling failures retain an error/report surface rather than stacking a second controller or silently disappearing. The loader's END/programmatic Stop still ends without restarting. Standalone module execution without a loader reports `RELOAD_REQUIRES_LOADER` and keeps its controls available.
+
+The patch passes 116 mocked loader assertions (including 27 new reload checks), nine actual-controller/loader X assertions, and existing peak/guide (66), Goal (63), bundle (55) and Threshold menu (45) checks. Syntax and reload lifecycle were exercised through the available Lua 5.4 harness; a native Luau compiler is unavailable in this replacement workspace. No live Roblox reload was performed. The remaining V21 behavior and live uncertainties below are unchanged.
 
 ## Deep jump and cancellation
 
@@ -26,7 +34,7 @@ These forecasts assume briefly constant player velocities and a continuation of 
 
 ## Usage and retained behavior
 
-Keep Yuna QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. The live route pins `ff3-v21`, contract `PELICAN_FF3_V21`:
+Keep Yuna QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. The live route pins `ff3-v21.1`, contract `PELICAN_FF3_V21`:
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/main/loader.lua"))()
