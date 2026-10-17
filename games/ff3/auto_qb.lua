@@ -46,7 +46,9 @@ local gate, copyResult, fileResult = 'WAIT_YUNA', 'NOT_REQUESTED', 'NOT_REQUESTE
 local fatalError, stopReason = 'NONE', 'NONE'
 local attempts, sent, ambiguous, relinquishments, nativeCalls = 0, 0, 0, 0, 0
 local receiverRejects={}
-local arrivalRejects={}
+local arrivalRejects,arrivalResiduals={},{}
+local blockedDecisions={}
+local lastBlockedAt,lastBlockedKey=-math.huge,''
 local opportunities, shotCache, modeChecks = {}, {}, {}
 local planRound, planDeferred, maxPlanCalls = 0, 0, 0
 local modeTransaction
@@ -81,6 +83,27 @@ local function setGate(value)
     counts[value]=(counts[value] or 0)+1
     if gate~=value then gate=value; log('GATE',value) end
     if status then status.Text=(choice and choice.player.Name..' ' or '')..value:gsub('_',' '):sub(1,24) end
+end
+local function rememberBlocked(player,shot,reason)
+    if not shot then return end
+    local now=os.clock()
+    local key=tostring(possession.epoch)..':'..player.Name..':'..tostring(shot.mode)..':'..tostring(reason)
+    if key==lastBlockedKey and now-lastBlockedAt<1 then return end
+    lastBlockedKey,lastBlockedAt=key,now
+    local rows={string.format('at=%.3f epoch=%d target=%s mode=%s reason=%s margin=%s lane=%s marginDB=%s laneDB=%s safety=%s',
+        now,possession.epoch,clean(player.Name),clean(shot.mode),clean(reason),tostring(shot.margin),tostring(shot.lane),clean(shot.marginDB or 'NONE'),clean(shot.laneDB or 'NONE'),clean(shot.safetyName or 'NONE'))}
+    if shot.origin and shot.velocity and shot.arrival then
+        rows[#rows+1]=string.format('TRAJECTORY t=%.6f origin=%.3f,%.3f,%.3f velocity=%.3f,%.3f,%.3f arrival=%.3f,%.3f,%.3f',
+            shot.time,shot.origin.X,shot.origin.Y,shot.origin.Z,shot.velocity.X,shot.velocity.Y,shot.velocity.Z,shot.arrival.X,shot.arrival.Y,shot.arrival.Z)
+    end
+    for _,line in ipairs(candidateEvidence) do rows[#rows+1]='COMPARISON '..line end
+    local function actor(label,s)
+        if s then rows[#rows+1]=string.format('%s p=%.3f,%.3f,%.3f v=%.3f,%.3f,%.3f',label,s.p.X,s.p.Y,s.p.Z,s.v.X,s.v.Y,s.v.Z) end
+    end
+    actor('MARGIN_DB',shot.marginActor);actor('LANE_DB',shot.laneActor)
+    local sample=samples[player];actor('WR',sample)
+    blockedDecisions[#blockedDecisions+1]=table.concat(rows,' | ')
+    if #blockedDecisions>8 then table.remove(blockedDecisions,1) end
 end
 local function finite(x) return type(x)=='number' and x==x and math.abs(x)<1e8 end
 local ff3Options=context.FF3Options or {}
@@ -543,7 +566,8 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v24','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v24.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
@@ -592,9 +616,17 @@ function controller.GetReport()
     end
     for mode,receipt in pairs(arrivalRejects) do
         rows[#rows+1]=string.format('NATIVE_ARRIVAL_REJECT|%s %s t=%.3f arrival=%.3f,%.3f,%.3f aim=%.3f,%.3f,%.3f',mode,receipt.target,receipt.time,receipt.arrival.X,receipt.arrival.Y,receipt.arrival.Z,receipt.aim.X,receipt.aim.Y,receipt.aim.Z)
+        rows[#rows+1]=string.format('NATIVE_ARRIVAL_REJECT_DETAIL|%s error=%.6f tolerance=%.6f epoch=%d; LAST_REJECTION_NOT_CURRENT_VERDICT',mode,receipt.error,receipt.tolerance,receipt.epoch)
     end
+    for mode,receipt in pairs(arrivalResiduals) do
+        rows[#rows+1]=string.format('NATIVE_SMALL_RESIDUAL_ACCEPTED|%s error=%.6f tolerance=%.6f epoch=%d; ARITHMETIC_ONLY_NOT_CATCH_PROOF',mode,receipt.error,receipt.tolerance,receipt.epoch)
+    end
+    for i,receipt in ipairs(blockedDecisions) do rows[#rows+1]='BLOCKED_DECISION|'..i..' '..receipt end
     for _,candidate in ipairs(candidateEvidence) do rows[#rows+1]='CURRENT_COMPARISON|'..candidate end
-    if pending then rows[#rows+1]='LAST_REQUEST|'..pending.target..' '..pending.mode..' '..pending.outcome end
+    if pending then
+        rows[#rows+1]='LAST_REQUEST|'..pending.target..' '..pending.mode..' '..pending.outcome
+        rows[#rows+1]='LAST_ACTION_SOURCE|'..(pending.source or 'UNKNOWN')
+    end
     local blocked={}; for k,v in pairs(blacklist) do if v then blocked[#blocked+1]=k end end; table.sort(blocked)
     rows[#rows+1]='BLACKLIST|'..table.concat(blocked,',')
     for name,reason in pairs(receiverRejects) do rows[#rows+1]='RECEIVER_REJECT|'..clean(name)..' '..reason end
@@ -1029,7 +1061,7 @@ function controller.ThrowAway()
         releaseChoice();if receiverMenu then receiverMenu.Visible=false end
         usedTools[ball.tool]=possession.epoch
         local epoch=possession.epoch
-        pending={tool=ball.tool,model=ball.model,target='OUT_OF_BOUNDS',mode='MANUAL_HIGH_AWAY',at=os.clock(),outcome='PREPARING'}
+        pending={tool=ball.tool,model=ball.model,target='OUT_OF_BOUNDS',mode='MANUAL_HIGH_AWAY',at=os.clock(),outcome='PREPARING',source='MANUAL_AWAY'}
         startAnimation(ball,os.clock())
         if stopped then return false end
         local final=ready(true)
@@ -1140,14 +1172,16 @@ local function lane(shot,d)
 end
 local function risk(shot,receiver,defenders)
     local margin,laneMargin=45,45; local t=shot.time
+    shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
     for _,d in ipairs(defenders) do
         -- Instant turning at observed/normal run speed is optimistic for the DB.
         -- A trailing defender must cover the actual distance before arrival;
         -- a stationary prevent defender can move instead of staying frozen.
         local distance=flat(shot.arrival-d.p).Magnitude
         local clearance=distance-runSpeed(d)*t-(4.5+d.turn*3)
-        margin=math.min(margin,clearance)
-        laneMargin=math.min(laneMargin,lane(shot,d))
+        if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
+        local pathClearance=lane(shot,d)
+        if pathClearance<laneMargin then laneMargin=pathClearance;shot.laneDB=d.name;shot.laneActor=d end
     end
     shot.margin,shot.lane=margin,laneMargin
     -- Once both clearances have a useful safety surplus, extra empty space
@@ -1308,10 +1342,17 @@ local function solve(player,mode)
         target=V(clamp(target.X,-75+oob.XTolerance,75+oob.XTolerance),target.Y,
             clamp(target.Z,-175+oob.ZTolerance,175+oob.ZTolerance))
     end
-    if flat(arrival-target).Magnitude>math.max(.01,flat(target-origin).Magnitude*.0001) then
-        arrivalRejects[mode]={target=player.Name,origin=origin,velocity=velocity,time=time,arrival=arrival,aim=target}
+    local endpointError=flat(arrival-target).Magnitude
+    -- The V24 live report contains native residuals of about .032-.034 studs.
+    -- This narrowly bounded arithmetic allowance is not a catch radius. Use
+    -- the actual ballistic arrival for every later reach/coverage check.
+    local endpointTolerance=math.max(.05,flat(target-origin).Magnitude*.0001)
+    if endpointError>endpointTolerance then
+        arrivalRejects[mode]={target=player.Name,origin=origin,velocity=velocity,time=time,arrival=arrival,aim=target,
+            error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch}
         return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH'
     end
+    if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
     return {origin=origin,velocity=velocity,power=power,time=time,mode=mode,arrival=arrival,
         passYards=flat(arrival-origin).Magnitude/3,at=os.clock()}
 end
@@ -1520,6 +1561,7 @@ drawGuide=function(now)
 end
 
 local function holdManual(r,reason)
+    if r then rememberBlocked(r.player,r.shot,reason or 'MANUAL_LOCK_COVERED') end
     if sequence and sequence.deep and r and sequence.player==r.player and reason=='MANUAL_LOCK_COVERED' then
         assistance.cancelledBurns[r.player]=possession.epoch;log('BURN_CANCEL',r.player.Name..' BURN_COVERAGE_CLOSED')
         cancelSequence('BURN_COVERAGE_CLOSED')
@@ -1610,7 +1652,7 @@ local function releaseNow(ball,selected,defenders,now)
     -- Readable live InputBegan request, exactly: Vector3.new(70000000) is X only.
     -- No retry: FireServer acceptance does not confirm a throw or server state.
     usedTools[ball.tool]=possession.epoch; attempts=attempts+1
-    pending={tool=ball.tool,model=ball.model,target=selected.player.Name,mode=shot.mode,at=now,outcome='REQUESTING'}
+    pending={tool=ball.tool,model=ball.model,target=selected.player.Name,mode=shot.mode,at=now,outcome='REQUESTING',source='AUTO_QB'}
     classify(shot,selected.sample,defenders)
     local evidence=string.format('%s %s %s t=%.3f power=%.2f arrival=%.2f,%.2f,%.2f margin=%.2f lane=%.2f residual=%.2f',
         selected.player.Name,shot.mode,shot.window,shot.time,shot.power,shot.arrival.X,shot.arrival.Y,shot.arrival.Z,
@@ -1671,6 +1713,7 @@ local function driveSequence(now)
     if stopped or sequence~=seq then return end
     if usedTools[ball.tool]==possession.epoch then sequence=nil;lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
     else
+        rememberBlocked(seq.player,seq.selected.shot,gate)
         cancelSequence('FINAL_RELEASE_CHECK_BLOCKED');cancelJump('RELEASE_CANCELLED')
         opportunities[seq.player]=nil;shotCache[seq.player]=nil
     end
@@ -1724,7 +1767,7 @@ local function tick(now)
         if ball.nativeThrow and usedTools[ball.tool]~=possession.epoch then
             usedTools[ball.tool]=possession.epoch
             pending={tool=ball.tool,model=ball.model,target=choice and choice.player.Name or 'NATIVE',
-                mode=choice and choice.shot.mode or 'NATIVE',at=now,outcome='NATIVE_MANUAL_THROW_UNCONFIRMED'}
+                mode=choice and choice.shot.mode or 'NATIVE',at=now,outcome='NATIVE_MANUAL_THROW_UNCONFIRMED',source='NATIVE_ANIMATION_OBSERVED; REQUEST_NOT_PROVEN'}
             log('MANUAL','Native Throw animation owns this possession; no competing AUTO request')
         end
         if pending and usedTools[ball.tool]==possession.epoch then

@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v24` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v24.1` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V24 removes automatic team stats and the jump-peak gate. AWAY is always visible beside the collapsed status bar. Deep opportunities request a normal jump and immediately run final native safety/release checks. Manual WR LIST exclusions, AFK protection, short-pass preference, RUN guidance, Goal LOS-only bypass and X reload remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. Yuna startup automation remains cancelled. [Changes, usage and validation](FF3_AUTO_QB.md).
+**FF3:** V24.1 corrects small native endpoint rejections and retains exact blocked-decision evidence. V24 removes automatic team stats and the jump-peak gate. AWAY is always visible beside the collapsed status bar. Deep opportunities request a normal jump and immediately run final native safety/release checks. Manual WR LIST exclusions, AFK protection, short-pass preference, RUN guidance, Goal LOS-only bypass and X reload remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. Yuna startup automation remains cancelled. [Changes, usage and validation](FF3_AUTO_QB.md).
 
 Historical stats/GUI diagnostics are separate tools, not regular-loader dependencies. The V23 runtime is preserved in its immutable tag; its stats integration is withdrawn.
 
