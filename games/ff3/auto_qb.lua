@@ -61,6 +61,7 @@ local assistance={jumpCount=0,guideChecks=0,maxGuideSeconds=0,
 local animationStatus, animationSource = 'NOT_REQUESTED', 'NONE'
 local lastSequenceOutcome='NONE'
 local frameCalls,maxFrameCalls,maxHeartbeat = 0,0,0
+local motionFrame=0
 local maxTick=0
 local fieldWaitSince, fieldWaitSeconds, initialFieldDiscovered, failureNotified = nil, 0, false, false
 local function resetFieldWait() fieldWaitSince=nil; fieldWaitSeconds=0 end
@@ -566,7 +567,8 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v24.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v24.2','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
@@ -1006,7 +1008,7 @@ local function ready(manual)
     local observed,tracks=pcall(function() return hum:GetPlayingAnimationTracks() end)
     if not observed or type(tracks)~='table' then return nil,'NATIVE_ANIMATION_OBSERVATION_FAILED' end
     for _,track in ipairs(tracks) do
-        if track.Name=='Throw' and track.IsPlaying then
+        if track.Name=='Throw' and track.IsPlaying and (not ownedAnimation or track~=ownedAnimation.track) then
             ball.nativeThrow=true; observedThrow={model=model,track=track}; break
         end
     end
@@ -1094,23 +1096,36 @@ local function sample(player,now)
     local velocity=root.AssemblyLinearVelocity
     if not vector(velocity) or flat(velocity).Magnitude>55 then return end
     local s=samples[player]
-    if not s or s.model~=model or now-s.at>.35 then
-        s={model=model,p=root.Position,v=velocity,at=now,n=1,turn=0,path={},motionSince=nil,observedSpeed=0}; samples[player]=s
-    else
-        local dt=now-s.at
+    if not s or s.model~=model or now-(s.motionAt or s.at)>.35 then
+        s={model=model,p=root.Position,v=velocity,at=now,n=1,turn=0,path={},motionSince=nil,observedSpeed=0,
+            motionAt=now,motionP=root.Position,motionV=velocity,motionFrame=motionFrame}; samples[player]=s
+        s.path[1]={at=now,p=root.Position}
+    elseif s.motionFrame~=motionFrame then
+        local dt=now-s.motionAt
         if dt>0 then
-            local observed=(root.Position-s.p)/dt
+            local observed=(root.Position-s.motionP)/dt
             -- A teleport makes interception estimates stale, rather than a route ban.
             if observed.Magnitude>100 then s.n=0; s.path={}; s.motionSince=nil end
             s.observedSpeed=flat(observed).Magnitude
             if s.observedSpeed>=CFG.MinMoveSpeed and flat(velocity).Magnitude>=CFG.MinMoveSpeed and observed.Magnitude<=100 then
-                s.motionSince=s.motionSince or s.at
+                s.motionSince=s.motionSince or s.motionAt
             else s.motionSince=nil end
-            s.turn=clamp((velocity-s.v).Magnitude/30,0,1)
-            s.p,s.v,s.at,s.n=root.Position,velocity,now,s.n+1
+            s.turn=clamp((velocity-s.motionV).Magnitude/30,0,1)
+            s.n=s.n+1
+            s.motionP,s.motionV,s.motionAt=root.Position,velocity,now
+            s.path[#s.path+1]={at=now,p=root.Position}
         end
+        s.motionFrame=motionFrame
     end
-    s.path[#s.path+1]={at=now,p=root.Position}
+    local readElapsed=now-s.motionAt
+    if readElapsed>0 and (root.Position-s.motionP).Magnitude/readElapsed>100 then
+        s.n=0;s.path={};s.motionSince=nil
+    end
+    -- Re-reading an unchanged pose during a native solve/animation is not a
+    -- second physics observation. Keep AFK history intact, but inspect actual
+    -- current position/velocity so a stop, cut or teleport cannot slip through.
+    s.turn=math.max(s.turn,clamp((velocity-s.v).Magnitude/30,0,1))
+    s.p,s.v,s.at=root.Position,velocity,now
     while #s.path>1 and now-s.path[1].at>CFG.MotionWindow do table.remove(s.path,1) end
     s.hum,s.head,s.name=hum,head,player.Name
     return s
@@ -1974,7 +1989,7 @@ local built,buildError=pcall(function()
     if core and core.DescendantAdded then connect(core.DescendantAdded,onLineAdded) end
     connect(Run.Heartbeat,function()
         if stopped then return end
-        local now=os.clock(); frameCalls=0
+        local now=os.clock(); frameCalls=0;motionFrame=motionFrame+1
         local ok,err=pcall(function() updateJump(now);driveSequence(now) end)
         if not ok then fatalError=clean(err); log('RELEASE_ERROR',err); controller.Stop('RELEASE_SEQUENCE_ERROR'); return end
         tick(now)
