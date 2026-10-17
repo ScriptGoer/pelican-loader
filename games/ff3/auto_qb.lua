@@ -1,18 +1,18 @@
--- PELICAN_FF3_V22: coverage-aware native receiver/mode planning alongside Yuna.
+-- PELICAN_FF3_V23: coverage-aware native receiver/mode planning alongside Yuna.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
 -- InputBegan release. Read-only closure discovery; no getter replacement/hooks.
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
-local VERSION, KEY = 'PELICAN_FF3_V22', 'PELICAN_FF3_AUTO_QB'
+local VERSION, KEY = 'PELICAN_FF3_V23', 'PELICAN_FF3_AUTO_QB'
 local CFG = {Interval=.12, DiscoveryInterval=2, MaxRoster=64,
     Gravity=28,
     ThrowMargin=6, ThrowLane=4, Settle=0, MinPlayAge=0, MinDownfieldYards=6,
     MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20, PlanCalls=6, PlanSeconds=.008, CacheAge=.36, SafeGap=.4, ReceiverSwitchYards=5}
 local Players, Run, Input = game:GetService('Players'), game:GetService('RunService'), game:GetService('UserInputService')
 local me = Players.LocalPlayer
-if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V22 requires the observed FF3 live place') end
+if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V23 requires the observed FF3 live place') end
 local env = type(getgenv)=='function' and getgenv() or _G
 local prior = env[KEY]
 if prior and (type(prior.Stop)~='function' or prior.Stop('REPLACED')~=true) then error('PELICAN: previous Auto QB cleanup failed') end
@@ -34,6 +34,15 @@ local controller = {Version=VERSION, IsStopped=false}
 local connections, events, counts, samples = {}, {}, {}, {}
 local profile, lease, choice, pending, gui, status, autoButton, throwButton, copyButton
 local receiverButton, receiverMenu, renderReceivers, awayButton
+local teamStats,teamButton,teamStatus=nil,nil,'NOT_INITIALIZED'
+local teamOptions=type(context.FF3Options)=='table' and context.FF3Options.TeamStats or nil
+assert(teamOptions==nil or type(teamOptions)=='table','FF3.TeamStats must be a table')
+teamOptions=teamOptions or {}
+local teamEnabled=teamOptions.Enabled~=false
+local statRetention=type(teamOptions.RetentionSeconds)=='number' and teamOptions.RetentionSeconds or 600
+local statBlocks={}
+local statAllows=env.PELICAN_FF3_STATS_ALLOW
+if type(statAllows)~='table' or getmetatable(statAllows)~=nil then statAllows={};env.PELICAN_FF3_STATS_ALLOW=statAllows end
 local blacklist=env.PELICAN_FF3_WR_BLACKLIST
 if type(blacklist)~='table' or getmetatable(blacklist)~=nil then blacklist={}; env.PELICAN_FF3_WR_BLACKLIST=blacklist end
 local stopped, cleanupComplete, inTick, auto, throwing, expanded = false, false, false, true, true, false
@@ -119,7 +128,10 @@ local function receiverKey(player)
     end
     return 'NAME:'..player.Name
 end
-function controller.IsBlacklisted(player) return blacklist[receiverKey(player)]==true end
+function controller.IsBlacklisted(player)
+    local key=receiverKey(player);local stat=statBlocks[key]
+    return blacklist[key]==true or teamEnabled and not statAllows[key] and stat and stat.bad and os.clock()-stat.at<=statRetention or false
+end
 local function teammate(player)
     if player==me or not me.Team or me.Neutral or player.Neutral or player.Team~=me.Team then return false end
     if controller.IsBlacklisted(player) then return false end
@@ -177,6 +189,7 @@ function controller.SetBlacklisted(player,value)
     if stopped or not instance(player,'Player') or player==me then return false end
     local key=receiverKey(player)
     blacklist[key]=value==true and true or nil
+    statAllows[key]=value~=true and true or nil
     log('BLACKLIST',player.Name..' '..tostring(value==true))
     opportunities[player]=nil; shotCache[player]=nil
     if value and choice and choice.player==player then releaseChoice() end
@@ -539,7 +552,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v22','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v23','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
@@ -594,6 +607,14 @@ function controller.GetReport()
     if pending then rows[#rows+1]='LAST_REQUEST|'..pending.target..' '..pending.mode..' '..pending.outcome end
     local blocked={}; for k,v in pairs(blacklist) do if v then blocked[#blocked+1]=k end end; table.sort(blocked)
     rows[#rows+1]='BLACKLIST|'..table.concat(blocked,',')
+    local statExcluded,statAllowed={},{}
+    for key,value in pairs(statBlocks) do if teamEnabled and value.bad and not statAllows[key] and os.clock()-value.at<=statRetention then statExcluded[#statExcluded+1]=key end end
+    for key,value in pairs(statAllows) do if value then statAllowed[#statAllowed+1]=key end end
+    table.sort(statExcluded);table.sort(statAllowed)
+    rows[#rows+1]='STATS_AUTO_EXCLUSIONS|'..table.concat(statExcluded,',')
+    rows[#rows+1]='STATS_MANUAL_ALLOW|'..table.concat(statAllowed,',')
+    rows[#rows+1]='TEAM_STATS_STATUS|'..teamStatus
+    if teamStats then rows[#rows+1]='TEAM_STATS_BEGIN\n'..teamStats.GetReport()..'\nTEAM_STATS_END' end
     for name,reason in pairs(receiverRejects) do rows[#rows+1]='RECEIVER_REJECT|'..clean(name)..' '..reason end
     local keys={}; for k in pairs(counts) do keys[#keys+1]=k end; table.sort(keys)
     for _,k in ipairs(keys) do rows[#rows+1]='GATE_COUNT|'..k..' '..counts[k] end
@@ -617,6 +638,8 @@ function controller.Stop(reason)
     if cleanupComplete then return true end
     if not stopped then stopReason=clean(reason or 'USER_END') end
     stopped=true; controller.IsStopped=true; fieldWaitSince=nil
+    local teamClean=true
+    if teamStats then local ok,result=pcall(teamStats.Stop,reason or 'AUTO_QB_STOP');teamClean=ok and result==true end
     releaseChoice()
     if disposeAnimation then disposeAnimation() end
     local remaining={}
@@ -626,7 +649,7 @@ function controller.Stop(reason)
     end
     connections=remaining; log('STOP',reason or 'USER_END'); gate='STOPPED'
     if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil;assistance.guideUI=nil;assistance.guideArrow=nil end end
-    cleanupComplete=#remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil
+    cleanupComplete=teamClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -654,6 +677,16 @@ function controller.SetThrow(value)
     end
     if throwButton then throwButton.Text=throwing and 'THR ON' or 'THR OFF' end
     log('THROW',throwing)
+end
+function controller.SetTeamStats(value)
+    if stopped then return false end
+    if not teamStats then return false end
+    teamEnabled=value==true
+    local ok,problem=pcall(teamStats.SetEnabled,teamEnabled)
+    if not ok then fatalError='Team stats: '..clean(problem);controller.Stop('TEAM_STATS_ERROR');return false end
+    if teamButton then teamButton.Text=teamEnabled and 'TEAM ON' or 'TEAM OFF' end
+    if choice and controller.IsBlacklisted(choice.player) then releaseChoice() end
+    return true
 end
 if context.RegisterCleanup then context.RegisterCleanup(function() return controller.Stop('LOADER_CLEANUP') end) end
 if context.IsCancelled and context.IsCancelled() then controller.Stop('CANCELLED'); return controller end
@@ -1921,7 +1954,7 @@ local function button(text,x,width,y)
     b.Parent=gui; return b
 end
 local built,buildError=pcall(function()
-    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V22'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
+    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V23'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('WAIT YUNA',-166,138)
     assistance.guideUI=Instance.new('Frame');assistance.guideUI.Name='RunGuide';assistance.guideUI.Size=UDim2.fromOffset(36,42)
     assistance.guideUI.Position=UDim2.new(.5,-18,0,136);assistance.guideUI.BackgroundTransparency=1;assistance.guideUI.Visible=false;assistance.guideUI.Parent=gui
@@ -1936,10 +1969,12 @@ local built,buildError=pcall(function()
     receiverButton=button('WR LIST',-166,106,112); receiverButton.Name='Receivers'
     awayButton=button('AWAY',-58,54,112);awayButton.Name='ThrowAway'
     connect(awayButton.Activated,controller.ThrowAway)
+    teamButton=button(teamEnabled and 'TEAM ON' or 'TEAM OFF',-166,162,137);teamButton.Name='TeamStats'
+    connect(teamButton.Activated,function() controller.SetTeamStats(not teamEnabled) end)
     receiverMenu=Instance.new('Frame'); receiverMenu.Name='ReceiverList'; receiverMenu.Size=UDim2.fromOffset(162,134)
-    receiverMenu.Position=UDim2.new(1,-166,0,137); receiverMenu.BackgroundColor3=Color3.fromRGB(24,30,28); receiverMenu.Parent=gui
+    receiverMenu.Position=UDim2.new(1,-166,0,162); receiverMenu.BackgroundColor3=Color3.fromRGB(24,30,28); receiverMenu.Parent=gui
     local title=Instance.new('TextLabel'); title.Name='Title'; title.Size=UDim2.fromOffset(158,22); title.Position=UDim2.fromOffset(2,0)
-    title.Text='Tap receiver to block / allow'; title.TextSize=10; title.TextColor3=Color3.new(1,1,1); title.BackgroundTransparency=1; title.Parent=receiverMenu
+    title.Text='Tap block/allow; S=stats'; title.TextSize=10; title.TextColor3=Color3.new(1,1,1); title.BackgroundTransparency=1; title.Parent=receiverMenu
     local rows,rowPlayers={},{}; local page=1; local lastRender=-math.huge
     for i=1,3 do
         local index=i; local row=button('',0,158,0); row.Name='Receiver'..i; row.Parent=receiverMenu
@@ -1962,7 +1997,7 @@ local built,buildError=pcall(function()
         local pages=math.max(1,math.ceil(#list/3)); page=clamp(page,1,pages)
         for i,row in ipairs(rows) do
             local p=list[(page-1)*3+i]; rowPlayers[i]=p; row.Visible=p~=nil
-            if p then row.Text=(controller.IsBlacklisted(p) and '[X] @' or '[ ] @')..p.Name end
+            if p then row.Text=(blacklist[receiverKey(p)] and '[X] @' or controller.IsBlacklisted(p) and '[S] @' or '[ ] @')..p.Name end
         end
         pageLabel.Text=#list==0 and 'No teammates' or tostring(page)..' / '..pages
         prev.Visible=pages>1; nextPage.Visible=pages>1
@@ -1973,10 +2008,10 @@ local built,buildError=pcall(function()
         receiverMenu.Visible=not receiverMenu.Visible; if cancelSequence then cancelSequence('RECEIVER_MENU') end;clearGuide();cancelJump('RECEIVER_MENU'); clearWindows(); if choice then choice.openSince=nil end
         if receiverMenu.Visible then renderReceivers() end
     end)
-    autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false;awayButton.Visible=false; receiverMenu.Visible=false
+    autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false;awayButton.Visible=false;teamButton.Visible=false; receiverMenu.Visible=false
     connect(status.Activated,function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
-        receiverButton.Visible=expanded;awayButton.Visible=expanded
+        receiverButton.Visible=expanded;awayButton.Visible=expanded;teamButton.Visible=expanded
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
@@ -2016,5 +2051,68 @@ local built,buildError=pcall(function()
     end)
 end)
 if not built then controller.Stop('STARTUP_ERROR'); error(buildError) end
+-- The cancelled Yuna startup/GUI recording workflow is not a dependency.
+-- Only this controller's separately packaged stat reader is mounted here.
+local statsOK,statsError=pcall(function()
+    for _,key in ipairs({'PELICAN_YUNA_GUI_RECORDER','PELICAN_FF3_STATS_RECORDER'}) do
+        local old=env[key]
+        if old then assert(type(old.Stop)=='function' and old.Stop('REPLACED_BY_TEAM_STATS')==true,'Previous recorder cleanup unconfirmed') end
+    end
+    local path='games/ff3/team_stats.lua'
+    local source
+    if context.Sources~=nil or context.SourceMode=='BUNDLED' then
+        source=context.Sources and context.Sources[path]
+        assert(type(source)=='string' and source~='','Missing bundled team stats source')
+    elseif type(context.BaseUrl)=='string' and type(context.Ref)=='string' then
+        source=game:HttpGet(context.BaseUrl..'/'..context.Ref..'/'..path)
+    else
+        teamStatus='LOADER_CONTEXT_REQUIRED';teamEnabled=false;teamButton.Text='TEAM N/A';return
+    end
+    assert(not stopped and not (context.IsCancelled and context.IsCancelled()),'Cancelled during team stats fetch')
+    assert(type(source)=='string' and source~='','Missing team stats source')
+    local chunk,problem=loadstring(source,'@'..path);assert(type(chunk)=='function',problem or 'Team stats compile failed')
+    local function canLeave()
+        local model=body(me)
+        return not stopped and auto and teamEnabled and profile~=nil and profile.state.Status.Value~='InPlay'
+            and profile.state.Throwable.Value==false and (not model or not equipped(model))
+    end
+    local mounted=chunk({Options=teamOptions,RegisterCleanup=context.RegisterCleanup,
+        OnGrade=function(player,role,grade)
+            if role~='WR' then return end
+            statBlocks[receiverKey(player)]=grade.bad==true and {bad=true,at=os.clock(),reason=grade.verdict} or nil
+            if choice and choice.player==player and controller.IsBlacklisted(player) then releaseChoice() end
+        end,
+        IsExempt=function(player) return statAllows[receiverKey(player)]==true end,
+        CanLeave=canLeave,
+        OnStatus=function(summary)
+            if not stopped and teamButton and teamEnabled then
+                local label='TEAM '..summary;if teamButton.Text~=label then teamButton.Text=label end
+            end
+        end,
+        CanInspect=function()
+            local model=body(me)
+            return not stopped and teamEnabled and profile~=nil and profile.state.Status.Value~='InPlay'
+                and profile.state.Throwable.Value==false and (not model or not equipped(model))
+        end,
+        RequestLeave=function(reason)
+            if not canLeave() then return false end
+            local oldTeam=me.Team
+            log('TEAM_LEAVE_REQUEST',reason);preserve(true)
+            if copyResult~='API_ACCEPTED' and fileResult~='API_ACCEPTED' then
+                log('TEAM_LEAVE_BLOCK','REPORT_EXPORT_UNAVAILABLE');preserve(false);return false
+            end
+            if not controller.Stop('TEAM_STATS_LEAVE') then return false end
+            local model=body(me)
+            if me.Team~=oldTeam or profile.state.Status.Value=='InPlay' or profile.state.Throwable.Value~=false or model and equipped(model) then return false end
+            local ok,problem=pcall(function() me:Kick('Pelican: '..reason..'. Stats report saved before leaving.') end)
+            log('TEAM_LEAVE_RESULT',ok and 'API_ACCEPTED_UNCONFIRMED' or 'FAILED_NO_RETRY '..clean(problem));preserve(true)
+            return ok
+        end,
+        OnError=function(problem) fatalError='Team stats: '..clean(problem);controller.Stop('TEAM_STATS_ERROR') end})
+    assert(type(mounted)=='table' and mounted.Version=='PELICAN_FF3_TEAM_STATS_V1' and type(mounted.Stop)=='function' and type(mounted.GetReport)=='function','Team stats controller contract failed')
+    teamStats=mounted
+    teamStatus='MOUNTED'
+end)
+if not statsOK then fatalError=clean(statsError);controller.Stop('TEAM_STATS_INIT_ERROR') end
 log('START','Observed deep peak; cancel sold burn; advisory parallel-run forecast; Goal LOS bypass')
 return controller
