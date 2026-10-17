@@ -1,18 +1,18 @@
--- PELICAN_FF3_V24: coverage-aware native receiver/mode planning alongside Yuna.
+-- PELICAN_FF3_V25: coverage-aware native receiver/mode planning alongside Yuna.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
 -- InputBegan release. Read-only closure discovery; no getter replacement/hooks.
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
-local VERSION, KEY = 'PELICAN_FF3_V24', 'PELICAN_FF3_AUTO_QB'
+local VERSION, KEY = 'PELICAN_FF3_V25', 'PELICAN_FF3_AUTO_QB'
 local CFG = {Interval=.12, DiscoveryInterval=2, MaxRoster=64,
     Gravity=28,
     ThrowMargin=6, ThrowLane=4, Settle=0, MinPlayAge=0, MinDownfieldYards=6,
     MinMoveSpeed=2, MinMotionAge=.65, MotionWindow=.8, MinMotionTravel=2.4, FieldDiscoverySeconds=20, PlanCalls=6, PlanSeconds=.008, CacheAge=.36, SafeGap=.4, ReceiverSwitchYards=5}
 local Players, Run, Input = game:GetService('Players'), game:GetService('RunService'), game:GetService('UserInputService')
 local me = Players.LocalPlayer
-if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V24 requires the observed FF3 live place') end
+if not me or game.PlaceId ~= 82866880824588 then error('PELICAN V25 requires the observed FF3 live place') end
 local env = type(getgenv)=='function' and getgenv() or _G
 local prior = env[KEY]
 if prior and (type(prior.Stop)~='function' or prior.Stop('REPLACED')~=true) then error('PELICAN: previous Auto QB cleanup failed') end
@@ -109,6 +109,23 @@ end
 local function finite(x) return type(x)=='number' and x==x and math.abs(x)<1e8 end
 local ff3Options=context.FF3Options or {}
 if type(ff3Options)~='table' then error('PELICAN: FF3 options must be a table') end
+local closeBullet=ff3Options.CloseBullet
+if closeBullet==nil then closeBullet={} end
+if closeBullet==false then closeBullet={Enabled=false} end
+assert(type(closeBullet)=='table','FF3.CloseBullet must be a table or false')
+assert(closeBullet.Enabled==nil or type(closeBullet.Enabled)=='boolean','CloseBullet.Enabled must be boolean')
+local touch={enabled=closeBullet.Enabled~=false,min=closeBullet.MinPower or 60,near=closeBullet.SoftYards or 10,full=closeBullet.FullPowerYards or 25}
+assert(finite(touch.min) and touch.min>=40 and touch.min<95 and finite(touch.near) and touch.near>0 and finite(touch.full) and touch.full>touch.near and touch.full<=50,'Invalid CloseBullet power/range policy')
+local function closePower(player)
+    if not touch.enabled then return end
+    -- Resolve actual parts without world scans.
+    local target=player.Character and player.Character:FindFirstChild('HumanoidRootPart')
+    local head=me.Character and me.Character:FindFirstChild('Head')
+    if not target or not head then return end
+    local distance=(Vector3.new(target.Position.X-head.Position.X,0,target.Position.Z-head.Position.Z)).Magnitude/3
+    if distance>=touch.full then return end
+    return math.floor(touch.min+(95-touch.min)*math.max(0,(distance-touch.near)/(touch.full-touch.near))+.5)
+end
 for _,key in ipairs({'MovementGuide','PredictiveJump'}) do
     if ff3Options[key]~=nil and type(ff3Options[key])~='boolean' then error('PELICAN: '..key..' must be boolean') end
 end
@@ -191,6 +208,10 @@ local function restoreModeTransaction()
     local owned=q.AutoThrowType==m.auto and rawget(m.auto,'Enabled')==false and rawget(q,'SelectedType')==m.mode
     if rawget(m.auto,'Enabled')==false then rawset(m.auto,'Enabled',m.enabled) end
     if rawget(q,'SelectedType')==m.mode then rawset(q,'SelectedType',m.selected) end
+    for _,field in ipairs(m.fields or {}) do
+        if rawget(field.object,field.key)==field.written then rawset(field.object,field.key,field.before)
+        else owned=false end
+    end
     if m.worker and coroutine.status(m.worker)=='suspended' and type(coroutine.close)=='function' then pcall(coroutine.close,m.worker) end
     if not owned then log('MODE','External edit preserved during solve') end
     return owned
@@ -377,7 +398,7 @@ local function marker(o,ground)
     end
     return role,p.Z,p.X-dx/2,p.X+dx/2
 end
-local function namedFieldReady(now,ground)
+local function namedFieldReady(now,ground,goalOnly)
     local known,why=observedGround()
     if why~='ACCEPTED' or known~=ground then lines.fastStatus='KNOWN_GROUND_UNVERIFIED'; return false end
     local blue=workspace:FindFirstChild('LineDown')
@@ -399,8 +420,10 @@ local function namedFieldReady(now,ground)
         lines.rootDirty=false; lines.rootChecked=now
     end
     if lines.groundAmbiguous then lines.fastStatus='GROUND_AMBIGUOUS'; return false end
-    if lines.rootNames.blueCount~=1 or lines.rootNames.yellowCount~=1 then lines.fastStatus='NAMED_ROOTS_MISSING_OR_DUPLICATE'; return false end
-    for _,entry in ipairs({{blue,'BLUE'},{yellow,'YELLOW'}}) do
+    if lines.rootNames.blueCount~=1 or not goalOnly and lines.rootNames.yellowCount~=1 then lines.fastStatus='NAMED_ROOTS_MISSING_OR_DUPLICATE'; return false end
+    local entries={{blue,'BLUE'}}
+    if not goalOnly then entries[#entries+1]={yellow,'YELLOW'} end
+    for _,entry in ipairs(entries) do
         local object,expected=entry[1],entry[2]
         if not observedLine(object) then lines.fastStatus='NAMED_ROOT_CLASS_OR_ANCESTRY'; return false end
         local role,_,lo,hi=marker(object,ground)
@@ -408,7 +431,7 @@ local function namedFieldReady(now,ground)
             lines.fastStatus='NAMED_ROOT_GEOMETRY_COLOR_OR_VISIBILITY'; return false
         end
     end
-    lines.fastStatus='VALIDATED_NAMED_ROOT_PAIR'
+    lines.fastStatus=goalOnly and 'VALIDATED_NAMED_BLUE_ONLY' or 'VALIDATED_NAMED_ROOT_PAIR'
     return true
 end
 local function downReading()
@@ -446,21 +469,12 @@ local function readLines(now)
     local yards,conflict,goalToGo=downReading()
     if lines.goalToGo~=goalToGo then lines.generation=lines.generation+1 end
     lines.goalToGo=goalToGo
-    if goalToGo then
-        -- Goal-to-go disables only LOS-derived checks. Never reuse a previous
-        -- play's line/direction or guess an attack direction from route/camera.
-        lines.los=nil; lines.forward=nil; lines.since=0; lines.at=now
-        if not ground or not groundShape(ground) or lines.groundAmbiguous then return missing('FIELD_GROUND_UNKNOWN') end
-        lines.readySource='HUD_GOAL_TO_GO_LOS_BYPASS'
-        lines.status='GOAL_TO_GO_LOS_BYPASSED'
-        return true
-    end
     if conflict then return missing(conflict) end
     -- The bound applies to actual marker geometry, never the number of visited
     -- map objects or unrelated Beams. It recovers as markers disappear/hide.
     lines.capped=false; lines.markerCount=0
     if not ground or not groundShape(ground) or lines.groundAmbiguous then return missing('LOS_GROUND_UNKNOWN') end
-    local namedReady=namedFieldReady(now,ground)
+    local namedReady=namedFieldReady(now,ground,goalToGo)
     if not lines.initialComplete and not namedReady then return missing('LOS_SEARCHING') end
     if lines.groundAmbiguous then return missing('LOS_GROUND_UNKNOWN') end
     local clusters={BLUE={},YELLOW={},GOAL={}}; local inspected=0
@@ -490,25 +504,48 @@ local function readLines(now)
     end
     if #valid.BLUE~=1 then return missing('LOS_BLUE_MISSING_OR_AMBIGUOUS') end
     local blue,yellow=valid.BLUE[1],valid.YELLOW[1]
-    if #valid.YELLOW~=1 then return missing('LOS_YELLOW_MISSING_OR_AMBIGUOUS') end
-    local delta=yellow.z-blue.z
-    if math.abs(delta)<2 or math.abs(delta)>90 then return missing('LOS_LINE_DISTANCE_INVALID') end
-    if type(yards)=='number' and math.abs(math.abs(delta)/3-yards)>.8 then return missing('LOS_DOWN_HUD_MISMATCH') end
     local cf=ground.CFrame
     local los=ground.Position+cf.UpVector*.5-cf.LookVector*blue.z
+    local delta,targetZ
+    if goalToGo then
+        -- LineDown is retained/validated as BLUE; a yellow first-down marker
+        -- beyond the goal line is not required. Prefer a verified pair at this
+        -- same LOS, otherwise require nearest-end-zone and QB-side agreement.
+        if lines.confirmedGround==ground and lines.confirmedLos and flat(lines.confirmedLos-los).Magnitude<.05 then
+            local dir=lines.confirmedForward
+            if dir then targetZ=dir:Dot(cf.LookVector)<0 and 150 or -150 end
+        end
+        if not targetZ then
+            if math.abs(blue.z)<.05 then return missing('GOAL_DIRECTION_UNVERIFIED') end
+            targetZ=blue.z>0 and 150 or -150
+        end
+        delta=targetZ-blue.z
+        if math.abs(delta)<.05 then return missing('GOAL_DIRECTION_UNVERIFIED') end
+        local _,root=body(me)
+        local direction=cf.LookVector*(delta>0 and -1 or 1)
+        if not root then return missing('GOAL_DIRECTION_WAIT_QB') end
+        if not lines.confirmedLos or lines.confirmedGround~=ground or flat(lines.confirmedLos-los).Magnitude>=.05 then
+            if flat(root.Position-los):Dot(direction)>.5 then return missing('GOAL_DIRECTION_QB_SIDE_CONFLICT') end
+        end
+    else
+        if #valid.YELLOW~=1 then return missing('LOS_YELLOW_MISSING_OR_AMBIGUOUS') end
+        delta=yellow.z-blue.z;targetZ=yellow.z
+        if math.abs(delta)<2 or math.abs(delta)>90 then return missing('LOS_LINE_DISTANCE_INVALID') end
+        if type(yards)=='number' and math.abs(math.abs(delta)/3-yards)>.8 then return missing('LOS_DOWN_HUD_MISMATCH') end
+    end
     local forward=cf.LookVector*(delta>0 and -1 or 1)
     local same=lines.los and flat(lines.los-los).Magnitude<.05 and lines.forward:Dot(forward)>.99
     local sameMeaning=lines.confirmedLos and flat(lines.confirmedLos-los).Magnitude<.05
-        and lines.confirmedForward:Dot(forward)>.99 and math.abs(lines.confirmedTargetZ-yellow.z)<.05
+        and lines.confirmedForward:Dot(forward)>.99 and math.abs(lines.confirmedTargetZ-targetZ)<.05
         and lines.confirmedGround==ground
     if not sameMeaning then
         lines.generation=lines.generation+1
         log('LOS',string.format('z=%.2f forwardZ=%.0f',los.Z,forward.Z))
     end
     if not same or not sameMeaning then lines.since=now end
-    lines.confirmedLos,lines.confirmedForward,lines.confirmedTargetZ,lines.confirmedGround=los,forward,yellow.z,ground
+    lines.confirmedLos,lines.confirmedForward,lines.confirmedTargetZ,lines.confirmedGround=los,forward,targetZ,ground
     lines.los,lines.forward,lines.at=los,forward,now
-    lines.readySource=namedReady and 'VALIDATED_NAMED_ROOT_PAIR' or 'COMPLETE_BACKGROUND_SCAN'
+    lines.readySource=goalToGo and 'GOAL_VALIDATED_BLUE_LINE' or namedReady and 'VALIDATED_NAMED_ROOT_PAIR' or 'COMPLETE_BACKGROUND_SCAN'
     lines.status=now-lines.since>=.25 and 'OBSERVED_LINES_STABLE' or 'LOS_SETTLING'
     return lines.status=='OBSERVED_LINES_STABLE'
 end
@@ -553,7 +590,7 @@ function controller.GetReport()
         'LOS_MARKER_CANDIDATES|'..lines.markerCount,'LOS_SCAN_VISITED|'..lines.scan.visited,
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
         'LOS_DISCOVERY_PROFILE|V20_VALIDATED_NAMED_FIELD_AND_BACKGROUND_SCAN',
-        'GOAL_TO_GO_LOS_BYPASSED|'..tostring(lines.goalToGo),'GOAL_TO_GO_POLICY|BYPASS_LOS_ONLY; AUTO_QB_ACTIVE; RESTORE_NORMAL_DOWNS',
+        'GOAL_TO_GO_LOS_BYPASSED|false','GOAL_TO_GO|'..tostring(lines.goalToGo),'GOAL_TO_GO_POLICY|VALIDATED_BLUE_LOS; NO_YELLOW_REQUIRED; QB_SIDE_DIRECTION_CHECK; RECEIVERS_BEYOND_LOS',
         'LOS_READY_SOURCE|'..lines.readySource,'LOS_FAST_PATH_STATUS|'..lines.fastStatus,
         'GROUND_REASON|'..groundReason(),'GROUND_SOURCE|'..(lines.groundSource or 'NONE'),
         'GROUND_CACHED|'..describeGround(lines.ground),
@@ -567,13 +604,13 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v24.2','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v25','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
-        'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
+        'CLOSE_BULLET_POLICY|NATIVE_LOW_ARC_POWER_WITH_ACTIVE_BULLET_LEAD; SAFETY_FIRST; POWER_'..touch.min..'_TO_95; YARDS_'..touch.near..'_TO_'..touch.full,'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
         'AUTO_JUMP_POLICY|NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT',
         'DEEP_POLICY|FLIGHT_EXCEEDS_CURRENT_NORMAL_JUMP_AIRTIME; NO_YARD_CUTOFF',
@@ -591,9 +628,9 @@ function controller.GetReport()
         'WINDOW|'..(choice and choice.shot.window or 'NONE'),'PLANNER_MAX_CALLS|'..maxPlanCalls,'PLANNER_DEFERRED|'..planDeferred,
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
-        'TARGET_DEPTH_YARDS|'..(choice and not lines.goalToGo and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
+        'TARGET_DEPTH_YARDS|'..(choice and lines.los and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
         'OPEN_HOLD_SECONDS|'..(choice and choice.openSince and string.format('%.2f',os.clock()-choice.openSince) or 'NONE'),
-        'RECEIVER_READINESS|'..(lines.goalToGo and 'GOAL_LOS_EXEMPT' or 'CURRENT_POSITION_BEYOND_LOS')..'; OBSERVED_RECENT_CONTINUOUS_MOVEMENT',
+        'RECEIVER_READINESS|'..'CURRENT_POSITION_BEYOND_LOS'..'; OBSERVED_RECENT_CONTINUOUS_MOVEMENT',
         'RUNTIME_VALIDATION|UNVERIFIED_IN_ROBLOX','JUMP_CATCH_CALIBRATION|MISSING; NO_ADDED_JUMP_BULLET',
         'THROW_AWAY|MANUAL_ONLY; SOURCE_MODEL_95_GRAVITY_28; GROUNDING_RULE_UNVERIFIED',
         'RELEASE|SOURCE_NATIVE_SOLVER_OUTPUT; ONE_REQUEST_PER_POSSESSION; NO_AUTOMATIC_RETRY'}
@@ -608,7 +645,7 @@ function controller.GetReport()
             ..' manual='..clean(profile.q.ManualType)..' power='..clean(profile.q.Power)
             ..' locked='..tostring(profile.q.Locked)..' lockedName='..clean(profile.q.LockedOntoName)
     end
-    for _,mode in ipairs({'Bullet','Fit','Dime','Jump'}) do rows[#rows+1]='MODE_EVALUATIONS|'..mode..' '..(modeChecks[mode] or 0) end
+    for _,mode in ipairs({'SoftBullet','Bullet','Fit','Dime','Jump'}) do rows[#rows+1]='MODE_EVALUATIONS|'..mode..' '..(modeChecks[mode] or 0) end
     for i,decision in ipairs(decisionHistory) do
         rows[#rows+1]='THROW_EVIDENCE|'..i..' '..decision.summary
         rows[#rows+1]='THROW_TRAJECTORY|'..i..' '..decision.trajectory
@@ -1049,7 +1086,7 @@ function controller.ThrowAway()
                 local edgeFraction=(side*80-p.X)/(side*85-p.X)
                 local time=distance*edgeFraction/(power*math.cos(angle))
                 local crossing=origin+velocity*time-V(0,.5*CFG.Gravity*time*time,0)
-                local downfieldExit=lines.goalToGo or not lines.los or not lines.forward or downfield(crossing)>0
+                local downfieldExit=not lines.los or not lines.forward or downfield(crossing)>0
                 if time>0 and crossing.Y>origin.Y and downfieldExit and (not best or crossing.Y>best.height) then
                     best={velocity=velocity,height=crossing.Y,time=time,angle=angle,point=crossing}
                 end
@@ -1133,18 +1170,18 @@ end
 local function receiverReady(player,s,now,point)
     if controller.IsBlacklisted(player) then return false,'BLACKLISTED' end
     if not teammate(player) then return false,'NOT_CURRENT_TEAMMATE' end
-    if not lines.goalToGo and (not lines.los or lines.status~='OBSERVED_LINES_STABLE' or now-lines.at>.3) then return false,'LOS_UNVERIFIED' end
+    if (not lines.los or lines.status~='OBSERVED_LINES_STABLE' or now-lines.at>.3) then return false,'LOS_UNVERIFIED' end
     if not s or s.n<2 or now-s.at>.3 then return false,'MOVEMENT_UNVERIFIED' end
     local model,root=body(player)
     if not model or model~=s.model then return false,'MOVEMENT_UNVERIFIED' end
     if not onField(root.Position) then return false,'OFF_FIELD' end
-    if not lines.goalToGo and downfield(root.Position)<CFG.MinDownfieldYards*3 then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
+    if downfield(root.Position)<(lines.goalToGo and 0 or CFG.MinDownfieldYards*3) then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
     if not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
     if not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
     local travel=0
     for i=2,#s.path do travel=travel+flat(s.path[i].p-s.path[i-1].p).Magnitude end
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
-    if point and (not lines.goalToGo and downfield(point)<CFG.MinDownfieldYards*3 or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
+    if point and (downfield(point)<(lines.goalToGo and 0 or CFG.MinDownfieldYards*3) or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
     return true
 end
 local function predict(s,t) return s.p+s.v*t end
@@ -1277,6 +1314,7 @@ local function better(a,b)
     -- A selectable but unreleasable endpoint cannot monopolize the decision.
     local ar,br=throwable(a),throwable(b)
     if ar~=br then return ar end
+    if ar and a.softBullet~=b.softBullet then return a.softBullet==true end
     if a.clearBurn~=b.clearBurn then return a.clearBurn==true end
     if a.score~=b.score then return a.score>b.score end
     return downfield(a.arrival)>downfield(b.arrival)
@@ -1306,6 +1344,10 @@ local function classify(shot,s,defenders)
     else shot.window='LATERAL_WINDOW' end
 end
 local function solve(player,mode)
+    local soft=mode=='SoftBullet'
+    local requestedPower=soft and closePower(player) or nil
+    if soft and not requestedPower then return nil,'CLOSE_BULLET_NOT_NEEDED' end
+    local nativeMode=soft and 'Dime' or mode
     if frameCalls>=8 then return nil,'NATIVE_FRAME_BUDGET' end
     if not lock(player) then return nil,'NATIVE_LOCK_BUSY' end
     if not teammate(player) or profile.selector()~=player.Character then return nil,'NATIVE_TARGET_MISMATCH' end
@@ -1317,11 +1359,21 @@ local function solve(player,mode)
     -- fn34 independently reads SelectedType when automatic mode is disabled.
     -- Never leave Auto Throw Type OFF between solves or during pregame/setup.
     modeTransaction={q=q,auto=q.AutoThrowType,enabled=rawget(q.AutoThrowType,'Enabled'),
-        selected=rawget(q,'SelectedType'),mode=mode}
-    rawset(q.AutoThrowType,'Enabled',false); rawset(q,'SelectedType',mode)
+        selected=rawget(q,'SelectedType'),mode=nativeMode,fields={}}
+    if soft then
+        -- Bullet/Fit force 95 in the inspected source. Use the native generic
+        -- low-arc Power path with the player's current Bullet lead instead.
+        -- Every temporary setting is owned/restored within this synchronous solve.
+        for _,field in ipairs({{q,'ManualType','Power'},{q,'Power',requestedPower},{q,'PreferHighArc',false},{profile.leads,'Dime',profile.leads.Bullet}}) do
+            local object,key,written=field[1],field[2],field[3]
+            modeTransaction.fields[#modeTransaction.fields+1]={object=object,key=key,before=rawget(object,key),written=written}
+            rawset(object,key,written)
+        end
+    end
+    rawset(q.AutoThrowType,'Enabled',false); rawset(q,'SelectedType',nativeMode)
     nativeCalls=nativeCalls+1; frameCalls=frameCalls+1; maxFrameCalls=math.max(maxFrameCalls,frameCalls); modeChecks[mode]=(modeChecks[mode] or 0)+1
     local worker=coroutine.create(profile.solve); modeTransaction.worker=worker
-    local ok,dir,origin,endpoint,power,time,velocity,aimpoint,initialAngle,returnedMode=coroutine.resume(worker,q.Angle,mode)
+    local ok,dir,origin,endpoint,power,time,velocity,aimpoint,initialAngle,returnedMode=coroutine.resume(worker,q.Angle,nativeMode)
     local yielded=coroutine.status(worker)=='suspended'
     local modeOwned=restoreModeTransaction()
     if yielded and not stopped then
@@ -1333,7 +1385,7 @@ local function solve(player,mode)
         fatalError=clean(dir); log('SOLVER_ERROR',dir)
         controller.Stop('NATIVE_SOLVER_ERROR'); return nil,'NATIVE_SOLVER_ERROR'
     end
-    if not modeOwned or q.AutoThrowType.Enabled~=true or returnedMode~=nil and returnedMode~=mode then
+    if not modeOwned or q.AutoThrowType.Enabled~=true or returnedMode~=nil and returnedMode~=nativeMode then
         fatalError='Native mode changed during protected solve'
         controller.Stop('NATIVE_MODE_SCOPE_CONFLICT'); return nil,'NATIVE_MODE_SCOPE_CONFLICT'
     end
@@ -1368,10 +1420,19 @@ local function solve(player,mode)
         return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH'
     end
     if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
-    return {origin=origin,velocity=velocity,power=power,time=time,mode=mode,arrival=arrival,
+    if soft then
+        if math.abs(power-requestedPower)>1 then return nil,'CLOSE_BULLET_POWER_NOT_HONORED' end
+        local expectedY=aimpoint.Y+profile.leads.Bullet.Y
+        if math.abs(arrival.Y-expectedY)>endpointTolerance then return nil,'CLOSE_BULLET_LEAD_NOT_HONORED' end
+        local distance=flat(arrival-origin).Magnitude
+        local rise=math.atan2 and math.atan2(arrival.Y-origin.Y,distance) or math.atan((arrival.Y-origin.Y)/math.max(.001,distance))
+        if math.atan(velocity.Y/math.max(.001,flat(velocity).Magnitude))>(math.pi/2+rise)/2+.0001 then return nil,'CLOSE_BULLET_HIGH_ARC_REJECTED' end
+    end
+    return {origin=origin,velocity=velocity,power=power,time=time,mode=soft and 'Bullet' or mode,arrival=arrival,
+        variant=mode,softBullet=soft,nativeMode=nativeMode,
         passYards=flat(arrival-origin).Magnitude/3,at=os.clock()}
 end
-local plannerModes={'Bullet','Fit','Dime','Jump'}
+local plannerModes={'SoftBullet','Bullet','Fit','Dime','Jump'}
 local function evaluate(receivers,indices,defenders,now)
     local groups={}
     for _,index in ipairs(indices) do
@@ -1498,8 +1559,8 @@ forecastGuide=function(data,now)
         if os.clock()-started>.001 then break end
         local futureQB=ball.root.Position+run*lead
         local arrival=shot.arrival+velocity*lead
-        if onField(futureQB) and onField(arrival) and (lines.goalToGo or downfield(futureQB)<=.5)
-            and (lines.goalToGo or downfield(arrival)>=CFG.MinDownfieldYards*3) then
+        if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=.5)
+            and (downfield(arrival)>=(lines.goalToGo and 0 or CFG.MinDownfieldYards*3)) then
             local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,
                 velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
             -- This is an estimated continuation, not an extra native solve.
@@ -1521,6 +1582,7 @@ forecastGuide=function(data,now)
     assistance.maxGuideSeconds=math.max(assistance.maxGuideSeconds,os.clock()-started)
 end
 local function deepThrow(shot,hum)
+    if shot.softBullet then return false end -- deliberately softened close pass
     local ascent=ascentTime(hum)
     -- A timing policy relative to this character's normal jump, not an
     -- invented official FF3 yardage/catch threshold. Missing jump parameters
@@ -1630,11 +1692,11 @@ local function releaseNow(ball,selected,defenders,now)
     if not current or current.tool~=ball.tool then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
     if not readLines(now) then releaseChoice(); setGate(lines.status); return end
-    if not lines.goalToGo and downfield(current.root.Position)>.5 then setGate('QB_PAST_LOS'); return end
+    if downfield(current.root.Position)>.5 then setGate('QB_PAST_LOS'); return end
     local eligible,rejection=receiverReady(selected.player,selected.sample,now)
     if not eligible then releaseChoice(); setGate(rejection); return end
     local activeSequence=sequence
-    local shot,why=solve(selected.player,selected.shot.mode)
+    local shot,why=solve(selected.player,selected.shot.variant or selected.shot.mode)
     if stopped or sequence~=activeSequence then return end
     if not shot then setGate(why); return end
     if assistance.cancelledBurns[selected.player]==possession.epoch then setGate('BURN_CANCELLED_THIS_POSSESSION');return end
@@ -1662,7 +1724,7 @@ local function releaseNow(ball,selected,defenders,now)
     current,reason=ready()
     if not current or current.tool~=ball.tool or current.remote~=ball.remote then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
-    if not lines.goalToGo and downfield(current.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
+    if downfield(current.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
     local unit=shot.velocity.Unit
     -- Readable live InputBegan request, exactly: Vector3.new(70000000) is X only.
     -- No retry: FireServer acceptance does not confirm a throw or server state.
@@ -1670,7 +1732,7 @@ local function releaseNow(ball,selected,defenders,now)
     pending={tool=ball.tool,model=ball.model,target=selected.player.Name,mode=shot.mode,at=now,outcome='REQUESTING',source='AUTO_QB'}
     classify(shot,selected.sample,defenders)
     local evidence=string.format('%s %s %s t=%.3f power=%.2f arrival=%.2f,%.2f,%.2f margin=%.2f lane=%.2f residual=%.2f',
-        selected.player.Name,shot.mode,shot.window,shot.time,shot.power,shot.arrival.X,shot.arrival.Y,shot.arrival.Z,
+        selected.player.Name,(shot.softBullet and 'SoftBullet' or shot.mode),shot.window,shot.time,shot.power,shot.arrival.X,shot.arrival.Y,shot.arrival.Z,
         shot.margin,shot.lane,shot.receiverResidual)
     lastDecision={summary=evidence,actors={},release=string.format('distanceYards=%.2f clearBurn=%s safetyOverTop=%s qbY=%.3f qbVy=%.3f jump=%s animation=%s',shot.passYards,tostring(shot.clearBurn),tostring(shot.safetyOverTop),current.root.Position.Y,current.root.AssemblyLinearVelocity.Y,assistance.jumpStatus,animationStatus)}
     local function actor(name,s)
@@ -1816,7 +1878,7 @@ local function tick(now)
         if possession.lineGeneration~=lines.generation then
             possession.lineGeneration=lines.generation; possession.since=now; releaseChoice()
         end
-        if not lines.goalToGo and downfield(ball.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
+        if downfield(ball.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
         local roster=Players:GetPlayers()
         if #roster>CFG.MaxRoster then releaseChoice(); setGate('ROSTER_LIMIT'); return end
         local receivers,defenders,seenRoster={},{},{}
@@ -1871,12 +1933,12 @@ local function tick(now)
         choice=best
         -- The last candidate may differ from the winner; settle the actual shared
         -- native lock and final preview on the winner before any release.
-        local final,failed=solve(best.player,best.shot.mode)
+        local final,failed=solve(best.player,best.shot.variant or best.shot.mode)
         if not final then
-            if shotCache[best.player] then shotCache[best.player].shots[best.shot.mode]=nil end
+            if shotCache[best.player] then shotCache[best.player].shots[best.shot.variant or best.shot.mode]=nil end
             opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..failed); return end
         best.shot=final;final.releaseBlocked=assistance.cancelledBurns[best.player]==possession.epoch
-        if shotCache[best.player] then shotCache[best.player].shots[final.mode]=best.shot end
+        if shotCache[best.player] then shotCache[best.player].shots[final.variant or final.mode]=best.shot end
         local eligible,rejection=receiverReady(best.player,best.sample,now,final.arrival)
         if not eligible then holdManual(best,'MANUAL_LOCK_'..rejection); return end
         eligible,rejection=receivePossible(best.shot,best.sample)
@@ -1912,7 +1974,7 @@ local function button(text,x,width,y)
     b.Parent=gui; return b
 end
 local built,buildError=pcall(function()
-    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V24'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
+    gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V25'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('WAIT YUNA',-166,138)
     assistance.guideUI=Instance.new('Frame');assistance.guideUI.Name='RunGuide';assistance.guideUI.Size=UDim2.fromOffset(36,42)
     assistance.guideUI.Position=UDim2.new(.5,-18,0,136);assistance.guideUI.BackgroundTransparency=1;assistance.guideUI.Visible=false;assistance.guideUI.Parent=gui
@@ -2006,5 +2068,5 @@ local built,buildError=pcall(function()
     end)
 end)
 if not built then controller.Stop('STARTUP_ERROR'); error(buildError) end
-log('START','Jump then immediate deep release; manual AWAY always visible; no team stats; advisory RUN; Goal LOS bypass')
+log('START','Jump then immediate deep release; manual AWAY always visible; no team stats; advisory RUN; Goal blue-line LOS')
 return controller

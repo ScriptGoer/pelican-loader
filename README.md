@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v24.2` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v25` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V24.2 fixes repeated movement sampling within one frame, which could falsely mark a running receiver idle and cancel release after a jump. V24 removes automatic team stats and the jump-peak gate. AWAY is always visible beside the collapsed status bar. Deep opportunities request a normal jump and immediately run final native safety/release checks. Manual WR LIST exclusions, AFK protection, short-pass preference, RUN guidance, Goal LOS-only bypass and X reload remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. Yuna startup automation remains cancelled. [Changes, usage and validation](FF3_AUTO_QB.md).
+**FF3:** V25 compares a lower-power close-pass variation against ordinary fast throws. It preserves the native result and checks the slower trajectory independently. Goal-to-go uses validated blue **LineDown (LOS)** without requiring yellow **LineTogo (first down)**. AFK, manual exclusions, immediate release, frame-based motion history, RUN guidance, COPY/X and always-visible AWAY remain. Stats and Yuna startup automation remain removed. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Configuration, evidence and actual live limits](FF3_AUTO_QB.md). The user-reported working `ff3-v24.2` tag remains available as rollback.
 
 Historical stats/GUI diagnostics are separate tools, not regular-loader dependencies. The V23 runtime is preserved in its immutable tag; its stats integration is withdrawn.
 
@@ -27,6 +27,6 @@ Historical stats/GUI diagnostics are separate tools, not regular-loader dependen
 
 **Mobile jump:** optional [jump width helper](FF3_MOBILE_JUMP.md) doubles the native jump button leftward while preserving its right edge and height. It runs independently of Auto QB/Yuna, has an original-width toggle and red restore/kill control, and does not change jump mechanics. Actual FF3/iPhone touch layout is unverified.
 
-Copy reports before leaving Roblox. Clipboard success indicates API acceptance, not iOS readback. Local tests do not prove in-game performance or mechanics. V15.4 is user-reported working; V16 is withdrawn; V24 grounding, jump/throw visuals, opening forecasts, safety classification, catches and iPhone performance remain unverified in Roblox.
+Copy reports before leaving Roblox. Clipboard success indicates API acceptance, not iOS readback. Local tests do not prove in-game performance or mechanics. V15.4 is user-reported working; V16 is withdrawn; V25 close-power compatibility, Goal direction, grounding, jump/throw visuals, catches and iPhone performance remain unverified in Roblox.
 
 Only runtime source, instructions, and checksums are public. Original handoffs, gameplay reports, test harnesses, and supplied paid-source attachments remain outside this distribution. No credentials or private keys are included.
