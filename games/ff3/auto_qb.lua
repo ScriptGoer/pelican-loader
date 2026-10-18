@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.3): adaptive comfort/window Bullets with explicit power evidence.
+-- PELICAN_FF3_V26 (ff3-v26.4): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -103,6 +103,7 @@ local function rememberBlocked(player,shot,reason)
     end
     actor('MARGIN_DB',shot.marginActor);actor('LANE_DB',shot.laneActor)
     local sample=samples[player];actor('WR',sample)
+    if controller.history then controller.history.Block(player,shot,reason,sample) end
     blockedDecisions[#blockedDecisions+1]=table.concat(rows,' | ')
     if #blockedDecisions>8 then table.remove(blockedDecisions,1) end
 end
@@ -138,6 +139,338 @@ local touch={enabled=closeBullet.Enabled~=false,min=closeBullet.MinPower or 40,f
     comfort=closeBullet.ComfortSeconds or .75,quick=closeBullet.WindowSeconds or .5,method='POWER',methodReason='NOT_PROBED',traces={}}
 assert(finite(touch.min) and touch.min>=1 and touch.min<95 and (touch.full==nil or finite(touch.full) and touch.full>0 and touch.full<=100)
     and finite(touch.comfort) and touch.comfort>=.3 and touch.comfort<=1.5 and finite(touch.quick) and touch.quick>=.2 and touch.quick<touch.comfort,'Invalid CloseBullet comfort/power policy')
+-- BEGIN RETAINED HISTORY
+-- Isolated scope keeps this optional recorder outside the native solve/release path.
+controller.history=(function()
+    local h={storage='NOT_STARTED',sync='OFF',dirty=false,lastDisk=-math.huge,lastSync=-math.huge,aliases={},aliasCount=0,blocked={}}
+    local options=ff3Options.History
+    if options==nil then options={} end
+    if options==false then options={Enabled=false} end
+    assert(type(options)=='table','FF3.History must be a table or false')
+    h.enabled=options.Enabled~=false
+    local cacheKey='PELICAN_FF3_HISTORY_V1'
+    local schema='PELICAN_FF3_HISTORY_V1'
+    local paths={'PELICAN_FF3_HISTORY_A.json','PELICAN_FF3_HISTORY_B.json'}
+    local maxRecords,maxBytes=100,80000
+    local codec,cache,data,runId,started,ended
+    local cfg=env.PELICAN_FF3_JSONBIN
+    local accessKey,binId,requestFn
+    local async=type(task)=='table' and type(task.defer)=='function' and type(task.cancel)=='function'
+    local interval=120
+    local function number(n) return type(n)=='number' and n==n and math.abs(n)<1e12 end
+    local function integer(n) return number(n) and n>=0 and n%1==0 end
+    local function safe(value,depth,budget)
+        if budget.n>=3000 then return nil end
+        budget.n=budget.n+1
+        if type(value)=='boolean' then return value end
+        if number(value) then return value end
+        if type(value)=='string' then return value:sub(1,100) end
+        if type(value)~='table' or getmetatable(value)~=nil or depth>=6 then return nil end
+        local out={};local n=0
+        for k,v in pairs(value) do
+            n=n+1;if n>128 then break end
+            if type(k)=='string' and #k<=40 or integer(k) and k>=1 and k<=128 then out[k]=safe(v,depth+1,budget) end
+        end
+        return out
+    end
+    local kinds={run_start=true,throw=true,blocked=true,run_end=true,possession_end=true}
+    local function valid(d)
+        if type(d)~='table' or d.Schema~=schema or type(d.Writer)~='string' or #d.Writer<1 or #d.Writer>100
+            or not integer(d.Revision) or type(d.Records)~='table' or #d.Records>maxRecords or type(d.Totals)~='table' then return false end
+        local n=0
+        for k,r in pairs(d.Records) do
+            n=n+1
+            if not integer(k) or k<1 or k>#d.Records or type(r)~='table' or type(r.Id)~='string' or #r.Id>150
+                or type(r.Run)~='string' or #r.Run>100 or not integer(r.Seq) or r.Seq>d.Revision
+                or not kinds[r.Kind] or type(r.Payload)~='table' or r.Id~=d.Writer..':'..r.Seq then return false end
+        end
+        if n~=#d.Records then return false end
+        local previous=0;for _,r in ipairs(d.Records) do if r.Seq<=previous then return false end;previous=r.Seq end
+        for k,v in pairs(d.Totals) do
+            if not ({Runs=true,Requests=true,Accepted=true,Ambiguous=true,Blocked=true,Errors=true,Evicted=true})[k] or not integer(v) then return false end
+        end
+        return true
+    end
+    local function decode(text)
+        if not codec or type(text)~='string' or #text>maxBytes+8192 then return end
+        local ok,value=pcall(function() return codec:JSONDecode(text) end)
+        if ok and valid(value) then return value end
+        return nil,ok and type(value)=='table' and value.Schema~=schema and 'FOREIGN_SCHEMA' or 'INVALID'
+    end
+    local function guid()
+        if codec then
+            local ok,value=pcall(function() return codec:GenerateGUID(false) end)
+            if ok and type(value)=='string' and #value>0 and #value<=90 then return value end
+        end
+        cache.serial=(cache.serial or 0)+1
+        return tostring(os.time())..'-'..tostring(math.floor(os.clock()*1000000))..'-'..cache.serial
+    end
+    local function total(key) data.Totals[key]=(data.Totals[key] or 0)+1 end
+    local function trim()
+        while #data.Records>maxRecords do table.remove(data.Records,1);total('Evicted') end
+    end
+    local function encode()
+        if not codec then return end
+        trim()
+        while true do
+            local ok,text=pcall(function() return codec:JSONEncode(data) end)
+            if not ok or type(text)~='string' then h.storage='ENCODE_FAILED';return end
+            if #text<=maxBytes then return text end
+            if #data.Records==0 then h.storage='SIZE_INVALID';return end
+            table.remove(data.Records,1);total('Evicted')
+        end
+    end
+    function h.Append(kind,payload)
+        if not h.enabled or not started or ended or not kinds[kind] then return end
+        data.Revision=data.Revision+1
+        local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Kind=kind,
+            Release='ff3-v26.4',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+        data.Records[#data.Records+1]=record;trim();h.dirty=true
+        if kind=='run_start' then total('Runs') elseif kind=='throw' then
+            total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
+        elseif kind=='blocked' then total('Blocked') elseif kind=='run_end' and record.Payload.Error then total('Errors') end
+    end
+    function h.Actor(name,s)
+        if not s then return end
+        if not h.aliases[name] then
+            if h.aliasCount>=64 then return {Id='OTHER'} end
+            h.aliasCount=h.aliasCount+1;h.aliases[name]='P'..h.aliasCount
+        end
+        return {Id=h.aliases[name],Position=h.Vector(s.p),Velocity=h.Vector(s.v),ObservedSpeed=s.observedSpeed,WalkSpeed=s.hum and s.hum.WalkSpeed}
+    end
+    function h.Vector(v)
+        if not v then return end
+        return {v.X,v.Y,v.Z}
+    end
+    function h.Shot(shot,player,s,api,source,defenders)
+        if not h.enabled or not shot then return end
+        local actors={}
+        for i,d in ipairs(defenders or {}) do if i>12 then break end;actors[#actors+1]=h.Actor(d.name,d) end
+        local comparisons={}
+        local cached=player and shotCache[player]
+        for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet'}) do
+            local other=cached and cached.shots and cached.shots[mode]
+            if other then comparisons[#comparisons+1]={Mode=mode,Power=other.power,Time=other.time,Arrival=h.Vector(other.arrival),
+                Margin=other.margin,Lane=other.lane,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
+        end
+        h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
+            Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
+            Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
+            Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
+            Receiver=h.Actor(player and player.Name or 'AWAY',s),Comparisons=comparisons,Defenders=actors,DefenderCount=#(defenders or {}),
+            Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,
+            Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},ManualInput=shot.nativeInput,
+            InputKind=shot.nativeInputKind,Ping=shot.networkPing,DistanceYards=shot.passYards,
+            FitReason=shot.fitReason,ComparedMode=shot.fitAlternativeVariant,ComparedTime=shot.fitAlternativeTime,
+            ComparedDBETA=shot.fitAlternativeDB,OverTop=shot.safetyOverTop,ClearBurn=shot.clearBurn,
+            LOS=lines.status,LOSDirection=h.Vector(lines.forward),LOSPosition=h.Vector(lines.los),
+            Jump=assistance.jumpStatus,Animation=animationStatus})
+    end
+    function h.Block(player,shot,reason,s)
+        if not h.enabled or not started then return end
+        local key=tostring(shot.variant or shot.mode)..':'..tostring(reason)
+        if h.blocked[key] and os.clock()-h.blocked[key]<10 then return end
+        -- Fixed-size throttle map, independent of roster/usernames.
+        local n=0;for _ in pairs(h.blocked) do n=n+1 end;if n>=64 and not h.blocked[key] then h.blocked={} end
+        h.blocked[key]=os.clock()
+        h.Append('blocked',{Epoch=possession.epoch,Reason=reason,Mode=shot.mode,Variant=shot.variant,
+            Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
+            Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),
+            Margin=shot.margin,Lane=shot.lane,Receiver=h.Actor(player.Name,s),
+            MarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
+    end
+    function h.Flush()
+        if not h.enabled or not started or not h.dirty or h.flushing then return end
+        if cache.diskUnsafe then return end
+        if not codec then h.storage='NO_JSON_MEMORY_ONLY';return end
+        if not h.canWrite then return end
+        local text=encode();if not text then return end
+        local revision=data.Revision
+        local slot=cache.nextSlot or 1
+        h.diskIO=true;h.flushing=true
+        local ok=pcall(writefile,paths[slot],text)
+        if not ok then h.diskIO=false;h.flushing=false;cache.diskUnsafe=true;h.storage='WRITE_FAILED_MEMORY_ONLY';return end
+        if type(readfile)=='function' then
+            local readOK,saved=pcall(readfile,paths[slot])
+            if not readOK or saved~=text then h.diskIO=false;h.flushing=false;cache.diskUnsafe=true;h.storage='READBACK_FAILED_MEMORY_ONLY';return end
+            h.storage='READBACK_VERIFIED'
+        else h.storage='WRITE_ACCEPTED_NO_READBACK' end
+        if cache.diskUnsafe then h.storage='IO_UNCERTAIN_MEMORY_ONLY' end
+        h.savedRevision=revision
+        h.diskIO=false;h.flushing=false;cache.nextSlot=slot==1 and 2 or 1
+        if data.Revision==revision then h.dirty=false end
+        h.lastDisk=os.clock()
+    end
+    local function response(method,body)
+        local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
+            Method=method,Headers={['X-Access-Key']=accessKey,['X-Bin-Meta']='true'},Timeout=15}
+        if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
+        h.netIO=method
+        local ok,result=pcall(requestFn,options)
+        h.netIO=nil
+        if not ok or type(result)~='table' then return nil,'NETWORK_FAILED' end
+        if result.StatusCode~=200 then return nil,'HTTP_'..tostring(tonumber(result.StatusCode) or 0) end
+        if type(result.Body)~='string' or #result.Body>maxBytes+8192 then return nil,'RESPONSE_SIZE' end
+        local parsedOK,parsed=pcall(function() return codec:JSONDecode(result.Body) end)
+        if not parsedOK or type(parsed)~='table' or type(parsed.metadata)~='table' or parsed.metadata.private~=true
+            or type(parsed.record)~='table' then return nil,'PRIVATE_RESPONSE_NOT_VERIFIED' end
+        return parsed.record
+    end
+    local function equal(a,b,depth)
+        if type(a)~=type(b) then return false end
+        if type(a)~='table' then return a==b end
+        if depth>10 then return false end
+        for k,v in pairs(a) do if not equal(v,b[k],depth+1) then return false end end
+        for k in pairs(b) do if a[k]==nil then return false end end
+        return true
+    end
+    function h.Sync()
+        local remote,why=response('GET')
+        if not remote then h.sync=why;return end
+        local empty=next(remote)==nil
+        if remote.Schema=='PELICAN_FF3_HISTORY_EMPTY_V1' then
+            empty=true;for k in pairs(remote) do if k~='Schema' then empty=false end end
+        end
+        if empty and cfg.Initialize==true then -- explicitly marked/empty dedicated bin only
+        elseif not valid(remote) then h.sync='FOREIGN_SCHEMA_PRESERVED';return
+        elseif remote.Writer~=data.Writer then h.sync='OTHER_WRITER_PRESERVED';return
+        elseif remote.Revision>data.Revision then h.sync='REMOTE_AHEAD_PRESERVED';return end
+        if valid(remote) and remote.Revision==data.Revision then
+            if equal(remote,data,0) then h.syncedRevision=data.Revision;h.sync='READBACK_VERIFIED';return end
+            h.sync='REVISION_CONFLICT_PRESERVED';return
+        end
+        local body=encode();if not body then h.sync='ENCODE_FAILED';return end
+        local snapshot=decode(body);if not snapshot then h.sync='SNAPSHOT_INVALID';return end
+        local saved,err=response('PUT',body)
+        if not saved or not equal(snapshot,saved,0) then cache.remoteUnsafe=true;h.sync=err or 'PUT_ECHO_MISMATCH_NO_RETRY';return end
+        local confirmed,readError=response('GET')
+        if not confirmed or not equal(snapshot,confirmed,0) then cache.remoteUnsafe=true;h.sync=readError or 'READBACK_MISMATCH_NO_RETRY';return end
+        h.syncedRevision=snapshot.Revision;h.sync='READBACK_VERIFIED'
+    end
+    local function schedule(field,fn)
+        local token={at=os.clock()};h[field]=token
+        token.thread=task.defer(function()
+            if ended or h[field]~=token then return end
+            local ok=pcall(fn)
+            if not ok then
+                if field=='netWorker' then h.sync='WORKER_FAILED_NO_RETRY';cache.remoteUnsafe=true
+                else h.storage='WORKER_FAILED_MEMORY_ONLY';cache.diskUnsafe=true end
+            end
+            if h[field]==token then h[field]=nil end
+        end)
+    end
+    function h.Update(now)
+        if not h.enabled or not started or ended then return end
+        if h.diskWorker and now-h.diskWorker.at>20 then
+            local token=h.diskWorker
+            if pcall(task.cancel,token.thread) then h.diskWorker=nil end
+            cache.diskUnsafe=true;h.storage='TIMEOUT_MEMORY_ONLY'
+        end
+        if h.netWorker and now-h.netWorker.at>20 then
+            local token=h.netWorker
+            if pcall(task.cancel,token.thread) then h.netWorker=nil end
+            cache.remoteUnsafe=true;h.sync='TIMEOUT_NO_RETRY'
+        end
+        if h.dirty and now-h.lastDisk>=10 and not h.diskWorker and h.canWrite and not cache.diskUnsafe then
+            h.lastDisk=now
+            if async then schedule('diskWorker',h.Flush) end -- synchronous fallback is confined to preserve/stop
+        end
+        if h.remoteReady and not cache.remoteUnsafe and not h.netWorker and now-h.lastSync>=interval
+            and h.syncedRevision~=data.Revision and (h.sync=='READY' or h.sync=='READBACK_VERIFIED') then
+            h.lastSync=now;h.sync='SYNCING';schedule('netWorker',h.Sync)
+        end
+    end
+    function h.Start()
+        if ended or started or not h.enabled then h.storage='OFF';return end
+        local ok,value=pcall(function() return game:GetService('HttpService') end)
+        if ok and value and type(value.JSONEncode)=='function' and type(value.JSONDecode)=='function' then codec=value end
+        cache=env[cacheKey]
+        if type(cache)~='table' or getmetatable(cache)~=nil then cache={};env[cacheKey]=cache end
+        if valid(cache.data) then data=cache.data end
+        h.canWrite=type(writefile)=='function' and type(readfile)=='function'
+        local sawInvalid,unreadable,foreign=false,false,false
+        local bestSlot
+        if codec and type(readfile)=='function' then
+            for i,path in ipairs(paths) do
+                local exists=true
+                if type(isfile)=='function' then local checkOK,result=pcall(isfile,path);if checkOK and type(result)=='boolean' then exists=result else unreadable=true;exists=false end end
+                if exists then
+                    local readOK,text=pcall(readfile,path)
+                    if readOK then
+                        local candidate,reason=decode(text)
+                        if reason=='FOREIGN_SCHEMA' then foreign=true end
+                        if candidate and (not data or candidate.Revision>data.Revision) then data=candidate;bestSlot=i
+                        elseif not candidate then sawInvalid=true end
+                    else
+                        local message=tostring(text):lower()
+                        local missing=message:find('not found',1,true) or message:find('does not exist',1,true) or message:find('no such file',1,true)
+                        if type(isfile)=='function' or not missing then unreadable=true end
+                    end
+                end
+            end
+        end
+        if ended then return end
+        if bestSlot then cache.nextSlot=bestSlot==1 and 2 or 1 end
+        if foreign or unreadable or sawInvalid and not data then cache.diskUnsafe=true end
+        if not data then data={Schema=schema,Writer=guid(),Revision=0,Records={},Totals={}} end
+        cache.data=data;runId=guid();started=true
+        h.storage=not codec and 'NO_JSON_MEMORY_ONLY' or cache.diskUnsafe and 'UNREADABLE_PRESERVED_MEMORY_ONLY'
+            or type(readfile)~='function' and 'NO_READFILE_MEMORY_ONLY' or not h.canWrite and 'NO_FILES_MEMORY_ONLY' or 'READY'
+        h.Append('run_start',{Runtime=VERSION,PreviousRecords=#data.Records,DiskRecovered=bestSlot~=nil})
+        if cfg~=nil then
+            if type(cfg)~='table' or type(cfg.BinId)~='string' or #cfg.BinId~=24 or not cfg.BinId:match('^%x+$')
+                or type(cfg.AccessKey)~='string' or #cfg.AccessKey<1 then h.sync='CONFIG_INVALID';return end
+            if cfg.IntervalSeconds~=nil then
+                if not number(cfg.IntervalSeconds) or cfg.IntervalSeconds<60 or cfg.IntervalSeconds>3600 then h.sync='INTERVAL_INVALID';return end
+                interval=cfg.IntervalSeconds
+            end
+            if not codec then h.sync='JSON_UNAVAILABLE';return end
+            if not async then h.sync='ASYNC_UNAVAILABLE';return end
+            requestFn=request or http_request or (type(syn)=='table' and syn.request) or (type(http)=='table' and http.request)
+            if type(requestFn)~='function' then h.sync='HTTP_UNAVAILABLE';return end
+            accessKey=cfg.AccessKey;binId=cfg.BinId
+            h.remoteReady=true;h.sync=cache.remoteUnsafe and 'PREVIOUS_IO_UNCERTAIN_NO_RETRY' or 'READY'
+            h.lastSync=os.clock()-interval+10 -- allow startup/throw work first
+        end
+    end
+    function h.Export()
+        if not started then return nil,'OFF' end
+        local text=encode()
+        if not text then return nil,'JSON_UNAVAILABLE' end
+        if type(setclipboard)~='function' then return nil,'CLIPBOARD_UNAVAILABLE' end
+        local ok=pcall(setclipboard,text)
+        return ok,ok and 'API_ACCEPTED' or 'COPY_FAILED'
+    end
+    function h.Report()
+        return 'HISTORY_STORAGE|'..h.storage..'\nHISTORY_RECORDS|'..tostring(data and #data.Records or 0)
+            ..'\nHISTORY_JSONBIN|'..h.sync..'\nHISTORY_SYNCED_REVISION|'..tostring(h.syncedRevision or 'NONE')
+            ..'\nHISTORY_REVISION|'..tostring(data and data.Revision or 0)..'\nHISTORY_SAVED_REVISION|'..tostring(h.savedRevision or 'NONE')..'\nHISTORY_LIMIT|100_RECORDS_AND_80000_BYTES; OUTCOMES_UNKNOWN; NO_AUTO_TUNING'
+    end
+    function h.Stop(reason,hasError)
+        if ended then return true end
+        if not started then ended=true;return true end
+        if not h.ending then h.Append('run_end',{Reason=reason,Error=hasError==true});h.ending=true end
+        for _,field in ipairs({'netWorker','diskWorker'}) do
+            local token=h[field]
+            if token then
+                h[field]=nil
+                if field=='netWorker' and h.netIO then cache.remoteUnsafe=true;h.sync='STOPPED_IO_UNCERTAIN_NO_RETRY'
+                elseif field=='diskWorker' and h.diskIO then cache.diskUnsafe=true;h.storage='IO_UNCERTAIN_MEMORY_ONLY' end
+                local ok=pcall(task.cancel,token.thread)
+                if not ok then h[field]=token;return false end
+                if field=='diskWorker' then h.diskIO=false;h.flushing=false end
+            end
+        end
+        -- A synchronous COPY/file API may be yielding on another callback.
+        -- Do not confirm cleanup until it returns; replacement stays blocked.
+        if h.flushing then cache.diskUnsafe=true;h.storage='IO_UNCERTAIN_MEMORY_ONLY';return false end
+        h.Flush();ended=true;accessKey=nil
+        return h.netWorker==nil and h.diskWorker==nil
+    end
+    return h
+end)()
+-- END RETAINED HISTORY
+
 local function closePower(player,quick)
     if not touch.enabled then return end
     local model=player.Character
@@ -675,7 +1008,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.3','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.4','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -714,6 +1047,7 @@ function controller.GetReport()
         'RUNTIME_VALIDATION|UNVERIFIED_IN_ROBLOX','JUMP_CATCH_CALIBRATION|MISSING; OPT_IN_NATIVE_FIT_HEIGHT_TRIAL_ONLY',
         'THROW_AWAY|MANUAL_ONLY; SOURCE_MODEL_95_GRAVITY_28; GROUNDING_RULE_UNVERIFIED',
         'RELEASE|SOURCE_NATIVE_SOLVER_OUTPUT; ONE_REQUEST_PER_POSSESSION; NO_AUTOMATIC_RETRY'}
+    rows[#rows+1]=controller.history.Report()
     for _,name in ipairs(observedLineNames) do
         local o=workspace:FindFirstChild(name)
         rows[#rows+1]='LOS_NAMED_LINE|'..name..' class='..(o and o.ClassName or 'MISSING')
@@ -757,6 +1091,7 @@ function controller.GetReport()
     return table.concat(rows,'\n')
 end
 local function preserve(copy)
+    if copy or not (type(task.defer)=='function' and type(task.cancel)=='function') then controller.history.Flush() end
     if copy then
         copyResult='UNAVAILABLE'
         if type(setclipboard)=='function' then local ok=pcall(setclipboard,controller.GetReport()); copyResult=ok and 'API_ACCEPTED' or 'FAILED' end
@@ -783,7 +1118,8 @@ function controller.Stop(reason)
     end
     connections=remaining; log('STOP',reason or 'USER_END'); gate='STOPPED'
     if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil;assistance.guideUI=nil;assistance.guideArrow=nil end end
-    cleanupComplete=#remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
+    local historyClean=controller.history.Stop(stopReason,fatalError~='NONE')
+    cleanupComplete=historyClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -835,6 +1171,8 @@ end
 if context.RegisterCleanup then context.RegisterCleanup(function() return controller.Stop('LOADER_CLEANUP') end) end
 if context.IsCancelled and context.IsCancelled() then controller.Stop('CANCELLED'); return controller end
 env[KEY]=controller
+controller.history.Start()
+if stopped or context.IsCancelled and context.IsCancelled() then controller.Stop('CANCELLED');return controller end
 
 -- Bounded read-only discovery. A final solver must be shared by a live preview
 -- connection and the source-shaped input release, and capture the same settings
@@ -1134,7 +1472,10 @@ local function observePossession(now)
         end
         possession.wasReady=true
     else
-        if pending and possession.wasReady then pending.outcome='POSSESSION_ENDED; THROW_NOT_VERIFIED' end
+        if pending and possession.wasReady then
+            controller.history.Append('possession_end',{Epoch=possession.epoch,Source=pending.source,Catch='UNKNOWN'})
+            pending.outcome='POSSESSION_ENDED; THROW_NOT_VERIFIED'
+        end
         possession.wasReady=false
     end
 end
@@ -1232,6 +1573,7 @@ function controller.ThrowAway()
         attempts=attempts+1;pending.outcome='REQUESTING'
         log('THROW_AWAY',string.format('manual power=95 angle=%.2f modeledExitY=%.2f exitT=%.3f grounding=UNVERIFIED',math.deg(best.angle),best.height,best.time))
         local ok,err=pcall(function() ball.remote:FireServer('Clicked',origin-unit*5+V(70000000,0,0),origin+unit*10000,power,1) end)
+        controller.history.Shot({mode='MANUAL_HIGH_AWAY',power=power,origin=origin,velocity=best.velocity,time=best.time,arrival=best.point},nil,nil,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','MANUAL_AWAY')
         if ok then sent=sent+1;pending.outcome='API_ACCEPTED_UNCONFIRMED';setGate('THROW_AWAY_SENT_UNCONFIRMED')
         else ambiguous=ambiguous+1;pending.outcome='AMBIGUOUS_NO_RETRY';fatalError=clean(err);controller.Stop('REQUEST_AMBIGUOUS_NO_RETRY');return false end
         preserve(false);return true
@@ -2155,6 +2497,7 @@ local function releaseNow(ball,selected,defenders,now)
     local ok,err=pcall(function()
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
     end)
+    controller.history.Shot(shot,selected.player,selected.sample,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','AUTO_QB',defenders)
     if ok then sent=sent+1; pending.outcome='API_ACCEPTED_UNCONFIRMED'; setGate('REQUEST_SENT_UNCONFIRMED')
     else
         ambiguous=ambiguous+1; pending.outcome='AMBIGUOUS_NO_RETRY'; fatalError=clean(err)
@@ -2416,6 +2759,10 @@ local built,buildError=pcall(function()
     controller.comeback.button.Name='ComebackChat';controller.comeback.button.Visible=false
     connect(controller.comeback.button.Activated,function() controller.SetComebackChat(not controller.comeback.enabled) end)
     controller.jumpBullet.button=button(controller.jumpBullet.enabled and 'JB ON' or 'JB OFF',-226,54,112)
+    controller.history.button=button('DATA',-226,54,137);controller.history.button.Name='History';controller.history.button.Visible=false
+    connect(controller.history.button.Activated,function()
+        local ok,result=controller.history.Export();controller.history.button.Text=ok and 'COPIED' or 'FAIL';log('HISTORY_COPY',result)
+    end)
     controller.jumpBullet.button.Name='JumpBullet';controller.jumpBullet.button.Visible=false
     connect(controller.jumpBullet.button.Activated,function() controller.SetJumpBullet(not controller.jumpBullet.enabled) end)
     connect(riskButton.Activated,function()
@@ -2465,7 +2812,7 @@ local built,buildError=pcall(function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
         controller.comeback.button.Visible=expanded
-        controller.jumpBullet.button.Visible=expanded
+        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
@@ -2502,6 +2849,7 @@ local built,buildError=pcall(function()
         if not guideOK then fatalError=clean(guideError);log('GUIDE_ERROR',guideError);controller.Stop('GUIDE_RUNTIME_ERROR');return end
         local chatOK,chatError=pcall(controller.comeback.update,os.clock())
         if not chatOK then fatalError=clean(chatError);log('COMEBACK_ERROR',chatError);controller.Stop('COMEBACK_RUNTIME_ERROR_NO_RETRY');return end
+        controller.history.Update(os.clock())
         maxHeartbeat=math.max(maxHeartbeat,os.clock()-now)
     end)
 end)
