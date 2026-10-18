@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v26.1` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v26.2` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V26.1 adds optional team-only `comeback` after sustained coverage, with a folded **CB ON/OFF** switch and cooldown; chat never holds a release. Chat delivery depends on Roblox permissions and is unverified. V26 adds **SAFE / MOD / TRUST** beside WR LIST. SAFE retains prior window checks; MOD and TRUST allow progressively tighter receiver-favored burns while preserving direct-lane, prevent and eligibility checks. Automatic visual animation now starts after the request so it cannot influence that sent native aim packet. Close-power comparison, Goal blue LineDown LOS, immediate jump/release, AFK/manual exclusions, frame motion history, COPY/X and always-visible AWAY remain. Stats and Yuna startup automation remain removed. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Configuration, policies and live limits](FF3_AUTO_QB.md). The immutable `ff3-v25` tag preserves the prior release.
+**FF3:** V26.2 keeps all Bullet variants strict in SAFE/MOD/TRUST and uses Fit only for a modeled timing rescue, rechecked at release. Expand the HUD for the opt-in **JB OFF/ON** trial: Bullet-speed native output with the active Fit height retained on sideways routes. Jump-catch windows remain uncalibrated. Close-power comparison, Goal blue LineDown LOS, immediate jump/release, AFK/manual exclusions, COPY/X, AWAY and optional team-only comeback chat remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Controls, policies and live limits](FF3_AUTO_QB.md). The immutable `ff3-v26.1` tag preserves the prior release.
 
 Historical stats/GUI diagnostics are separate tools, not regular-loader dependencies. The V23 runtime is preserved in its immutable tag; its stats integration is withdrawn.
 

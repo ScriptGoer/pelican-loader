@@ -1,3 +1,47 @@
+# FF3 V26.2: strict Bullet, timing-only Fit and jump-bullet trial
+
+Yuna's retained source audit shows Fit's vertical lead is conditional on running-away/mouse aiming; Jump keeps it for sideways routes. That explains a sideways Fit collapsing to a chest target. Configured height is not a verified server catch window. This patch keeps the V26 controller contract and adds the controls below.
+
+## Optional native Fit-height Bullet trial
+
+Expand the HUD and tap **JB OFF** to enable **JB ON**, or explicitly configure:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/main/loader.lua"))({
+    FF3 = { JumpBullet = true }
+})
+```
+
+It starts **off** in a new executor session because its catch window is uncalibrated. The deliberate toggle persists in executor memory across reload; an explicit option wins. Toggle changes cancel prepared work and clear candidate caches.
+
+The additional `JumpBullet` candidate temporarily uses the native Jump Power path, Power 95, PreferHighArc false, and a Jump lead built from the player's active **Bullet.X / Fit.Y**. Jump's unconditional vertical-lead branch retains Fit's configured lift on sideways routes. No new numeric catch-height offset is added. The final solver supplies origin, velocity, time, aim and native clamp/SmartPass placement. The controller checks reported power and model velocity magnitude against 95 (within 1), verifies actual ballistic arrival Y against the pre-vertical aimpoint plus the configured lift using the existing numeric tolerance, and rejects the higher ballistic branch. Missing/nonpositive Fit height, ignored settings, inconsistent output or unsupported behavior rejects the candidate rather than constructing a velocity by hand.
+
+The native Jump settings and lead entry are restored inside the synchronous solve. Only the validated candidate is labeled as a Bullet variant. It passes the original strict lane/endpoint checks in all risk modes. When both ordinary and jump Bullets are safe, the ordinary Bullet wins so open receivers do not need unnecessary jumps. Native selection, team restriction, movement/field/arrival eligibility and release revalidation still apply. Reports identify `JumpBullet`, actual applied lead, native mode, power, path and the uncalibrated status.
+
+This implements a **native Fit-height, Bullet-speed trial**, not a proven reliable high-jump catch. It may still require unsuitable timing or land in the game's dead zone. Enable it deliberately for live evaluation with a ready receiver; do not interpret a configured lift or local branch test as catch calibration. The feature does not control a WR's jump or change Humanoid jump power, catch code, anti-cheat or anti-tamper behavior.
+
+## Bullet remains strict
+
+`throwable` now excludes every candidate labeled Bullet from MOD/TRUST relaxation. Ordinary Bullet, SoftBullet and JumpBullet require the existing endpoint margin 6 and lane margin 4 in SAFE, MOD and TRUST. Dime/Jump retain their non-Bullet burn-risk policies; Fit additionally requires the timing gate below. The prior V26.1 source is privately preserved in the private source archive, with its immutable public tag retained. A source comparison reproduces a contested Bullet admitted by V26.1 MOD and rejected by all current risk modes.
+
+## Fit must rescue a late throw
+
+Fit is no longer eligible merely because its score or receiver direction looks favorable. For each receiver, the planner first grades available non-Fit candidates. A usable non-Fit opportunity vetoes automatic Fit for that receiver.
+
+When none is usable, Fit requires a graded alternative whose modeled defender arrival time is no later than ball flight time. Fit must have a shorter flight than that late alternative, arrive before its own modeled defender ETA, and pass its current lane/endpoint/prevent and receiver checks. A lane-only problem, missing/invalid alternative, or safe but lower-scoring ordinary pass does not establish a timing rescue. Native mode names and distance alone cannot authorize Fit.
+
+At release the controller solves the chosen counterfactual again, then solves the actual Fit last. Fresh receiver/defender observations regrade both and other still-current cached alternatives; a newly safe alternative, lost timing advantage or newly threatened Fit cancels the unsent release for replanning. Evidence records the compared variant, both flight/defender times and Fit reason. The redundant main-loop Fit preview is omitted so up to six planning calls plus the two final calls remain within the existing eight-call frame limit. No animation/peak/pacing timer is added. Manual selection remains available when automatic timing need is unproven.
+
+Defender ETA uses the inherited speed-bounded pursuit/reach model (distance minus inherited reach, divided by observed/normal speed). It assumes immediate reaction and turning. This is a modeled timing comparison, not measured FF3 catch probability, and may be conservative. Comparisons are bounded by the existing candidate cache/call/time policy, not an exhaustive search of every possible route.
+
+## V26.2 validation
+
+793 current mocked assertions pass, including 55 mode-policy checks. They cover the reproduced prior Bullet regression, timing-only Fit and fresh comparison, two-receiver call budget, lateral height retention, native speed/branch verification, rollback/conflicts/stop, unsupported output and the opt-in UI. Generic jump/frame tests now use Dime where an isolated Fit no longer qualifies; preserved historical regression cases remain.
+
+Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.2` and requires `PELICAN_FF3_V26`.
+
+## Preserved V26.1 comeback and V26 behavior
+
 # FF3 V26.1: team comeback call
 
 The optional route call below is added to V26 without changing its controller contract or pass decisions. Prior V26 runtime remains at immutable `ff3-v26`.
@@ -95,4 +139,4 @@ THROW_INPUTS preserves native reference/send head positions, current native lead
 
 New scenes distinguish a MOD burn from SAFE and a tighter TRUST burn from MOD, retain prevent/direct-path and eligibility gates, exercise the mobile cycle and a mid-solve mode change, retain SAFE packet/timing behavior and accept a jumping WR without mistaking vertical velocity for a route cut. A synthetic animation-driven head shift changes V25's packet but not V26's packet relative to the no-animation baseline. Post-send visual errors and stop-during-load resource cleanup are covered. The preparation-stage regression hooks now explicitly run during track loading rather than during post-send visual playback.
 
-Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.1` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
+Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.2` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
