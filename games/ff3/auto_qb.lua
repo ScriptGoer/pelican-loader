@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26: coverage-aware native receiver/mode planning alongside Yuna.
+-- PELICAN_FF3_V26 (ff3-v26.1): coverage-aware planning and optional team comeback call.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -109,6 +109,11 @@ end
 local function finite(x) return type(x)=='number' and x==x and math.abs(x)<1e8 end
 local ff3Options=context.FF3Options or {}
 if type(ff3Options)~='table' then error('PELICAN: FF3 options must be a table') end
+assert(ff3Options.ComebackChat==nil or type(ff3Options.ComebackChat)=='boolean','FF3.ComebackChat must be boolean')
+controller.comeback={enabled=ff3Options.ComebackChat~=false and env.PELICAN_FF3_COMEBACK_CHAT~=false,
+    observations={},status='IDLE',attempts=0,outcome='NOT_REQUESTED',nextProbe=0}
+if ff3Options.ComebackChat~=nil then controller.comeback.enabled=ff3Options.ComebackChat end
+env.PELICAN_FF3_COMEBACK_CHAT=controller.comeback.enabled
 -- Explicit application risk policies, not calibrated game catch windows.
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
     MOD={margin=2,lane=-1,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
@@ -597,6 +602,9 @@ function controller.GetReport()
         'ATTEMPTS|'..attempts,'REQUEST_SENT|'..sent,'AMBIGUOUS_REQUESTS|'..ambiguous,
         'NATIVE_SOLVER_CALLS|'..nativeCalls,'EXTERNAL_LOCK_EDITS|'..relinquishments,'MAX_TICK_SECONDS|'..string.format('%.6f',maxTick),
         'COPY_RESULT|'..copyResult,'FILE_RESULT|'..fileResult,
+        'COMEBACK_CHAT|'..tostring(controller.comeback.enabled),'COMEBACK_STATUS|'..controller.comeback.status,
+        'COMEBACK_ATTEMPTS|'..controller.comeback.attempts,'COMEBACK_OUTCOME|'..controller.comeback.outcome,
+        'COMEBACK_POLICY|EXACT_comeback; VERIFIED_DEFAULT_TEAM_CHANNEL_ONLY; SAME_DB_2_SECONDS_WITHIN_5_YARDS; ONCE_PER_POSSESSION; 30_SECOND_SESSION_COOLDOWN; ADVISORY_NOT_ROLE_DETECTION',
         'LOS_STATUS|'..lines.status,'LOS_WORLD_Z|'..(lines.los and string.format('%.2f',lines.los.Z) or 'NONE'),
         'ATTACK_FORWARD_Z|'..(lines.forward and string.format('%.0f',lines.forward.Z) or 'NONE'),
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
@@ -617,7 +625,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
@@ -707,6 +715,7 @@ function controller.Stop(reason)
     if cleanupComplete then return true end
     if not stopped then stopReason=clean(reason or 'USER_END') end
     stopped=true; controller.IsStopped=true; fieldWaitSince=nil
+    if controller.comeback.cancel then controller.comeback.cancel() end
     releaseChoice()
     if disposeAnimation then disposeAnimation() end
     local remaining={}
@@ -716,7 +725,7 @@ function controller.Stop(reason)
     end
     connections=remaining; log('STOP',reason or 'USER_END'); gate='STOPPED'
     if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil;assistance.guideUI=nil;assistance.guideArrow=nil end end
-    cleanupComplete=#remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil
+    cleanupComplete=#remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -732,13 +741,14 @@ function controller.Stop(reason)
 end
 function controller.SetAuto(value)
     auto=value==true
-    if not auto then resetFieldWait(); releaseChoice() end
+    if not auto then resetFieldWait(); releaseChoice();if controller.comeback.cancel then controller.comeback.cancel() end end
     if autoButton then autoButton.Text=auto and 'AUTO ON' or 'AUTO OFF' end
     log('AUTO',auto)
 end
 function controller.SetThrow(value)
     throwing=value==true
     if not throwing then
+        if controller.comeback.cancel then controller.comeback.cancel() end
         if cancelSequence then cancelSequence('THROW_OFF') end
         if cancelJump then cancelJump('THROW_OFF') end
     end
@@ -1222,6 +1232,155 @@ local function receiverReady(player,s,now,point)
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
     if point and (downfield(point)<(lines.goalToGo and 0 or CFG.MinDownfieldYards*3) or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
     return true
+end
+-- Optional team-only route call. Reuses the decision snapshot; no native solves,
+-- world scan, chat UI manipulation, public-channel or guessed remote fallback.
+function controller.comeback.cancel()
+    local c=controller.comeback
+    c.observations={};c.snapshot=nil
+    local work=c.worker
+    if work then
+        work.active=false
+        if work.invoked then c.outcome='CANCELLED_IN_FLIGHT_DELIVERY_UNKNOWN' end
+        if work.thread and coroutine.status(work.thread)~='dead' and coroutine.running()~=work.thread then
+            local ok=pcall(task.cancel,work.thread)
+            if not ok then return false end
+        end
+        c.worker=nil
+    end
+    return true
+end
+function controller.SetComebackChat(value)
+    if stopped or type(value)~='boolean' then return false end
+    if not controller.comeback.cancel() then return false end
+    local c=controller.comeback
+    c.enabled=value;env.PELICAN_FF3_COMEBACK_CHAT=value;c.status=value and 'IDLE' or 'OFF'
+    if c.button then c.button.Text=value and 'CB ON' or 'CB OFF' end
+    return true
+end
+function controller.comeback.near(s,d)
+    if not lines.forward or not onField(d.p) then return false end
+    local gap=flat(s.p-d.p);local distance=gap.Magnitude
+    -- This is a route-call policy, not a measured interception/catch radius.
+    -- A WR already coming back or separating does not need this instruction.
+    return distance<=15 and (d.p-s.p):Dot(lines.forward)>=-3
+        and flat(s.v):Dot(lines.forward)>=-2
+        and (distance<.1 or flat(s.v-d.v):Dot(gap/distance)<=2)
+end
+function controller.comeback.valid(data,player,defender)
+    if stopped or not controller.comeback.enabled or not auto or not throwing or pending or sequence
+        or receiverMenu and receiverMenu.Visible or not choice or not choice.manualOnly then return false end
+    if os.clock()-data.at>.3 or data.epoch~=possession.epoch or data.generation~=lines.generation
+        or data.team~=me.Team or lines.status~='OBSERVED_LINES_STABLE' then return false end
+    local ball=ready()
+    if not ball or ball.nativeThrow or ball.tool~=data.tool or ball.model~=data.model or downfield(ball.root.Position)>.5 then return false end
+    local s=sample(player,os.clock())
+    if not receiverReady(player,s,os.clock()) or s.model~=data.models[player] then return false end
+    local db=Players:GetPlayerFromCharacter(defender)
+    if not db or db.Neutral or not db.Team or db.Team==me.Team then return false end
+    local model,root=body(db)
+    if model~=defender or not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude>55 then return false end
+    return controller.comeback.near(s,{p=root.Position,v=root.AssemblyLinearVelocity})
+end
+function controller.comeback.channel()
+    local service=game:GetService('TextChatService')
+    if not service or service.CreateDefaultTextChannels~=true or not me.Team or me.Neutral then return end
+    local color=me.Team.TeamColor
+    if not color or not color.Name or me.TeamColor~=color then return end
+    local folder=service:FindFirstChild('TextChannels')
+    if not folder or not folder:IsA('Folder') then return end
+    local channels=folder:GetChildren()
+    if #channels>64 then return end
+    local channel
+    for _,o in ipairs(channels) do
+        if o.Name=='RBXTeam'..color.Name then
+            if channel or not o:IsA('TextChannel') then return end
+            channel=o
+        end
+    end
+    if not channel then return end
+    local roster=Players:GetPlayers();if #roster>CFG.MaxRoster then return end
+    local members={}
+    for _,p in ipairs(roster) do
+        -- Default team channels group by color; reject shared opponent colors.
+        if not p.Neutral and p.Team and p.Team.TeamColor==color and p.Team~=me.Team then return end
+        if not p.Neutral and p.Team==me.Team then members[p.UserId]=true end
+    end
+    local sources=channel:GetChildren();if #sources>CFG.MaxRoster then return end
+    local own
+    for _,o in ipairs(sources) do
+        if not o:IsA('TextSource') or not members[o.UserId] then return end
+        if o.UserId==me.UserId then if own then return end;own=o end
+    end
+    if own and own.CanSend==true then return channel end
+end
+function controller.comeback.update(now)
+    local c=controller.comeback
+    if c.worker then
+        if now-c.worker.at>5 then
+            if not c.cancel() then error('Comeback chat worker cleanup failed') end
+            c.enabled=false;env.PELICAN_FF3_COMEBACK_CHAT=false
+            c.status='SEND_TIMEOUT_DISABLED_NO_RETRY';if c.button then c.button.Text='CB OFF' end
+        end
+        return
+    end
+    local data=c.snapshot;c.snapshot=nil
+    if data==nil then return end -- no decision tick on this physics frame
+    if not data or not c.enabled or stopped or pending or sequence or not choice or not choice.manualOnly then
+        c.observations={};return
+    end
+    local last=env.PELICAN_FF3_COMEBACK_LAST_ATTEMPT
+    if c.calledEpoch==data.epoch or finite(last) and now>=last and now-last<30 then c.observations={};c.status='COOLDOWN';return end
+    local seen={};local candidate
+    for _,r in ipairs(data.receivers) do
+        local s=r.sample;local nearest,dist=nil,math.huge
+        for _,d in ipairs(data.defenders) do
+            if c.near(s,d) then
+                local gap=flat(s.p-d.p).Magnitude
+                if gap<dist then nearest,dist=d,gap end
+            end
+        end
+        if nearest then
+            seen[r.player]=true
+            local old=c.observations[r.player]
+            if not old or old.model~=s.model or old.defender~=nearest.model or old.epoch~=data.epoch
+                or old.team~=data.team or old.generation~=data.generation or now-old.at>.3 then
+                old={model=s.model,defender=nearest.model,epoch=data.epoch,team=data.team,generation=data.generation,since=now}
+                c.observations[r.player]=old
+            end
+            old.at=now
+            if now-old.since>=2 and (not candidate or old.since<candidate.since) then candidate=old;candidate.player=r.player end
+        end
+    end
+    for p in pairs(c.observations) do if not seen[p] then c.observations[p]=nil end end
+    if not candidate then c.status='OBSERVING';return end
+    if now<c.nextProbe then return end
+    c.status='COVERAGE_PERSISTED'
+    c.nextProbe=now+2
+    if not task or type(task.defer)~='function' or type(task.cancel)~='function' then c.status='SCHEDULER_UNAVAILABLE';return end
+    local channel=c.channel()
+    if not channel then c.status='TEAM_CHANNEL_UNAVAILABLE';return end
+    local work={active=true,at=now};c.worker=work;c.status='QUEUED'
+    work.thread=task.defer(function()
+        local ok,err=pcall(function()
+            if not work.active or not c.valid(data,candidate.player,candidate.defender) or c.channel()~=channel then c.status='CANCELLED_BEFORE_SEND';return end
+            c.calledEpoch=data.epoch;c.attempts=c.attempts+1;env.PELICAN_FF3_COMEBACK_LAST_ATTEMPT=os.clock()
+            work.invoked=true;c.status='SENDING';c.outcome='AWAITING_RESULT'
+            -- Exactly the requested text. No /team prefix, name, suffix or UI
+            -- target switch. SendAsync may be denied by platform chat policy.
+            local result=channel:SendAsync('comeback')
+            if not work.active or stopped then return end
+            c.outcome=result and tostring(result.Status) or 'NO_RESULT_DELIVERY_UNKNOWN'
+            c.status='RESULT_RECORDED_NO_RETRY'
+            if not result or result.Status~=Enum.TextChatMessageStatus.Success then
+                c.enabled=false;env.PELICAN_FF3_COMEBACK_CHAT=false;c.status='SEND_NOT_SUCCESS_DISABLED_NO_RETRY'
+                if c.button then c.button.Text='CB OFF' end
+            end
+            log('COMEBACK_CHAT',c.outcome)
+        end)
+        if c.worker==work then c.worker=nil end
+        if not ok and not stopped then fatalError=clean(err);log('COMEBACK_ERROR',err);controller.Stop('COMEBACK_RUNTIME_ERROR_NO_RETRY') end
+    end)
 end
 local function predict(s,t) return s.p+s.v*t end
 -- Inherited vertical/horizontal reach estimates remain uncalibrated. Search
@@ -1898,6 +2057,7 @@ local function tick(now)
     inTick=true; lastTick=now
     local begun=os.clock()
     local ok,err=pcall(function()
+        controller.comeback.snapshot=false
         if context.IsCancelled and context.IsCancelled() then controller.Stop('CANCELLED'); return end
         scanLines()
         -- Field context exists for every role. Discover/refresh it before any
@@ -1988,6 +2148,11 @@ local function tick(now)
         for player in pairs(samples) do if not seenRoster[player] then samples[player]=nil; opportunities[player]=nil; shotCache[player]=nil end end
         if receiverMenu and receiverMenu.Visible then releaseChoice(); setGate('RECEIVER_MENU_OPEN'); return end
         if observationMissing then holdManual(fallbackReceiver(receivers),'MANUAL_LOCK_WAIT_DEFENDER_OBSERVATIONS'); return end
+        if controller.comeback.enabled and auto and throwing then
+            local models={};for _,r in ipairs(receivers) do models[r.player]=r.sample.model end
+            controller.comeback.snapshot={at=now,receivers=receivers,defenders=defenders,models=models,
+                epoch=possession.epoch,team=me.Team,generation=lines.generation,tool=ball.tool,model=ball.model}
+        end
         for _,r in ipairs(receivers) do
             local separation=45
             for _,d in ipairs(defenders) do separation=math.min(separation,flat(predict(r.sample,r.estimate)-predict(d,r.estimate)).Magnitude) end
@@ -2071,6 +2236,9 @@ local built,buildError=pcall(function()
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
     receiverButton=button('WR LIST',-166,106,112); receiverButton.Name='Receivers'
     riskButton=button(riskPolicy.mode,-58,54,112);riskButton.Name='RiskMode'
+    controller.comeback.button=button(controller.comeback.enabled and 'CB ON' or 'CB OFF',-226,54,87)
+    controller.comeback.button.Name='ComebackChat';controller.comeback.button.Visible=false
+    connect(controller.comeback.button.Activated,function() controller.SetComebackChat(not controller.comeback.enabled) end)
     connect(riskButton.Activated,function()
         controller.SetRiskMode(riskPolicy.mode=='SAFE' and 'MOD' or riskPolicy.mode=='MOD' and 'TRUST' or 'SAFE')
     end)
@@ -2117,6 +2285,7 @@ local built,buildError=pcall(function()
     connect(status.Activated,function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
+        controller.comeback.button.Visible=expanded
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
@@ -2151,9 +2320,11 @@ local built,buildError=pcall(function()
             updateJump(os.clock());drawGuide(os.clock())
         end)
         if not guideOK then fatalError=clean(guideError);log('GUIDE_ERROR',guideError);controller.Stop('GUIDE_RUNTIME_ERROR');return end
+        local chatOK,chatError=pcall(controller.comeback.update,os.clock())
+        if not chatOK then fatalError=clean(chatError);log('COMEBACK_ERROR',chatError);controller.Stop('COMEBACK_RUNTIME_ERROR_NO_RETRY');return end
         maxHeartbeat=math.max(maxHeartbeat,os.clock()-now)
     end)
 end)
 if not built then controller.Stop('STARTUP_ERROR'); error(buildError) end
-log('START','SAFE/MOD/TRUST burn risk; jump and immediate release; animation after request; AWAY always visible; Goal blue LOS')
+log('START','SAFE/MOD/TRUST; jump and immediate release; animation after request; optional team comeback; Goal blue LOS')
 return controller
