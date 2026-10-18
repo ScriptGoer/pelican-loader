@@ -1,3 +1,51 @@
+# FF3 V26.3: distance and coverage select Bullet power
+
+The prior short-power policy used a 60 floor and could fall back directly to 95. The user wants an easy standing catch, with power changing by distance and coverage. Yellow is a rough visual reference and does not gate power. The exact cause of the earlier live report of missing lower power remains unproven.
+
+## Current automatic behavior
+
+The planner compares two ordinary Bullet-lead candidates: `SoftBullet` requests a gentler flight and `QuickBullet` requests a quicker coverage window. Defaults estimate power for approximately 0.75 and 0.50 seconds respectively, with a request floor of 40 and a cap of 94. These are tunable comfort policies, **not measured human reaction times or verified FF3 catch mechanics**. The initial request uses current QB/WR positions, receiver velocity, ping, the active Bullet lead and the source-model gravity. It is no longer a flat 60 short-range band or a distance-only ramp.
+
+The estimate chooses a power input; it does not supply the ball's final trajectory. Each candidate is separately solved by the qualified native helper and receives its own projected path, flight time, receiver-reach, lane, endpoint and coverage checks. If both qualify, the lower actual native power wins. If the gentler path gives a defender too much time, a safe intermediate-power QuickBullet can win. Every Bullet variant stays strict in SAFE, MOD and TRUST. A safe ordinary Bullet remains preferred over an unnecessary experimental jump Bullet.
+
+Full-power automatic candidates (including other native mode labels, preventing a 95-power label workaround) require enough native horizontal throw distance and flight time. The default is at least `95 * WindowSeconds / 3` yards (about 15.83 yards) and at least WindowSeconds of flight. This is an explicit comfort policy based on the modeled throw, not a first-down-line rule. Full power is available for longer eligible opportunities when a lower-power completion is unavailable or unsafe. A rejected softer candidate cannot silently authorize a short 95 throw. If nothing qualifies, automatic release stays withheld and the existing manual target remains available.
+
+No fixed release delay, extra animation timer or peak wait is introduced. The intended change is **slower ball travel where suitable**, not delayed commitment to an open receiver. Powered standing Bullets retain the active Bullet lead rather than adding a new jump or catch-height offset. Their previous no-extra-QB-jump behavior remains; ordinary full/deep native release behavior is preserved.
+
+## Lower-power control and evidence
+
+The current call previously selected ManualType Power but kept passing the saved Angle as the native helper's manual input. Archived live V24/V24.1 reports show Angle=45, also establishing the UI degree convention. The call now supplies the requested power in Power mode and degree-valued input in Angle mode, including the existing native Power-mode path. A manual-value fixture reproduces old requested-60/returned-45 rejection followed by 95, then checks the corrected request. This is a supported failure mechanism, not proof of the user's latest live trigger. Returned-power verification remains mandatory.
+
+The primary path still asks the native generic Dime Power/low-arc calculation for the current Bullet lead. It verifies returned power, actual model speed versus reported power, lower ballistic branch and actual arrival height. The inspected native Bullet/Fit branch forces 95, so changing that branch's Power setting alone cannot implement this feature.
+
+If direct Power is not honored or gives an unsupported higher branch, the controller records the failure and changes subsequent bounded planning attempts to the source-supported generic **Angle** path. The retained audit identifies the native non-Bullet angle-to-power formula. A low-angle estimate is passed to that native solver under an owned temporary Angle/ManualType/lead/power transaction. The native final tuple, including its actual derived power and velocity, remains authoritative. It is accepted only if it is below full power, speed/power agree, the lower branch and active Bullet height are verified, and ordinary safety checks pass. Angle-derived actual power may differ from the initial request, including below its requested floor; reports preserve both. No manually fabricated velocity or server packet substitutes for an unsupported native result.
+
+This is a source-supported compatibility fallback, not a claim that the user's current running build ignored Power. The original paid attachment is no longer in this workspace; its retained audit and current integration support the path, and actual running-build compatibility still needs live verification. Unsupported control remains visible and cannot force a short full-power pass. Actual exceptions/yields retain stop-and-preserve behavior; these are counterfactual native calculations, not repeated server throw requests. One request per possession and no ambiguous network retries remain.
+
+All temporary settings, including Angle, restore synchronously. A conflicting external Angle edit is preserved and stops the instance. Reports now include BULLET_POWER_METHOD, persistent method failure reason/receipt, bounded requested/returned power traces, full-power limits, candidate power eligibility, selected requested/actual power and actual release trajectory. A game's displayed power number alone does not establish the sent power; the script does not rewrite the native game power UI. The request receipt records the actual argument supplied by the solver, not a verified server launch or catch.
+
+## Configuration
+
+Regular-loader users need no new buttons or options. Advanced settings remain optional:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/main/loader.lua"))({
+    FF3 = {
+        CloseBullet = { MinPower = 40, ComfortSeconds = 0.75, WindowSeconds = 0.50 }
+    }
+})
+```
+
+`CloseBullet=false` deliberately restores original native-power planning and opts out of the comfort/full-power restriction. An explicit old `MinPower=60` still requests a 60 minimum; remove it to use the new default. Optional `FullPowerYards` overrides the default minimum full-power distance while preserving the minimum flight check. Legacy `SoftYards` is ignored because the fixed-distance ramp is removed. Existing SAFE/MOD/TRUST, JB, comeback, WR blacklist, COPY, AWAY and X controls remain. Normal field/LOS requirements are preserved; power adds no yellow-marker lookup or dependency.
+
+## V26.3 validation
+
+849 current mocked assertions pass, including 56 new adaptive-power checks and 33 updated native power/rollback checks. The new suite reproduces the archived short-95 fallback, checks intermediate power under closing coverage, unchanged open release readiness, marker independence, unsupported-control refusal, Angle recovery and transactional cleanup. Legacy non-power fixtures explicitly opt out while dedicated current power suites enable defaults. Source/bundle validation uses Lua 5.4.
+
+No live throws/chats were run. Native build compatibility, actual server speed conversion, catch comfort and iPhone performance remain unverified. The exact prior live failure cause is not established. The loader pins `ff3-v26.3` and retains `PELICAN_FF3_V26`.
+
+## Preserved V26.2 and earlier behavior
+
 # FF3 V26.2: strict Bullet, timing-only Fit and jump-bullet trial
 
 Yuna's retained source audit shows Fit's vertical lead is conditional on running-away/mouse aiming; Jump keeps it for sideways routes. That explains a sideways Fit collapsing to a chest target. Configured height is not a verified server catch window. This patch keeps the V26 controller contract and adds the controls below.
@@ -38,7 +86,7 @@ Defender ETA uses the inherited speed-bounded pursuit/reach model (distance minu
 
 793 current mocked assertions pass, including 55 mode-policy checks. They cover the reproduced prior Bullet regression, timing-only Fit and fresh comparison, two-receiver call budget, lateral height retention, native speed/branch verification, rollback/conflicts/stop, unsupported output and the opt-in UI. Generic jump/frame tests now use Dime where an isolated Fit no longer qualifies; preserved historical regression cases remain.
 
-Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.2` and requires `PELICAN_FF3_V26`.
+Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.3` and requires `PELICAN_FF3_V26`.
 
 ## Preserved V26.1 comeback and V26 behavior
 
@@ -139,4 +187,4 @@ THROW_INPUTS preserves native reference/send head positions, current native lead
 
 New scenes distinguish a MOD burn from SAFE and a tighter TRUST burn from MOD, retain prevent/direct-path and eligibility gates, exercise the mobile cycle and a mid-solve mode change, retain SAFE packet/timing behavior and accept a jumping WR without mistaking vertical velocity for a route cut. A synthetic animation-driven head shift changes V25's packet but not V26's packet relative to the no-animation baseline. Post-send visual errors and stop-during-load resource cleanup are covered. The preparation-stage regression hooks now explicitly run during track loading rather than during post-send visual playback.
 
-Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.2` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
+Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.3` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.

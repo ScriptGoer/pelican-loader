@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.2): strict Bullets, timing-rescue Fit and opt-in JumpBullet trial.
+-- PELICAN_FF3_V26 (ff3-v26.3): adaptive comfort/window Bullets with explicit power evidence.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -134,17 +134,31 @@ if closeBullet==nil then closeBullet={} end
 if closeBullet==false then closeBullet={Enabled=false} end
 assert(type(closeBullet)=='table','FF3.CloseBullet must be a table or false')
 assert(closeBullet.Enabled==nil or type(closeBullet.Enabled)=='boolean','CloseBullet.Enabled must be boolean')
-local touch={enabled=closeBullet.Enabled~=false,min=closeBullet.MinPower or 60,near=closeBullet.SoftYards or 10,full=closeBullet.FullPowerYards or 25}
-assert(finite(touch.min) and touch.min>=40 and touch.min<95 and finite(touch.near) and touch.near>0 and finite(touch.full) and touch.full>touch.near and touch.full<=50,'Invalid CloseBullet power/range policy')
-local function closePower(player)
+local touch={enabled=closeBullet.Enabled~=false,min=closeBullet.MinPower or 40,full=closeBullet.FullPowerYards,
+    comfort=closeBullet.ComfortSeconds or .75,quick=closeBullet.WindowSeconds or .5,method='POWER',methodReason='NOT_PROBED',traces={}}
+assert(finite(touch.min) and touch.min>=1 and touch.min<95 and (touch.full==nil or finite(touch.full) and touch.full>0 and touch.full<=100)
+    and finite(touch.comfort) and touch.comfort>=.3 and touch.comfort<=1.5 and finite(touch.quick) and touch.quick>=.2 and touch.quick<touch.comfort,'Invalid CloseBullet comfort/power policy')
+local function closePower(player,quick)
     if not touch.enabled then return end
-    -- Resolve actual parts without world scans.
-    local target=player.Character and player.Character:FindFirstChild('HumanoidRootPart')
+    local model=player.Character
+    local target=model and model:FindFirstChild('Head')
+    local root=model and model:FindFirstChild('HumanoidRootPart')
     local head=me.Character and me.Character:FindFirstChild('Head')
-    if not target or not head then return end
-    local distance=(Vector3.new(target.Position.X-head.Position.X,0,target.Position.Z-head.Position.Z)).Magnitude/3
-    if distance>=touch.full then return end
-    return math.floor(touch.min+(95-touch.min)*math.max(0,(distance-touch.near)/(touch.full-touch.near))+.5)
+    if not target or not root or not head or not profile then return end
+    local v=root.AssemblyLinearVelocity;local speed=math.sqrt(v.X*v.X+v.Z*v.Z)
+    local lead=profile.leads.Bullet;local ping=me:GetNetworkPing()
+    if not finite(ping) or ping<0 then return end
+    local function estimate(time)
+        local x=target.Position.X+v.X*(time+ping)+(speed>0 and v.X/speed*lead.X or 0)-head.Position.X
+        local z=target.Position.Z+v.Z*(time+ping)+(speed>0 and v.Z/speed*lead.X or 0)-head.Position.Z
+        local y=target.Position.Y+lead.Y-head.Position.Y
+        -- Estimate a power request only. Native output supplies the actual
+        -- flight, lead, origin and low-arc trajectory, then coverage grades it.
+        return math.floor(math.max(touch.min,math.min(94,math.sqrt((x*x+z*z)/(time*time)+(y/time+CFG.Gravity*time/2)^2)))+.5)
+    end
+    local gentle=estimate(touch.comfort)
+    if quick then local power=estimate(touch.quick);if power<=gentle then return end;return power,touch.quick end
+    return gentle,touch.comfort
 end
 for _,key in ipairs({'MovementGuide','PredictiveJump'}) do
     if ff3Options[key]~=nil and type(ff3Options[key])~='boolean' then error('PELICAN: '..key..' must be boolean') end
@@ -577,6 +591,39 @@ local function onField(point)
     local p=lines.ground.CFrame:PointToObjectSpace(point)
     return math.abs(p.X)<=80 and math.abs(p.Z)<=180
 end
+function touch.fullAllowed(shot)
+    local power=shot.power or shot.velocity and shot.velocity.Magnitude
+    if not touch.enabled or power and power<94.5 then return true end
+    -- Distance/flight policy only; never depends on LineTogo or down number.
+    local yards=shot.passYards or shot.arrival and shot.origin and flat(shot.arrival-shot.origin).Magnitude/3
+    return yards~=nil and yards>=(touch.full or 95*touch.quick/3) and shot.time>=touch.quick
+end
+function touch.record(player,variant,requested,returned,reason)
+    local rows=touch.traces
+    rows[#rows+1]=string.format('%s %s method=%s requested=%s returned=%s %s',player.Name,variant,touch.method,tostring(requested),tostring(returned),reason)
+    if #rows>8 then table.remove(rows,1) end
+end
+function touch.angle(player,power)
+    local _,root,head=body(player);local _,_,qbHead=body(me)
+    if not head or not qbHead then return end
+    local origin=qbHead.Position
+    local cache=shotCache[player];local base=cache and cache.shots.Bullet
+    if base and base.qbModel==me.Character and os.clock()-base.at<=CFG.CacheAge then origin=base.origin end
+    local v=flat(root.AssemblyLinearVelocity);local lead=profile.leads.Bullet;local ping=me:GetNetworkPing()
+    if not finite(ping) or ping<0 then return end
+    local time=flat(head.Position-origin).Magnitude/power;local angle
+    for _=1,3 do
+        local target=head.Position+v*(time+ping)+(v.Magnitude>0 and v.Unit*lead.X or V())+V(0,lead.Y,0)
+        local r=flat(target-origin).Magnitude;local h=target.Y-origin.Y
+        local disc=power^4-CFG.Gravity*(CFG.Gravity*r*r+2*h*power*power)
+        if r<=0 or disc<0 then return end
+        angle=math.atan((power*power-math.sqrt(disc))/(CFG.Gravity*r))
+        time=r/(power*math.cos(angle))
+    end
+    -- This angle is only an input to the audited native Angle/power solver.
+    -- Its final output, not this estimate, supplies the released trajectory.
+    return math.deg(angle) -- native Angle/UI input is degrees (live setting 45)
+end
 local function onLineAdded(o)
     if stopped then return end
     if o.Parent==workspace then lines.rootDirty=true end
@@ -628,7 +675,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.2','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.3','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -639,7 +686,11 @@ function controller.GetReport()
         'RISK_POLICY|SAFE=STRICT; MOD=COMFORTABLE_NON_BULLET_BURN_RACE; TRUST=TIGHTER_NON_BULLET_BURN_RACE; DIRECT_PATH_AND_PREVENT_STILL_BLOCKED',
         'RISK_LIMITS|margin='..selectedRisk.margin..' lane='..selectedRisk.lane..' race='..tostring(selectedRisk.race)..' lateral='..tostring(selectedRisk.lateral)..' turn='..tostring(selectedRisk.turn),
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
-        'CLOSE_BULLET_POLICY|NATIVE_LOW_ARC_POWER_WITH_ACTIVE_BULLET_LEAD; SAFETY_FIRST; POWER_'..touch.min..'_TO_95; YARDS_'..touch.near..'_TO_'..touch.full,'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
+        'CLOSE_BULLET_POLICY|ADAPTIVE_GENTLE_AND_WINDOW_NATIVE_LOW_ARC; LOWEST_STRICT_SAFE_POWER; NO_YELLOW_DEPENDENCY',
+        'BULLET_POWER_METHOD|'..touch.method,'BULLET_POWER_METHOD_REASON|'..touch.methodReason,'BULLET_POWER_CONTROL_FAILURE|'..(touch.methodReceipt or 'NONE'),
+        'BULLET_REQUEST_MIN|'..touch.min,'BULLET_COMFORT_SECONDS|'..touch.comfort,'BULLET_WINDOW_SECONDS|'..touch.quick,
+        'FULL_POWER_MIN_YARDS|'..(touch.full or 95*touch.quick/3),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.quick,
+        'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
         'AUTO_JUMP_POLICY|NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT',
         'DEEP_POLICY|FLIGHT_EXCEEDS_CURRENT_NORMAL_JUMP_AIRTIME; NO_YARD_CUTOFF',
@@ -674,7 +725,8 @@ function controller.GetReport()
             ..' manual='..clean(profile.q.ManualType)..' power='..clean(profile.q.Power)
             ..' locked='..tostring(profile.q.Locked)..' lockedName='..clean(profile.q.LockedOntoName)
     end
-    for _,mode in ipairs({'SoftBullet','Bullet','Fit','Dime','Jump','JumpBullet'}) do rows[#rows+1]='MODE_EVALUATIONS|'..mode..' '..(modeChecks[mode] or 0) end
+    for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet'}) do rows[#rows+1]='MODE_EVALUATIONS|'..mode..' '..(modeChecks[mode] or 0) end
+    for _,row in ipairs(touch.traces) do rows[#rows+1]='BULLET_POWER_TRACE|'..row end
     for i,decision in ipairs(decisionHistory) do
         rows[#rows+1]='THROW_EVIDENCE|'..i..' '..decision.summary
         rows[#rows+1]='THROW_TRAJECTORY|'..i..' '..decision.trajectory
@@ -775,7 +827,7 @@ end
 function controller.SetJumpBullet(value)
     if stopped or type(value)~='boolean' then return false end
     releaseChoice();controller.jumpBullet.enabled=value;env.PELICAN_FF3_JUMP_BULLET=value
-    if controller.jumpBullet.plannerModes then controller.jumpBullet.plannerModes[6]=value and 'JumpBullet' or nil end
+    if controller.jumpBullet.plannerModes then controller.jumpBullet.plannerModes[7]=value and 'JumpBullet' or nil end
     if controller.jumpBullet.button then controller.jumpBullet.button.Text=value and 'JB ON' or 'JB OFF' end
     log('JUMP_BULLET',value and 'OPT_IN_UNCALIBRATED_FIT_HEIGHT_TRIAL' or 'OFF')
     return true
@@ -1457,6 +1509,7 @@ local function risk(shot,receiver,defenders)
         if pathClearance<laneMargin then laneMargin=pathClearance;shot.laneDB=d.name;shot.laneActor=d end
     end
     shot.margin,shot.lane,shot.defenderETA=margin,laneMargin,firstDB
+    shot.powerAllowed=touch.fullAllowed(shot)
     if shot.mode=='Fit' then shot.fitAllowed=false end
     if riskPolicy.mode~='SAFE' then
         local speed=runSpeed(receiver)
@@ -1540,6 +1593,7 @@ local function coverage(shot,s,defenders)
 end
 local function throwable(shot)
     if shot.releaseBlocked then return false end
+    if shot.powerAllowed==false then return false end
     if shot.mode=='Fit' and not shot.fitAllowed then return false end
     local strict=shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane
         and (not shot.safetyOverTop or shot.mode=='Bullet')
@@ -1576,6 +1630,7 @@ local function better(a,b)
     if ar~=br then return ar end
     if ar and a.mode=='Bullet' and b.mode=='Bullet' and a.jumpBullet~=b.jumpBullet then return not a.jumpBullet end
     if ar and a.softBullet~=b.softBullet then return a.softBullet==true end
+    if ar and a.softBullet and b.softBullet and a.power~=b.power then return a.power<b.power end
     if a.clearBurn~=b.clearBurn then return a.clearBurn==true end
     if a.score~=b.score then return a.score>b.score end
     return downfield(a.arrival)>downfield(b.arrival)
@@ -1605,10 +1660,11 @@ local function classify(shot,s,defenders)
     else shot.window='LATERAL_WINDOW' end
 end
 local function solve(player,mode)
-    local soft=mode=='SoftBullet'
+    local soft=mode=='SoftBullet' or mode=='QuickBullet'
     local jump=mode=='JumpBullet'
     if jump and not controller.jumpBullet.enabled then return nil,'JUMP_BULLET_OFF' end
-    local requestedPower=soft and closePower(player) or nil
+    if soft and touch.profile~=profile then touch.profile=profile;touch.method='POWER';touch.methodReason='NOT_PROBED';touch.methodReceipt=nil end
+    local requestedPower=soft and closePower(player,mode=='QuickBullet') or nil
     if soft and not requestedPower then return nil,'CLOSE_BULLET_NOT_NEEDED' end
     local appliedLead
     if jump then
@@ -1616,6 +1672,13 @@ local function solve(player,mode)
         appliedLead=Vector2.new(profile.leads.Bullet.X,profile.leads.Fit.Y);requestedPower=95
     end
     local nativeMode=jump and 'Jump' or soft and 'Dime' or mode
+    -- The source's selected manual value is power in Power mode and degrees
+    -- in Angle mode. Do not keep passing the old Angle after selecting Power.
+    local nativeInput=(soft or jump) and requestedPower or profile and (profile.q.ManualType=='Power' and profile.q.Power or profile.q.Angle)
+    if soft and touch.method=='ANGLE' then
+        nativeInput=touch.angle(player,requestedPower)
+        if not nativeInput then touch.record(player,mode,requestedPower,nil,'ANGLE_ESTIMATE_UNREACHABLE');return nil,'CLOSE_BULLET_ANGLE_ESTIMATE_UNREACHABLE' end
+    end
     if frameCalls>=8 then return nil,'NATIVE_FRAME_BUDGET' end
     if not lock(player) then return nil,'NATIVE_LOCK_BUSY' end
     if not teammate(player) or profile.selector()~=player.Character then return nil,'NATIVE_TARGET_MISMATCH' end
@@ -1638,16 +1701,20 @@ local function solve(player,mode)
         -- Every temporary setting is owned/restored within this synchronous solve.
         -- Jump's native branch always applies its vertical lead, including
         -- lateral routes. Reuse configured Fit height, not a new catch offset.
-        for _,field in ipairs({{q,'ManualType','Power'},{q,'Power',requestedPower},{q,'PreferHighArc',false},{profile.leads,nativeMode,appliedLead or profile.leads.Bullet}}) do
+        for _,field in ipairs({{q,'ManualType',soft and touch.method=='ANGLE' and 'Angle' or 'Power'},{q,'Power',requestedPower},{q,'PreferHighArc',false},{profile.leads,nativeMode,appliedLead or profile.leads.Bullet}}) do
             local object,key,written=field[1],field[2],field[3]
             modeTransaction.fields[#modeTransaction.fields+1]={object=object,key=key,before=rawget(object,key),written=written}
             rawset(object,key,written)
+        end
+        if soft and touch.method=='ANGLE' then
+            modeTransaction.fields[#modeTransaction.fields+1]={object=q,key='Angle',before=rawget(q,'Angle'),written=nativeInput}
+            rawset(q,'Angle',nativeInput)
         end
     end
     rawset(q.AutoThrowType,'Enabled',false); rawset(q,'SelectedType',nativeMode)
     nativeCalls=nativeCalls+1; frameCalls=frameCalls+1; maxFrameCalls=math.max(maxFrameCalls,frameCalls); modeChecks[mode]=(modeChecks[mode] or 0)+1
     local worker=coroutine.create(profile.solve); modeTransaction.worker=worker
-    local ok,dir,origin,endpoint,power,time,velocity,aimpoint,initialAngle,returnedMode=coroutine.resume(worker,q.Angle,nativeMode)
+    local ok,dir,origin,endpoint,power,time,velocity,aimpoint,initialAngle,returnedMode=coroutine.resume(worker,nativeInput,nativeMode)
     local yielded=coroutine.status(worker)=='suspended'
     local modeOwned=restoreModeTransaction()
     if yielded and not stopped then
@@ -1696,23 +1763,35 @@ local function solve(player,mode)
     if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
     if soft or jump then
         local prefix=jump and 'JUMP_BULLET_' or 'CLOSE_BULLET_'
-        if math.abs(power-requestedPower)>1 then return nil,prefix..'POWER_NOT_HONORED' end
+        local function reject(reason,switchMethod)
+            if soft then
+                touch.record(player,mode,requestedPower,power,reason)
+                if switchMethod then touch.methodReceipt=touch.traces[#touch.traces];touch.method='ANGLE';touch.methodReason=reason end
+            end
+            return nil,prefix..reason
+        end
+        if (not soft or touch.method=='POWER') and math.abs(power-requestedPower)>1 then return reject('POWER_NOT_HONORED',soft) end
+        if soft and power>=94.5 then return reject('LOW_POWER_UNAVAILABLE',touch.method=='POWER') end
+        if soft and math.abs(velocity.Magnitude-power)>1 then return reject('SPEED_POWER_MISMATCH',touch.method=='POWER') end
         if jump and math.abs(velocity.Magnitude-requestedPower)>1 then return nil,'JUMP_BULLET_SPEED_NOT_HONORED' end
         local expectedY=aimpoint.Y+(appliedLead or profile.leads.Bullet).Y
-        if math.abs(arrival.Y-expectedY)>endpointTolerance then return nil,prefix..'LEAD_NOT_HONORED' end
+        if math.abs(arrival.Y-expectedY)>endpointTolerance then return reject('LEAD_NOT_HONORED') end
         local distance=flat(arrival-origin).Magnitude
         local rise=math.atan2 and math.atan2(arrival.Y-origin.Y,distance) or math.atan((arrival.Y-origin.Y)/math.max(.001,distance))
-        if math.atan(velocity.Y/math.max(.001,flat(velocity).Magnitude))>(math.pi/2+rise)/2+.0001 then return nil,prefix..'HIGH_ARC_REJECTED' end
+        if math.atan(velocity.Y/math.max(.001,flat(velocity).Magnitude))>(math.pi/2+rise)/2+.0001 then return reject('HIGH_ARC_REJECTED',soft and touch.method=='POWER') end
+        if soft then touch.record(player,mode,requestedPower,power,'NATIVE_OUTPUT_ACCEPTED');if touch.method=='POWER' then touch.methodReason='DIRECT_POWER_CONFIRMED' end end
     end
     appliedLead=appliedLead or profile.leads[soft and 'Bullet' or mode]
     return {origin=origin,velocity=velocity,power=power,time=time,mode=(soft or jump) and 'Bullet' or mode,arrival=arrival,
         variant=mode,softBullet=soft,jumpBullet=jump,nativeMode=nativeMode,appliedLead=appliedLead,
+        powerMethod=soft and touch.method or 'NATIVE',requestedPower=requestedPower,
+        nativeInput=nativeInput,nativeInputKind=((soft or jump) and (not soft or touch.method=='POWER') or not soft and not jump and q.ManualType=='Power') and 'POWER' or 'ANGLE_DEGREES',
         launchHead=launchHead,qbModel=qbModel,targetPosition=targetPosition,targetVelocity=targetVelocity,
         passYards=flat(arrival-origin).Magnitude/3,at=os.clock()}
 end
-local plannerModes={'SoftBullet','Bullet','Fit','Dime','Jump'}
+local plannerModes={'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump'}
 controller.jumpBullet.plannerModes=plannerModes
-if controller.jumpBullet.enabled then plannerModes[6]='JumpBullet' end
+if controller.jumpBullet.enabled then plannerModes[7]='JumpBullet' end
 function controller.fit.alternatives(player,s,defenders,now,fresh)
     local result={};local cache=shotCache[player]
     if not cache or cache.model~=s.model or cache.epoch~=possession.epoch or cache.generation~=lines.generation then return result end
@@ -1790,7 +1869,7 @@ local function evaluate(receivers,indices,defenders,now)
         for _,shot in ipairs(valid) do
             local mode=shot.variant or shot.mode
             candidateEvidence[#candidateEvidence+1]=string.format('%s %s t=%.3f p=%.2f margin=%.2f lane=%.2f release=%s clearBurn=%s safetyOverTop=%s',r.player.Name,mode,shot.time,shot.power,shot.margin,shot.lane,tostring(throwable(shot)),tostring(shot.clearBurn),tostring(shot.safetyOverTop))..string.format(' directLane=%s race=%s wrETA=%s lateral=%s',tostring(shot.directLane),tostring(shot.raceAdvantage),tostring(shot.receiverETA),tostring(shot.routeLateral))
-                ..' fitReason='..tostring(shot.fitReason)..' dbETA='..tostring(shot.defenderETA)
+                ..' fitReason='..tostring(shot.fitReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)
             if better(shot,bestShot) then bestShot=shot end
         end
         if bestShot then
@@ -2065,6 +2144,8 @@ local function releaseNow(ball,selected,defenders,now)
         shot.appliedLead.X,shot.appliedLead.Y,tostring(shot.networkPing),os.clock()-shot.at)
     lastDecision.inputs=lastDecision.inputs..' nativeMode='..shot.nativeMode..' fitReason='..tostring(shot.fitReason)
         ..' fitCompared='..tostring(shot.fitAlternativeVariant)..' comparedTime='..tostring(shot.fitAlternativeTime)..' comparedDBETA='..tostring(shot.fitAlternativeDB)..' dbETA='..tostring(shot.defenderETA)
+        ..' powerMethod='..shot.powerMethod..' requestedPower='..tostring(shot.requestedPower)..' powerAllowed='..tostring(shot.powerAllowed)
+        ..' manualInput='..tostring(shot.nativeInput)..' inputKind='..shot.nativeInputKind
     lastDecision.candidates={}
     for _,candidate in ipairs(candidateEvidence) do lastDecision.candidates[#lastDecision.candidates+1]=candidate end
     for i,d in ipairs(defenders) do lastDecision.actors[#lastDecision.actors+1]=actor('DB'..i..':'..clean(d.name),d) end
