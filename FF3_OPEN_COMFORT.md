@@ -1,0 +1,31 @@
+# FF3 V26.14: ordinary open passes and a UI ground guide
+
+The default `FF3.OpenComfort=true` removes native Jump from automatic planning and supersedes V26.9's wide-open Jump preference. A strict safe ordinary Bullet variant is preferred to an elevated candidate. Existing native-origin refinement chooses the gentlest supported safe power, with the unchanged 0.90-second gentle / 0.65-second tighter-window policies. These times are application preferences, not verified human reaction or catch thresholds. Nothing adds a release wait or changes the configured catch leads. SHORT still prioritizes a known safe shallow candidate over a deep option; modes are evaluated incrementally within the existing budget, not exhaustively before every release.
+
+If an ordinary flat trajectory is unsafe, another native trajectory can still qualify. Fit retains its timing-rescue requirement; Dime retains native adaptive angle/coverage evaluation. The planner does not force a flat ball through an underneath defender because the arrival point looks open. All Bullet variants remain strict in every risk setting. Existing teammate, movement/AFK, LOS, end-zone, friend/trust, blacklist and final native freshness checks remain.
+
+Custom JumpBullet remains a separate opt-in, uncalibrated Bullet-X/Fit-Y trial. Under OpenComfort, any current safe ordinary Bullet vetoes it. A valid native normal Bullet must show an actual modeled endpoint/lane threat; a speed/comfort failure alone is insufficient. The higher path must independently pass strict safety. Immediately before sending, normal Bullet is solved again, fresh defender geometry grades both paths, and the custom path is solved last. A newly safe chest path cancels the trial. Cached counterfactuals expire under the existing 0.36-second rule; the final normal Bullet comparison is fresh. Missing source/control data fails closed. The two final calls replace a redundant preview and stay inside the existing eight-call frame limit.
+
+`OpenComfort=false` explicitly restores the previous mode policy, including the separate `WideOpenJump` option. `WideOpenJump=true` alone cannot override the new default. No extra HUD control is added. Ordinary loader/X reload gets the new default without changing global Yuna settings. ARC AUTO / OLD remains independent; with comfort enabled its normal automatic loft candidate is Dime, not Jump. MAG TEST stays off by default and trusted-only.
+
+## Ground guide
+
+The former floating RUN icon becomes three preallocated noninteractive PlayerGui Frame segments. Four world points on the validated field top are converted with Camera:WorldToScreenPoint; ScreenGui's normal inset convention is retained. There are no Workspace Parts, Beams, Attachments, Decals, injected scripts or movement writes. This is a perspective-aligned UI overlay with no depth occlusion, not a physical world object.
+
+Only a currently covered eligible target with a modeled future safe opportunity can produce advice. The forecast compares receiver-parallel, left, right and backward running at 0.5 seconds, plus parallel at 0.25 and 0.75: at most six estimates, stopping between estimates when its existing one-millisecond work budget expires. It reuses current native flight/roster data, considers projected pursuit clearance around the QB, rejects field/LOS crossings, and favors a usable passing window with more QB room. Fit and uncalibrated elevated trials are excluded from this advisory forecast because they lack the required future counterfactual proof.
+
+No extra native calls, world scans, new worker or render listener is added. Release work runs first; an open pass does not wait for the arrow. Three existing UI segments redraw at most 30 Hz through the existing heartbeat and disappear on stale prediction (0.35 seconds), invalid/offscreen/behind-camera projection, lost eligibility, AUTO off, menu, respawn or shutdown. Unsupported projection hides the guide; genuine runtime errors still stop and preserve the controller report. `FF3.MovementGuide=false` disables rendering.
+
+The forecast assumes short constant-motion continuation, adjusts the old native tuple rather than recalculating actual future native/server physics, and inherits uncalibrated pursuit/reach. It cannot promise a future opening or account for occluding avatars. A current safe release is always independent of this advice.
+
+## Evidence limits
+
+The audited history distinguishes native Jump from custom JumpBullet and supports removing the old high-mode preference. Most retained outcome captures are uncertain; the evidence does not establish better lead values, required catch technique or reliable completion rates. No automatic lead tuning or team-stat workflow is added. Supplied reports remain outside this public distribution.
+
+## Validation and release
+
+30 suites / 1,785 mocked assertions pass: 38 new open-comfort checks and 62 ground-guide checks plus the prior 1,685. New checks exercise real comfort/angle defaults, the archived Jump regression, ordinary passes with JB enabled, actual lower native power/time, unchanged leads/settings, explicit legacy behavior, strict custom counterfactuals and final cancellation, a safe Dime over an unsafe flat lane, and SHORT priority once both opportunities are known. Guide checks drive the actual heartbeat forecast/projection, camera change, missing/offscreen/behind-camera handling, throttling, field/LOS bounds, no Workspace insertions, no QB movement, shutdown and identical open-release timing/native calls with guide on/off.
+
+Historical packet fixtures explicitly select `OpenComfort=false` and their existing angle/Jump settings to retain their intended baseline contracts. New suites exercise production defaults separately. Sources and rebuilt bundle parse/run under Lua 5.4 mocks; this is not Roblox runtime verification. No actual throw, chat, currency or server exit test was performed.
+
+Loader pin: `ff3-v26.14`; controller contract remains `PELICAN_FF3_V26`. The immutable ff3-v26.13.1 tag preserves the prior controller. Other game routes/source and the upload companion remain unchanged. History adds OpenComfort and custom JumpBullet's reason/chest counterfactual; reports add comfort policy, guide render/status/draw count.

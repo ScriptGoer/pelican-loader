@@ -60,7 +60,7 @@ An assistant does not automatically gain access to a private bin by knowing its 
 
 Together with the existing current suites, **987 mocked assertions pass**. The generated bundle and runtime load under Lua 5.4. No Roblox session, phone, live chat or football request was tested. Actual JSONBin privacy/initialization readback was checked separately; mocked executor sync checks are not a phone runtime test. iPhone IO latency, current executor HTTP support, phone-side key use/quota, persistence and live catchability remain unverified. This is substantial progress in retained diagnostic evidence; it is not proof of improved passing outcomes.
 
-The loader pins `ff3-v26.13.1`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
+The loader pins `ff3-v26.14`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
 
 Protocol references: [JSONBin Read API](https://jsonbin.io/api-reference/bins/read/) and [Update API](https://jsonbin.io/api-reference/bins/update/).
 
@@ -81,3 +81,5 @@ V26.11 adds coverage-based friend route calls. The last attempted instruction ap
 V26.12 retains MagTrial Enabled/ExtraY/calibration policy in current settings, and per-throw MagTrial, MagExtraY, anonymous MagTrustSource, MagBaseLead and explicit unverified catch calibration. Base LeadSettings remain unchanged; Lead records the actual scoped value and LeadControls.YOffset identifies MagTrial.ExtraY. Manual-trust/friend identities are not exported. [Trial and trust behavior](FF3_TRUSTED_MAG.md).
 
 V26.13 retains AdaptiveAngle in current settings, and ActualAngleDegrees, AngleRequest, NativeAngleAdjustment, AdaptiveAngle and EndzoneTarget in throw records. AngleRequest stores the requested angle, estimated flight, native power cap, projected blocker count and policy reason; the actual native trajectory remains authoritative. [Adaptive angles and goal changes](FF3_ADAPTIVE_ANGLE.md).
+
+V26.14 retains OpenComfort in settings and throws, plus JumpBulletReason / JumpBulletChest when a custom trial qualifies. The counterfactual stores native normal-Bullet time and modeled endpoint/lane clearance; it does not establish an actual catch outcome. Reports identify guide render/status/draw count. The existing upload companion is unchanged. [Policy and evidence limits](FF3_OPEN_COMFORT.md).
