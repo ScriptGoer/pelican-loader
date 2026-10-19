@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.12): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.13): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -227,6 +227,11 @@ controller.mag=(function()
     function m.Reject(reason) m.status=reason;return nil,reason end
     return m
 end)()
+assert(ff3Options.AdaptiveAngle==nil or type(ff3Options.AdaptiveAngle)=='boolean','FF3.AdaptiveAngle must be boolean')
+controller.angle={enabled=ff3Options.AdaptiveAngle~=false and env.PELICAN_FF3_ADAPTIVE_ANGLE~=false,
+    origins=setmetatable({}, {__mode='k'}),cache=setmetatable({}, {__mode='k'}),status='WAIT_SCENE',requests=0}
+if ff3Options.AdaptiveAngle~=nil then controller.angle.enabled=ff3Options.AdaptiveAngle end
+env.PELICAN_FF3_ADAPTIVE_ANGLE=controller.angle.enabled
 -- Explicit application risk policies, not calibrated game catch windows.
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
     MOD={margin=2,lane=CFG.ThrowLane,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
@@ -336,7 +341,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.12',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.13',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -350,7 +355,7 @@ controller.history=(function()
         if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
         local context=e.NativeContext()
         local control=touch.lastControl or {}
-        local values={controller.receiverFilter.mode,tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        local values={controller.receiverFilter.mode,tostring(controller.angle.enabled),tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
         for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
             local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
         end
@@ -358,7 +363,7 @@ controller.history=(function()
         if h.settingsSignature==signature then return end
         h.settingsSignature=signature
         data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
-            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',ReceiverFilter=controller.receiverFilter.mode,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',ReceiverFilter=controller.receiverFilter.mode,AdaptiveAngle=controller.angle.enabled,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
         data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
@@ -408,6 +413,7 @@ controller.history=(function()
             Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},ManualInput=shot.nativeInput,
             MagTrial=shot.magTrial,MagExtraY=shot.magExtraY,MagTrustSource=shot.magTrustSource,
             MagBaseLead=shot.magBaseLead and {shot.magBaseLead.X,shot.magBaseLead.Y},MagCatchCalibration=shot.magTrial and 'MISSING; ANGLE_REQUIRED_UNVERIFIED' or nil,
+            ActualAngleDegrees=shot.actualAngle,AdaptiveAngle=shot.angleControl~=nil,AngleRequest=shot.angleControl,EndzoneTarget=shot.endzoneTarget,
             InputKind=shot.nativeInputKind,Ping=shot.networkPing,DistanceYards=shot.passYards,
             FitReason=shot.fitReason,ComparedMode=shot.fitAlternativeVariant,ComparedTime=shot.fitAlternativeTime,
             ComparedDBETA=shot.fitAlternativeDB,OverTop=shot.safetyOverTop,ClearBurn=shot.clearBurn,
@@ -452,7 +458,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.12'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.13'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -858,6 +864,22 @@ function controller.mag.Allowed(player)
     if not controller.mag.enabled then return false end
     return controller.mag.Source(player)~=nil
 end
+controller.field={}
+function controller.field.QBLimit(root,direction)
+    if not lines.goalToGo then return .5 end
+    direction=direction or lines.forward
+    local size,cf=root and root.Size,root and root.CFrame
+    if not direction or not vector(size) or not cf or not vector(cf.RightVector) or not vector(cf.LookVector) then return .5 end
+    -- Goal-line straddling uses the measured root footprint, not the receiver's
+    -- downfield distance or an end-zone exemption for an already-crossed QB.
+    return math.max(.5,math.abs(cf.RightVector:Dot(direction))*size.X/2+math.abs(cf.LookVector:Dot(direction))*size.Z/2)
+end
+function controller.field.QBPast(root)
+    local depth=lines.los and lines.forward and flat(root.Position-lines.los):Dot(lines.forward) or math.huge
+    local limit=controller.field.QBLimit(root)
+    controller.field.lastDepth,controller.field.lastLimit=depth,limit
+    return depth>limit
+end
 
 -- LOS geometry is preserved from the earlier FF3 reports: the observed ground
 -- and full-width blue/yellow strips (or straight Beams). Direction is never
@@ -1137,7 +1159,8 @@ local function readLines(now)
         -- LineDown is retained/validated as BLUE; a yellow first-down marker
         -- beyond the goal line is not required. Prefer a verified pair at this
         -- same LOS, otherwise require nearest-end-zone and QB-side agreement.
-        if lines.confirmedGround==ground and lines.confirmedLos and flat(lines.confirmedLos-los).Magnitude<.05 then
+        if lines.confirmedGround==ground and lines.confirmedTeam==me.Team and lines.confirmedEpoch==possession.epoch
+            and lines.confirmedLos and flat(lines.confirmedLos-los).Magnitude<.05 then
             local dir=lines.confirmedForward
             if dir then targetZ=dir:Dot(cf.LookVector)<0 and 150 or -150 end
         end
@@ -1146,12 +1169,16 @@ local function readLines(now)
             targetZ=blue.z>0 and 150 or -150
         end
         delta=targetZ-blue.z
-        if math.abs(delta)<.05 then return missing('GOAL_DIRECTION_UNVERIFIED') end
+        -- LOS can coincide with the goal stripe; receivers still have usable
+        -- end-zone space beyond it. Never flip direction toward midfield there.
+        if math.abs(delta)<.05 then delta=targetZ>0 and 1 or -1
+        elseif (targetZ>0 and delta<0 or targetZ<0 and delta>0) then return missing('GOAL_LOS_BEYOND_TARGET_ENDZONE') end
         local _,root=body(me)
         local direction=cf.LookVector*(delta>0 and -1 or 1)
         if not root then return missing('GOAL_DIRECTION_WAIT_QB') end
-        if not lines.confirmedLos or lines.confirmedGround~=ground or flat(lines.confirmedLos-los).Magnitude>=.05 then
-            if flat(root.Position-los):Dot(direction)>.5 then return missing('GOAL_DIRECTION_QB_SIDE_CONFLICT') end
+        if not lines.confirmedLos or lines.confirmedGround~=ground or lines.confirmedTeam~=me.Team
+            or lines.confirmedEpoch~=possession.epoch or flat(lines.confirmedLos-los).Magnitude>=.05 then
+            if flat(root.Position-los):Dot(direction)>controller.field.QBLimit(root,direction) then return missing('GOAL_DIRECTION_QB_SIDE_CONFLICT') end
         end
     else
         if #valid.YELLOW~=1 then return missing('LOS_YELLOW_MISSING_OR_AMBIGUOUS') end
@@ -1170,6 +1197,7 @@ local function readLines(now)
     end
     if not same or not sameMeaning then lines.since=now end
     lines.confirmedLos,lines.confirmedForward,lines.confirmedTargetZ,lines.confirmedGround=los,forward,targetZ,ground
+    lines.confirmedTeam,lines.confirmedEpoch=me.Team,possession.epoch
     lines.los,lines.forward,lines.at=los,forward,now
     lines.readySource=goalToGo and 'GOAL_VALIDATED_BLUE_LINE' or namedReady and 'VALIDATED_NAMED_ROOT_PAIR' or 'COMPLETE_BACKGROUND_SCAN'
     lines.status=now-lines.since>=.25 and 'OBSERVED_LINES_STABLE' or 'LOS_SETTLING'
@@ -1190,6 +1218,7 @@ function controller.passPlan.assess(shot,receiver)
     local verified=lines.los~=nil and lines.forward~=nil and lines.status=='OBSERVED_LINES_STABLE'
     shot.catchDepthYards=verified and downfield(shot.arrival)/3 or nil
     shot.deepTarget=shot.catchDepthYards~=nil and shot.catchDepthYards>=p.deepYards
+    shot.endzoneTarget=verified and controller.field.InEndzone(shot.arrival) or false
     local current=verified and downfield(receiver.p)/3 or nil
     shot.deepComeback=verified and receiver.depthEpoch==possession.epoch and receiver.depthGeneration==lines.generation
         and finite(receiver.depthPeakYards) and receiver.depthPeakYards>=p.deepYards
@@ -1200,7 +1229,7 @@ function controller.passPlan.assess(shot,receiver)
     local ping=shot.networkPing
     shot.wideOpen=finite(ping) and ping>=0 and (shot.wideMargin or shot.margin)>=CFG.ThrowMargin*2 and (shot.wideLane or shot.lane)>=CFG.ThrowLane*2
         and not shot.safetyOverTop and shot.defenderETA>shot.time+ping or false
-    shot.planAllowed=p.mode=='NORMAL' or verified and (p.mode=='DEEP' and (shot.deepTarget or shot.deepComeback)
+    shot.planAllowed=p.mode=='NORMAL' or verified and (p.mode=='DEEP' and (shot.deepTarget or shot.deepComeback or shot.endzoneTarget)
         or p.mode=='SHORT' and (not shot.deepTarget or shot.wideOpen)) or false
     shot.planReason=shot.planAllowed and 'PASS_PLAN_ALLOWED' or (p.mode=='DEEP' and 'DEEP_OR_COMEBACK_ONLY' or 'SHORT_DEEP_NOT_WIDE_OPEN')
     shot.jumpPreferred=p.preferJump and shot.mode=='Jump' and shot.wideOpen or false
@@ -1211,6 +1240,18 @@ local function onField(point)
     if not lines.ground then return false end
     local p=lines.ground.CFrame:PointToObjectSpace(point)
     return math.abs(p.X)<=80 and math.abs(p.Z)<=180
+end
+function controller.field.InEndzone(point)
+    if not lines.ground or not lines.forward or lines.status~='OBSERVED_LINES_STABLE' then return false end
+    -- Reuse the existing validated field frame, +/-150 goal stripes and +/-180
+    -- end bounds already used by LOS/AntiOOB; never infer direction from camera.
+    local cf=lines.ground.CFrame;local p=cf:PointToObjectSpace(point)
+    local direction=lines.forward:Dot(cf.LookVector)<0 and 1 or -1
+    return math.abs(p.X)<=80 and p.Z*direction>=150 and p.Z*direction<=180
+end
+function controller.field.BeyondMinimum(point)
+    local depth=downfield(point)
+    return depth>=0 and (lines.goalToGo or controller.field.InEndzone(point) or depth>=CFG.MinDownfieldYards*3)
 end
 function touch.fullAllowed(shot)
     if not touch.enabled then return true end
@@ -1294,6 +1335,8 @@ function controller.GetReport()
         'LOS_SCAN_PENDING_ROOTS|'..math.max(0,lines.scan.tail-lines.scan.i+1),
         'LOS_DISCOVERY_PROFILE|V20_VALIDATED_NAMED_FIELD_AND_BACKGROUND_SCAN',
         'GOAL_TO_GO_LOS_BYPASSED|false','GOAL_TO_GO|'..tostring(lines.goalToGo),'GOAL_TO_GO_POLICY|VALIDATED_BLUE_LOS; NO_YELLOW_REQUIRED; QB_SIDE_DIRECTION_CHECK; RECEIVERS_BEYOND_LOS',
+        'ENDZONE_RECEIVER_POLICY|ATTACKING_ENDZONE_EXEMPT_FROM_SIX_YARDS_AND_DEEP_ONLY_DEPTH; MOVEMENT_TEAM_AND_COVERAGE_STILL_REQUIRED',
+        'QB_LOS_CENTER_DEPTH|'..tostring(controller.field.lastDepth),'QB_LOS_ALLOWED_OVERLAP|'..tostring(controller.field.lastLimit),
         'LOS_READY_SOURCE|'..lines.readySource,'LOS_FAST_PATH_STATUS|'..lines.fastStatus,
         'GROUND_REASON|'..groundReason(),'GROUND_SOURCE|'..(lines.groundSource or 'NONE'),
         'GROUND_CACHED|'..describeGround(lines.ground),
@@ -1307,9 +1350,12 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.12','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.13','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
+        'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
+        'ADAPTIVE_ANGLE_ESTIMATES|'..controller.angle.requests,
+        'ANGLE_POLICY|COVERAGE_DERIVED_NATIVE_DIME_JUMP; FOUR_BOUNDED_ESTIMATES; NO_EXTRA_NATIVE_SOLVES; FIT_BULLET_LOW_BRANCH_UNCHANGED; NATIVE_OUTPUT_AND_SAFETY_RECHECK_REQUIRED',
         'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
@@ -1411,6 +1457,7 @@ function controller.Stop(reason)
     if cleanupComplete then return true end
     if not stopped then stopReason=clean(reason or 'USER_END') end
     stopped=true; controller.IsStopped=true; fieldWaitSince=nil
+    controller.angle.scene=nil;controller.angle.cache={};controller.angle.origins={}
     if controller.comeback.cancel then controller.comeback.cancel() end
     releaseChoice()
     if disposeAnimation then disposeAnimation() end
@@ -1509,6 +1556,13 @@ function controller.SetMagTrial(value)
     if controller.mag.RefreshModes then controller.mag.RefreshModes() end
     if controller.mag.button then controller.mag.button.Text=value and 'MAG TEST' or 'MAG OFF' end
     log('MAG_TRIAL',value and 'OPT_IN_UNCALIBRATED_RAISED_DIME' or 'OFF')
+    return true
+end
+function controller.SetAdaptiveAngle(value)
+    if stopped or type(value)~='boolean' then return false end
+    releaseChoice();controller.angle.enabled=value;env.PELICAN_FF3_ADAPTIVE_ANGLE=value
+    controller.angle.status=value and 'WAIT_SCENE' or 'OFF'
+    if controller.angle.button then controller.angle.button.Text=value and 'ARC AUTO' or 'ARC OLD' end
     return true
 end
 if context.RegisterCleanup then context.RegisterCleanup(function() return controller.Stop('LOADER_CLEANUP') end) end
@@ -1964,7 +2018,7 @@ local function sample(player,now)
     s.routeTurn=math.max(s.routeTurn,clamp(flat(velocity-s.v).Magnitude/30,0,1))
     s.p,s.v,s.at=root.Position,velocity,now
     while #s.path>1 and now-s.path[1].at>CFG.MotionWindow do table.remove(s.path,1) end
-    s.hum,s.head,s.name=hum,head,player.Name
+    s.hum,s.head,s.root,s.name=hum,head,root,player.Name
     controller.passPlan.observe(s,player)
     return s
 end
@@ -1976,13 +2030,13 @@ local function receiverReady(player,s,now,point)
     local model,root=body(player)
     if not model or model~=s.model then return false,'MOVEMENT_UNVERIFIED' end
     if not onField(root.Position) then return false,'OFF_FIELD' end
-    if downfield(root.Position)<(lines.goalToGo and 0 or CFG.MinDownfieldYards*3) then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
+    if not controller.field.BeyondMinimum(root.Position) then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
     if not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
     if not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
     local travel=0
     for i=2,#s.path do travel=travel+flat(s.path[i].p-s.path[i-1].p).Magnitude end
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
-    if point and (downfield(point)<(lines.goalToGo and 0 or CFG.MinDownfieldYards*3) or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
+    if point and (not controller.field.BeyondMinimum(point) or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
     return controller.receiverFilter.allowed(player)
 end
 -- Optional team-only route call. Reuses the decision snapshot; no native solves,
@@ -2077,7 +2131,7 @@ function controller.comeback.valid(data,player,defender,instruction)
     if os.clock()-data.at>.3 or data.epoch~=possession.epoch or data.generation~=lines.generation
         or data.team~=me.Team or lines.status~='OBSERVED_LINES_STABLE' then return false end
     local ball=ready()
-    if not ball or ball.nativeThrow or ball.tool~=data.tool or ball.model~=data.model or downfield(ball.root.Position)>.5 then return false end
+    if not ball or ball.nativeThrow or ball.tool~=data.tool or ball.model~=data.model or controller.field.QBPast(ball.root) then return false end
     local s=sample(player,os.clock())
     if not receiverReady(player,s,os.clock()) or s.model~=data.models[player] then return false end
     local db=Players:GetPlayerFromCharacter(defender)
@@ -2436,6 +2490,70 @@ local function classify(shot,s,defenders)
     elseif flat(nearest-shot.arrival):Dot(lines.forward)>0 then shot.window='UNDERNEATH_WINDOW'
     else shot.window='LATERAL_WINDOW' end
 end
+function controller.angle.Request(player,mode,lead)
+    local a=controller.angle;local scene=a.scene
+    if stopped then return nil,'STOPPED' end
+    if not a.enabled then return nil,'OFF' end
+    if not scene or os.clock()-scene.at>.3 or scene.epoch~=possession.epoch or scene.generation~=lines.generation or scene.team~=me.Team then return nil,'ANGLE_SCENE_UNVERIFIED' end
+    local _,_,head=body(me);local _,root,targetHead=body(player)
+    if not head or not root or not targetHead or not vector(root.AssemblyLinearVelocity) then return nil,'ANGLE_POSE_UNVERIFIED' end
+    local speed=profile and profile.q.Power;local ping=me:GetNetworkPing()
+    if not finite(speed) or speed<=0 or speed>95 or not finite(ping) or ping<0 then return nil,'ANGLE_POWER_OR_PING_UNVERIFIED' end
+    local cache=a.cache[player];local saved=cache and cache[mode]
+    if saved and saved.frame==motionFrame and saved.epoch==scene.epoch and saved.generation==scene.generation
+        and saved.x==lead.X and saved.y==lead.Y and saved.speed==speed and saved.ping==ping
+        and saved.head==head.Position and saved.target==root.Position and saved.velocity==root.AssemblyLinearVelocity then return saved.control end
+    local origin=head.Position;local known=a.origins[player]
+    if known and known.epoch==scene.epoch and known.profile==profile and os.clock()-known.at<=CFG.CacheAge then origin=known.origin+(head.Position-known.head) end
+    local velocity=flat(root.AssemblyLinearVelocity);local direction=velocity.Magnitude>0 and velocity.Unit or V()
+    local time=math.max(.05,flat(targetHead.Position-origin).Magnitude/speed);local angle,blockers,needed=0,0,0
+    -- Four bounded fixed-point estimates, never extra native solves. The native
+    -- result and full pursuit/lane check remain the only release trajectory.
+    for _=1,4 do
+        local target=targetHead.Position+velocity*(time+ping)+direction*lead.X+V(0,lead.Y,0)
+        local oob=profile.q.AntiOOB
+        if type(oob)=='table' and oob.Enabled and finite(oob.XTolerance) and finite(oob.ZTolerance) then
+            target=V(clamp(target.X,-75+oob.XTolerance,75+oob.XTolerance),target.Y,clamp(target.Z,-175+oob.ZTolerance,175+oob.ZTolerance))
+        end
+        local delta=flat(target-origin);local range=delta.Magnitude;local height=target.Y-origin.Y
+        if range<.01 then return nil,'ANGLE_RANGE_UNVERIFIED' end
+        local disc=speed^4-CFG.Gravity*(CFG.Gravity*range*range+2*height*speed*speed)
+        if disc<0 then return nil,'ANGLE_ESTIMATE_UNREACHABLE' end
+        local low=math.atan((speed*speed-math.sqrt(disc))/(CFG.Gravity*range))
+        local flight=math.max(range/(speed*math.cos(low)),touch.enabled and touch.comfort or .05)
+        local route=delta/range;local probeFlight=flight;blockers=0
+        for _,d in ipairs(scene.defenders) do
+            local p,v=d.p,d.v
+            if d.root and d.root.Parent and vector(d.root.Position) and vector(d.root.AssemblyLinearVelocity) then p,v=d.root.Position,d.root.AssemblyLinearVelocity end
+            local f=flat(p-origin):Dot(route)/range
+            if f>0 and f<1 then
+                local predicted=p+flat(v)*(probeFlight*f)
+                f=flat(predicted-origin):Dot(route)/range
+                if f>0 and f<1 and flat(predicted-origin-delta*f).Magnitude<=4.5+(d.turn or 0)*3 then
+                    -- Same inherited, uncalibrated jump reach as the defender
+                    -- lane model. Added clearance is an application risk policy.
+                    local reach=12.2
+                    if d.hum and finite(d.hum.JumpPower) then reach=clamp(d.hum.JumpPower^2/(2*workspace.Gravity)+5,12.2,24) end
+                    local base=origin.Y+height*f
+                    local clearance=p.Y+reach+CFG.ThrowLane-base
+                    if clearance>0 then
+                        flight=math.max(flight,math.sqrt(2*clearance/(CFG.Gravity*f*(1-f))))
+                        blockers=blockers+1
+                    end
+                end
+            end
+        end
+        time=flight;needed=math.sqrt((range/time)^2+(height/time+CFG.Gravity*time/2)^2)
+        angle=math.deg(math.atan((height+CFG.Gravity*time*time/2)/range))
+        if not finite(angle) or angle<=0 or angle>=89 or needed>speed+1 then return nil,'ANGLE_ESTIMATE_UNREACHABLE' end
+    end
+    local control={requested=angle,flight=time,powerCap=speed,blockers=blockers,reason=blockers>0 and 'LOFT_OVER_PROJECTED_LANE_BLOCKER' or 'LOW_CLEAR_LANE'}
+    a.requests=a.requests+1;a.status=control.reason
+    cache=cache or {};a.cache[player]=cache
+    cache[mode]={frame=motionFrame,epoch=scene.epoch,generation=scene.generation,x=lead.X,y=lead.Y,speed=speed,ping=ping,
+        head=head.Position,target=root.Position,velocity=root.AssemblyLinearVelocity,control=control}
+    return control
+end
 local function solve(player,mode)
     local soft=mode=='SoftBullet' or mode=='QuickBullet'
     local jump=mode=='JumpBullet'
@@ -2458,6 +2576,12 @@ local function solve(player,mode)
     -- The source's selected manual value is power in Power mode and degrees
     -- in Angle mode. Do not keep passing the old Angle after selecting Power.
     local nativeInput=(soft or jump) and requestedPower or profile and (profile.q.ManualType=='Power' and profile.q.Power or profile.q.Angle)
+    local angleControl
+    if controller.angle.enabled and not soft and not jump and (nativeMode=='Dime' or nativeMode=='Jump') then
+        local reason;angleControl,reason=controller.angle.Request(player,mode,appliedLead or profile.leads[nativeMode])
+        if not angleControl then controller.angle.status=reason;return nil,reason end
+        nativeInput=angleControl.requested
+    end
     if soft and touch.method=='ANGLE' then
         nativeInput=touch.angle(player,requestedPower)
         if not nativeInput then touch.record(player,mode,requestedPower,nil,'ANGLE_ESTIMATE_UNREACHABLE');return nil,'CLOSE_BULLET_ANGLE_ESTIMATE_UNREACHABLE' end
@@ -2497,6 +2621,12 @@ local function solve(player,mode)
     if mag then
         modeTransaction.fields[#modeTransaction.fields+1]={object=profile.leads,key='Dime',before=rawget(profile.leads,'Dime'),written=appliedLead}
         rawset(profile.leads,'Dime',appliedLead)
+    end
+    if angleControl then
+        for _,field in ipairs({{q,'ManualType','Angle'},{q,'Angle',nativeInput}}) do
+            modeTransaction.fields[#modeTransaction.fields+1]={object=field[1],key=field[2],before=rawget(field[1],field[2]),written=field[3]}
+            rawset(field[1],field[2],field[3])
+        end
     end
     rawset(q.AutoThrowType,'Enabled',false); rawset(q,'SelectedType',nativeMode)
     nativeCalls=nativeCalls+1; frameCalls=frameCalls+1; maxFrameCalls=math.max(maxFrameCalls,frameCalls); modeChecks[mode]=(modeChecks[mode] or 0)+1
@@ -2548,6 +2678,13 @@ local function solve(player,mode)
         return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH'
     end
     if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
+    local actualAngle=math.deg(math.atan(velocity.Y/math.max(.0001,flat(velocity).Magnitude)))
+    if angleControl then
+        if math.abs(actualAngle-angleControl.requested)>.25 or power>angleControl.powerCap+1 then
+            controller.angle.status='NATIVE_ADAPTIVE_ANGLE_NOT_HONORED';return nil,'NATIVE_ADAPTIVE_ANGLE_NOT_HONORED'
+        end
+        controller.angle.origins[player]={origin=origin,head=launchHead,at=os.clock(),epoch=possession.epoch,profile=profile}
+    end
     if mag then
         if not controller.mag.Allowed(player) then return controller.mag.Reject('MAG_TRUST_REVOKED') end
         if math.abs(arrival.Y-aimpoint.Y-appliedLead.Y)>endpointTolerance then return controller.mag.Reject('MAG_VERTICAL_LEAD_NOT_HONORED') end
@@ -2582,9 +2719,10 @@ local function solve(player,mode)
         variant=mode,softBullet=soft,jumpBullet=jump,nativeMode=nativeMode,appliedLead=appliedLead,
         magTrial=mag,magPlayer=mag and player or nil,magTrustSource=mag and controller.mag.Source(player,false) or nil,
         magExtraY=mag and controller.mag.extraY or nil,magBaseLead=mag and profile.leads.Dime or nil,
+        angleControl=angleControl,actualAngle=actualAngle,
         powerMethod=soft and touch.method or 'NATIVE',requestedPower=requestedPower,
         effectiveYLead=arrival.Y-aimpoint.Y,verticalLeadControlActive=math.abs((arrival.Y-aimpoint.Y)-appliedLead.Y)<=endpointTolerance,
-        nativeInput=nativeInput,nativeInputKind=((soft or jump) and (not soft or touch.method=='POWER') or not soft and not jump and q.ManualType=='Power') and 'POWER' or 'ANGLE_DEGREES',
+        nativeInput=nativeInput,nativeInputKind=angleControl and 'ANGLE_DEGREES' or ((soft or jump) and (not soft or touch.method=='POWER') or not soft and not jump and q.ManualType=='Power') and 'POWER' or 'ANGLE_DEGREES',
         launchHead=launchHead,qbModel=qbModel,targetPosition=targetPosition,targetVelocity=targetVelocity,
         passYards=flat(arrival-origin).Magnitude/3,at=os.clock()}
 end
@@ -2609,6 +2747,7 @@ function controller.fit.alternatives(player,s,defenders,now,fresh)
     return result
 end
 local function evaluate(receivers,indices,defenders,now)
+    controller.angle.scene={at=now,epoch=possession.epoch,generation=lines.generation,team=me.Team,defenders=defenders}
     local groups={}
     for _,index in ipairs(indices) do
         local r=receivers[index]
@@ -2743,8 +2882,8 @@ forecastGuide=function(data,now)
         if os.clock()-started>.001 then break end
         local futureQB=ball.root.Position+run*lead
         local arrival=shot.arrival+velocity*lead
-        if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=.5)
-            and (downfield(arrival)>=(lines.goalToGo and 0 or CFG.MinDownfieldYards*3)) then
+        if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=controller.field.QBLimit(ball.root))
+            and (controller.field.BeyondMinimum(arrival)) then
             local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,networkPing=shot.networkPing,
                 velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
             -- This is an estimated continuation, not an extra native solve.
@@ -3383,7 +3522,7 @@ local function releaseNow(ball,selected,defenders,now)
     if not current or current.tool~=ball.tool then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
     if not readLines(now) then releaseChoice(); setGate(lines.status); return end
-    if downfield(current.root.Position)>.5 then setGate('QB_PAST_LOS'); return end
+    if controller.field.QBPast(current.root) then setGate('QB_PAST_LOS'); return end
     local eligible,rejection=receiverReady(selected.player,selected.sample,now)
     if not eligible then releaseChoice(); setGate(rejection); return end
     local activeSequence=sequence
@@ -3433,7 +3572,7 @@ local function releaseNow(ball,selected,defenders,now)
     current,reason=ready()
     if not current or current.tool~=ball.tool or current.remote~=ball.remote then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
-    if downfield(current.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
+    if controller.field.QBPast(current.root) then releaseChoice(); setGate('QB_PAST_LOS'); return end
     if current.model~=shot.qbModel or (current.head.Position-shot.launchHead).Magnitude>.5 then
         setGate('QB_LAUNCH_POSE_CHANGED_REPLAN');return
     end
@@ -3461,6 +3600,7 @@ local function releaseNow(ball,selected,defenders,now)
         ..' powerMethod='..shot.powerMethod..' requestedPower='..tostring(shot.requestedPower)..' powerAllowed='..tostring(shot.powerAllowed)
         ..' manualInput='..tostring(shot.nativeInput)..' inputKind='..shot.nativeInputKind
         ..' magTrial='..tostring(shot.magTrial)..' magExtraY='..tostring(shot.magExtraY)..' magTrustSource='..tostring(shot.magTrustSource)
+        ..' actualAngle='..tostring(shot.actualAngle)..' angleReason='..tostring(shot.angleControl and shot.angleControl.reason)
     lastDecision.candidates={}
     for _,candidate in ipairs(candidateEvidence) do lastDecision.candidates[#lastDecision.candidates+1]=candidate end
     for i,d in ipairs(defenders) do lastDecision.actors[#lastDecision.actors+1]=actor('DB'..i..':'..clean(d.name),d) end
@@ -3611,7 +3751,7 @@ local function tick(now)
         if possession.lineGeneration~=lines.generation then
             possession.lineGeneration=lines.generation; possession.since=now; releaseChoice()
         end
-        if downfield(ball.root.Position)>.5 then releaseChoice(); setGate('QB_PAST_LOS'); return end
+        if controller.field.QBPast(ball.root) then releaseChoice(); setGate('QB_PAST_LOS'); return end
         local roster=Players:GetPlayers()
         if #roster>CFG.MaxRoster then releaseChoice(); setGate('ROSTER_LIMIT'); return end
         local receivers,defenders,seenRoster={},{},{}
@@ -3742,6 +3882,8 @@ local built,buildError=pcall(function()
     controller.passPlan.button=button(controller.passPlan.mode,-286,54,112);controller.passPlan.button.Name='PassPlan';controller.passPlan.button.Visible=false
     controller.mag.button=button(controller.mag.enabled and 'MAG TEST' or 'MAG OFF',-166,72,137);controller.mag.button.Name='MagTrial';controller.mag.button.Visible=false
     connect(controller.mag.button.Activated,function() controller.SetMagTrial(not controller.mag.enabled) end)
+    controller.angle.button=button(controller.angle.enabled and 'ARC AUTO' or 'ARC OLD',-92,88,137);controller.angle.button.Name='AdaptiveAngle';controller.angle.button.Visible=false
+    connect(controller.angle.button.Activated,function() controller.SetAdaptiveAngle(not controller.angle.enabled) end)
     connect(controller.passPlan.button.Activated,function()
         local mode=controller.passPlan.mode
         controller.SetPassPlan(mode=='NORMAL' and 'DEEP' or mode=='DEEP' and 'SHORT' or 'NORMAL')
@@ -3821,7 +3963,7 @@ local built,buildError=pcall(function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
         controller.comeback.button.Visible=expanded
-        controller.jumpBullet.button.Visible=expanded;controller.mag.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded;controller.receiverFilter.button.Visible=expanded
+        controller.jumpBullet.button.Visible=expanded;controller.mag.button.Visible=expanded;controller.angle.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded;controller.receiverFilter.button.Visible=expanded
         if not expanded then controller.receiverEvidence.panel.Visible=false end
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
