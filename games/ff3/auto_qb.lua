@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.5): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.6): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -211,6 +211,7 @@ controller.history=(function()
         while #data.Records>maxRecords do table.remove(data.Records,1);total('Evicted') end
     end
     local function encode()
+        if controller.receiverEvidence and controller.receiverEvidence.SnapshotActive then controller.receiverEvidence.SnapshotActive() end
         if not codec then return end
         trim()
         while true do
@@ -225,11 +226,21 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.5',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.6',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
         elseif kind=='blocked' then total('Blocked') elseif kind=='run_end' and record.Payload.Error then total('Errors') end
+        return record.Id
+    end
+    function h.Records() return data and data.Records or {} end
+    function h.SessionKey() return sessionId end
+    function h.AttachObservation(id,value)
+        if not started or ended then return false end
+        for _,record in ipairs(data.Records) do if record.Id==id and record.Kind=='throw' then
+            record.Payload.Observation=safe(value,0,{n=0});data.Revision=data.Revision+1;h.dirty=true;return true
+        end end
+        return false
     end
     function h.Actor(name,s)
         if not s then return end
@@ -254,12 +265,16 @@ controller.history=(function()
             if other then comparisons[#comparisons+1]={Mode=mode,Power=other.power,Time=other.time,Arrival=h.Vector(other.arrival),
                 Margin=other.margin,Lane=other.lane,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
         end
-        h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
+        return h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             Receiver=h.Actor(player and player.Name or 'AWAY',s),Comparisons=comparisons,Defenders=actors,DefenderCount=#(defenders or {}),
             Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,
+            LeadSettings=controller.receiverEvidence and controller.receiverEvidence.ReadSettings(),
+            EffectiveYLead=shot.effectiveYLead,VerticalLeadControlActive=shot.verticalLeadControlActive,
+            LeadControls=controller.receiverEvidence and controller.receiverEvidence.Bindings(shot),
+            NativeContext=controller.receiverEvidence and controller.receiverEvidence.NativeContext(),
             Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},ManualInput=shot.nativeInput,
             InputKind=shot.nativeInputKind,Ping=shot.networkPing,DistanceYards=shot.passYards,
             FitReason=shot.fitReason,ComparedMode=shot.fitAlternativeVariant,ComparedTime=shot.fitAlternativeTime,
@@ -304,7 +319,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.5'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.6'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1037,6 +1052,7 @@ function touch.angle(player,power)
     return math.deg(angle) -- native Angle/UI input is degrees (live setting 45)
 end
 local function onLineAdded(o)
+    if controller.receiverEvidence then controller.receiverEvidence.OnAdded(o) end
     if stopped then return end
     if o.Parent==workspace then lines.rootDirty=true end
     if observedLine(o) then lines.parts[o]=true end
@@ -1087,7 +1103,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.5','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.6','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -1127,6 +1143,7 @@ function controller.GetReport()
         'THROW_AWAY|MANUAL_ONLY; SOURCE_MODEL_95_GRAVITY_28; GROUNDING_RULE_UNVERIFIED',
         'RELEASE|SOURCE_NATIVE_SOLVER_OUTPUT; ONE_REQUEST_PER_POSSESSION; NO_AUTOMATIC_RETRY'}
     rows[#rows+1]=controller.history.Report()
+    if controller.receiverEvidence then rows[#rows+1]=controller.receiverEvidence.Report() end
     for _,name in ipairs(observedLineNames) do
         local o=workspace:FindFirstChild(name)
         rows[#rows+1]='LOS_NAMED_LINE|'..name..' class='..(o and o.ClassName or 'MISSING')
@@ -1197,6 +1214,7 @@ function controller.Stop(reason)
     end
     connections=remaining; log('STOP',reason or 'USER_END'); gate='STOPPED'
     if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil;assistance.guideUI=nil;assistance.guideArrow=nil end end
+    if controller.receiverEvidence then controller.receiverEvidence.Stop(stopReason) end
     local historyClean=controller.history.Stop(stopReason,fatalError~='NONE')
     cleanupComplete=historyClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
@@ -2206,6 +2224,7 @@ local function solve(player,mode)
     return {origin=origin,velocity=velocity,power=power,time=time,mode=(soft or jump) and 'Bullet' or mode,arrival=arrival,
         variant=mode,softBullet=soft,jumpBullet=jump,nativeMode=nativeMode,appliedLead=appliedLead,
         powerMethod=soft and touch.method or 'NATIVE',requestedPower=requestedPower,
+        effectiveYLead=arrival.Y-aimpoint.Y,verticalLeadControlActive=math.abs((arrival.Y-aimpoint.Y)-appliedLead.Y)<=endpointTolerance,
         nativeInput=nativeInput,nativeInputKind=((soft or jump) and (not soft or touch.method=='POWER') or not soft and not jump and q.ManualType=='Power') and 'POWER' or 'ANGLE_DEGREES',
         launchHead=launchHead,qbModel=qbModel,targetPosition=targetPosition,targetVelocity=targetVelocity,
         passYards=flat(arrival-origin).Magnitude/3,at=os.clock()}
@@ -2483,6 +2502,497 @@ local function currentDefenders(player,now)
     return samples[player],defenders
 end
 
+-- BEGIN RECEIVER EVIDENCE
+-- Passive observations and empirical comparisons; no catch-window or input-intent claim.
+controller.receiverEvidence=(function()
+    local e={candidateSet=setmetatable({}, {__mode='k'}),status='NO_THROW_OBSERVED',nextAt=0,last={},candidates={},settings={},advice={},rejected={},observations=0,maxSeconds=0}
+    local active
+    local evidenceOptions=ff3Options.ReceiverEvidence
+    if evidenceOptions==nil then evidenceOptions={} elseif evidenceOptions==false then evidenceOptions={Enabled=false} end
+    assert(type(evidenceOptions)=='table','FF3.ReceiverEvidence must be a table or false')
+    assert(evidenceOptions.Enabled==nil or type(evidenceOptions.Enabled)=='boolean','ReceiverEvidence.Enabled must be boolean')
+    e.enabled=evidenceOptions.Enabled~=false
+    if not e.enabled then e.status='CAPTURE_DISABLED' end
+    local function assetId(value)
+        if type(value)=='number' and value%1==0 and value>0 then return 'rbxassetid://'..string.format('%.0f',value) end
+        if type(value)=='string' then
+            local id=value:match('^rbxassetid://(%d+)$') or value:match('^%d+$') or value:match('^https?://www%.roblox%.com/asset/%?id=(%d+)$')
+            if id then return 'rbxassetid://'..id end
+        end
+    end
+    local poseCalibration=evidenceOptions.VerifiedDivePose
+    if poseCalibration~=nil then
+        assert(type(poseCalibration)=='table' and type(poseCalibration.Reference)=='string' and #poseCalibration.Reference>0 and #poseCalibration.Reference<=100,'VerifiedDivePose requires a controlled-evidence reference')
+        assert(finite(poseCalibration.MaxTorsoUpAbs) and poseCalibration.MaxTorsoUpAbs>=0 and poseCalibration.MaxTorsoUpAbs<1
+            and finite(poseCalibration.UprightMinUpAbs) and poseCalibration.UprightMinUpAbs>poseCalibration.MaxTorsoUpAbs and poseCalibration.UprightMinUpAbs<=1
+            and finite(poseCalibration.MinHandForward) and math.abs(poseCalibration.MinHandForward)<20,'Invalid verified pose bounds')
+    end
+    local mappingVerified=poseCalibration~=nil
+    local function vec(v) return v and {v.X,v.Y,v.Z} end
+    local function round(n) return math.floor(n*1000+.5)/1000 end
+    local function pose(player)
+        local model,root,head,hum=body(player)
+        if not model or not vector(root.AssemblyLinearVelocity) then return end
+        local stateOK,state=pcall(function() return hum:GetState() end)
+        local name=stateOK and tostring(state):match('([^%.]+)$') or 'UNKNOWN'
+        local floor=hum.FloorMaterial
+        local grounded=name=='Running' or name=='RunningNoPhysics' or name=='Landed'
+        if name~='Jumping' and name~='Freefall' and not grounded and floor and Enum.Material then grounded=floor~=Enum.Material.Air end
+        return {model=model,root=root,head=head,hum=hum,p=root.Position,v=root.AssemblyLinearVelocity,
+            grounded=grounded,state=name,up=root.CFrame and root.CFrame.UpVector and root.CFrame.UpVector.Y}
+    end
+    function e.ReadSettings()
+        local out={}
+        if profile and profile.leads and aliveConnection(profile.preview) and aliveConnection(profile.release) then
+            for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
+                local lead=profile.leads[mode]
+                if lead and finite(lead.X) and finite(lead.Y) then out[mode]={X=lead.X,Y=lead.Y} end
+            end
+        end
+        return out
+    end
+    function e.NativeContext()
+        local q=profile and profile.q;if not q then return {} end
+        local parts={tostring(q.ManualType),tostring(q.Angle),tostring(q.Power),tostring(q.PreferHighArc),tostring(q.AutoCorrect),tostring(workspace.Gravity)}
+        local function add(v) parts[#parts+1]=(type(v)=='number' or type(v)=='boolean' or type(v)=='string') and tostring(v) or 'UNAVAILABLE' end
+        for _,setting in ipairs({'SmartPass','AntiOOB'}) do
+            local value=q[setting]
+            if type(value)=='table' then for _,field in ipairs({'Enabled','FitOnly','MaxRange','XTolerance','ZTolerance'}) do add(value[field]) end else add(value) end
+        end
+        for i,value in ipairs(parts) do parts[i]=tostring(value) end
+        local signature=table.concat(parts,':')
+        return {Signature=signature,Complete=#signature<=100,Source='QUALIFIED_SHARED_NATIVE_SETTINGS'}
+    end
+    function e.Bindings(shot)
+        local x=shot.mode;local y=shot.mode
+        if shot.softBullet then x='Bullet';y='Bullet' end
+        if shot.jumpBullet then x='Bullet';y='Fit' end
+        return {X=x..'.X',Y=y..'.Y'}
+    end
+    local function owner(part)
+        local function ancestor(o)
+            for _=1,5 do
+                if not o then return end
+                if o:IsA('Model') then
+                    local p=Players:GetPlayerFromCharacter(o)
+                    if p then return p end
+                end
+                o=o.Parent
+            end
+        end
+        local found=ancestor(part)
+        if found then return found end
+        local ok,parts=pcall(function() return part:GetConnectedParts(false) end)
+        if ok and type(parts)=='table' then
+            if #parts>16 then return nil,'ASSEMBLY_CAP' end
+            for _,p in ipairs(parts) do
+                local pOwner=ancestor(p)
+                if pOwner then if found and found~=pOwner then return nil,'AMBIGUOUS_OWNER' end;found=pOwner end
+            end
+        end
+        return found
+    end
+    local function ballLike(part)
+        if not instance(part,'BasePart') then return false end
+        local at=part
+        for _=1,4 do if not at then break end;if at.Name=='Football' then return true end;at=at.Parent end
+        return false
+    end
+    function e.OnAdded(part)
+        if not e.enabled or e.disabled or not active or os.clock()-active.at>1 or #e.candidates>=16 then return end
+        if ballLike(part) and part~=active.handle and part:IsDescendantOf(workspace) then
+            local root=part.AssemblyRootPart
+            if instance(root,'BasePart') then part=root end
+            if not e.candidateSet[part] then e.candidateSet[part]=true;e.candidates[#e.candidates+1]=part end
+        end
+    end
+    -- A stiff airborne torso with hands extended is pose evidence, independent of animation names.
+    local function observePose(f,p)
+        local model=p.model
+        local torso=model:FindFirstChild('UpperTorso') or model:FindFirstChild('Torso')
+        local function hand(side)
+            local part=model:FindFirstChild(side..'Hand')
+            if part and vector(part.Position) then return part.Position,'HAND_PART' end
+            part=model:FindFirstChild(side..' Arm')
+            if part and part.CFrame and vector(part.Position) then
+                return part.Position-part.CFrame.UpVector*(part.Size.Y*.5),'R6_ARM_ENDPOINT_ESTIMATE'
+            end
+        end
+        local left,leftSource=hand('Left');local right,rightSource=hand('Right')
+        local travel=flat(p.v);if travel.Magnitude<1 then travel=f.route end
+        local torsoUp=torso and torso.CFrame and torso.CFrame.UpVector.Y
+        local forward=travel.Magnitude>0 and travel.Unit or nil
+        local leftForward=left and torso and forward and (left-torso.Position):Dot(forward)
+        local rightForward=right and torso and forward and (right-torso.Position):Dot(forward)
+        local rigid=p.hum.PlatformStand==true or p.state=='Physics' or p.state=='Ragdoll' or p.state=='FallingDown'
+        local metrics={TorsoUpY=torsoUp,RootUpY=p.up,HeadHeightFromRoot=p.head.Position.Y-p.p.Y,
+            LeftHandForward=leftForward,RightHandForward=rightForward,LeftSource=leftSource,RightSource=rightSource,
+            PlatformStand=p.hum.PlatformStand==true,RigidPhysicsState=rigid,AirborneState=not p.grounded}
+        local known=finite(torsoUp) and finite(leftForward) and finite(rightForward)
+        local maxUp=poseCalibration and poseCalibration.MaxTorsoUpAbs or .55
+        local minHands=poseCalibration and poseCalibration.MinHandForward or 0
+        local upright=poseCalibration and poseCalibration.UprightMinUpAbs or .8
+        local diveLike=known and (not p.grounded or rigid) and math.abs(torsoUp)<=maxUp and leftForward>=minHands and rightForward>=minHands
+        local classified=known and (diveLike or math.abs(torsoUp)>=upright)
+        if not classified then f.poseUnknown=true end
+        if diveLike and mappingVerified then f.diveVerified=true end
+        metrics.Classification=diveLike and 'DIVE_LIKE_POSE' or classified and 'UPRIGHT_POSE' or 'UNCLASSIFIED_POSE'
+        f.lastPose=metrics
+        if diveLike and not f.firstDivePose then f.firstDivePose={At=os.clock()-f.at,Metrics=metrics} end
+        return diveLike,metrics
+    end
+    -- Optional animation inventory is ancillary. No name/ID defines dive state.
+    local function animations(f,p)
+        local ok,tracks=pcall(function() return p.hum:GetPlayingAnimationTracks() end)
+        if not ok or type(tracks)~='table' then return end
+        for i=1,math.min(#tracks,8) do
+            local track=tracks[i];local asset=track.Animation;local id=asset and assetId(asset.AnimationId)
+            if id and not f.animationAssets[id] then
+                local n=0;for _ in pairs(f.animationAssets) do n=n+1 end
+                if n<8 then f.animationAssets[id]={At=os.clock()-f.at,AncillaryOnly=true} end
+            end
+        end
+    end
+    local function fitPath(rows)
+        if #rows<6 then return nil,'TOO_FEW_FREE_FLIGHT_SAMPLES' end
+        local first,last=rows[1],rows[#rows]
+        local span=last[1]-first[1]
+        if span<.25 then return nil,'FLIGHT_SPAN_TOO_SHORT' end
+        local matrix={{0,0,0},{0,0,0},{0,0,0}}
+        local rhs={{0,0,0},{0,0,0},{0,0,0}}
+        for _,row in ipairs(rows) do
+            local t=row[1]-first[1];local basis={1,t,t*t}
+            for i=1,3 do
+                for j=1,3 do matrix[i][j]=matrix[i][j]+basis[i]*basis[j] end
+                for axis=1,3 do rhs[i][axis]=rhs[i][axis]+basis[i]*row[axis+1] end
+            end
+        end
+        for col=1,3 do
+            local pivot=col;for row=col+1,3 do if math.abs(matrix[row][col])>math.abs(matrix[pivot][col]) then pivot=row end end
+            matrix[col],matrix[pivot]=matrix[pivot],matrix[col];rhs[col],rhs[pivot]=rhs[pivot],rhs[col]
+            local scale=matrix[col][col];if math.abs(scale)<1e-9 then return nil,'FIT_SINGULAR' end
+            for j=col,3 do matrix[col][j]=matrix[col][j]/scale end
+            for axis=1,3 do rhs[col][axis]=rhs[col][axis]/scale end
+            for row=1,3 do if row~=col then
+                local a=matrix[row][col]
+                for j=col,3 do matrix[row][j]=matrix[row][j]-a*matrix[col][j] end
+                for axis=1,3 do rhs[row][axis]=rhs[row][axis]-a*rhs[col][axis] end
+            end end
+        end
+        local error=0
+        for _,row in ipairs(rows) do
+            local t=row[1]-first[1]
+            for axis=1,3 do local d=row[axis+1]-(rhs[1][axis]+rhs[2][axis]*t+rhs[3][axis]*t*t);error=error+d*d end
+        end
+        return {Samples=#rows,Span=span,RMS=math.sqrt(error/#rows),Gravity=-2*rhs[3][2],
+            Velocity={rhs[2][1],rhs[2][2],rhs[2][3]},HorizontalAcceleration=2*math.sqrt(rhs[3][1]^2+rhs[3][3]^2)}
+    end
+    local function wilson(success,total)
+        local z=1.96;local p=success/total;local q=1+z*z/total
+        local middle=(p+z*z/(2*total))/q
+        local radius=z*math.sqrt(p*(1-p)/total+z*z/(4*total*total))/q
+        return middle-radius,middle+radius
+    end
+    function e.Evaluate(records,current,session)
+        local groups={};local rejected={};local badSettings={}
+        local function settingKey(session,x,y,context) return table.concat({session or '',x,y,context or ''},':') end
+        for _,record in ipairs(records or {}) do
+            local p=type(record)=='table' and record.Kind=='throw' and record.Payload
+            local o=type(p)=='table' and p.Observation
+            if type(p)=='table' and p.Source=='AUTO_QB' and p.Mode=='Fit' and type(o)=='table'
+                and o.Association=='EXACT_HELD_PART' and o.ObservedOutcome=='OPPONENT_POSSESSION_OBSERVED'
+                and type(p.Lead)=='table' and finite(p.Lead[1]) and finite(p.Lead[2]) and type(p.NativeContext)=='table' then
+                badSettings[settingKey(record.Session,p.Lead[1],p.Lead[2],p.NativeContext.Signature)]=true
+            end
+        end
+        local function reject(reason) rejected[reason]=(rejected[reason] or 0)+1 end
+        for _,record in ipairs(records or {}) do
+            local p=type(record)=='table' and record.Kind=='throw' and type(record.Payload)=='table' and record.Payload
+            if p and p.Source=='AUTO_QB' and p.Mode=='Fit' and (not session or record.Session==session) then
+                local o=p.Observation
+                if type(o)~='table' then reject('NO_OBSERVATION')
+                elseif o.Association~='EXACT_HELD_PART' then reject('BALL_IDENTITY_UNVERIFIED')
+                elseif type(o.Quality)~='table' or o.Quality.PoseClassificationCalibrated~=true then reject('DIVE_POSE_UNCALIBRATED')
+                elseif o.Quality.PhysicalPossessionWitness~=true then reject('POSSESSION_WELD_NOT_OBSERVED')
+                elseif o.Quality.CleanComparison~=true then reject(o.Quality and o.Quality.Reason or 'QUALITY_UNKNOWN')
+                elseif o.ObservedOutcome~='RECEIVER_POSSESSION_OBSERVED' then reject('OUTCOME_NOT_INTENDED_POSSESSION')
+                elseif type(record.Session)~='string' or type(o.ReceiverToken)~='string' then reject('RECEIVER_CONTEXT_MISSING')
+                elseif type(p.Lead)~='table' or not finite(p.Lead[1]) or not finite(p.Lead[2])
+                    or type(p.LeadSettings)~='table' or type(p.LeadSettings.Fit)~='table'
+                    or type(p.NativeContext)~='table' or type(p.NativeContext.Signature)~='string' or p.NativeContext.Complete==false
+                    or not finite(p.Power) or not finite(p.Time) or not finite(p.DistanceYards)
+                    or type(o.Movement)~='table' then reject('SETTINGS_OR_MOVEMENT_CONTEXT_MISSING')
+                else
+                    -- These are matching/QC policies, never FF3 catch acceptance radii.
+                    local matchKey=table.concat({record.Session,o.ReceiverToken,record.Release or '',p.Variant or p.Mode,p.PowerMethod or '',
+                        string.format('%.3f',p.Power),math.floor(p.DistanceYards/10),math.floor(p.Time/.25),tostring(p.Jump),tostring(p.VerticalLeadControlActive),p.NativeContext.Signature},':')
+                    local key=table.concat({matchKey,p.Lead[1],p.Lead[2]},':')
+                    local g=groups[key]
+                    if not g then g={matchKey=matchKey,X=p.Lead[1],Y=p.Lead[2],mode=p.Mode,variant=p.Variant,power=p.Power,distance=p.DistanceYards,
+                        yActive=p.VerticalLeadControlActive,context=p.NativeContext.Signature,session=record.Session,receiver=o.ReceiverToken,release=record.Release,n=0,desired=0,ids={}};groups[key]=g end
+                    g.n=g.n+1
+                    if o.Movement.JumpAtPossession==true and o.Movement.DiveSignalObserved==false and o.Movement.ContinuedRoute==true
+                        and not o.Movement.ExcessHeightSignal then g.desired=g.desired+1 end
+                    g.ids[#g.ids+1]=record.Id
+                end
+            end
+        end
+        local recommendations={}
+        local fit=current and current.Fit
+        if fit then
+            for _,base in pairs(groups) do
+                if base.X==fit.X and base.Y==fit.Y and base.n>=5 then
+                    local _,baseHigh=wilson(base.desired,base.n)
+                    for _,alt in pairs(groups) do
+                        local dx,dy=alt.X-base.X,alt.Y-base.Y
+                        if alt.n>=5 and alt.matchKey==base.matchKey and alt.context==base.context and alt.variant==base.variant and alt.session==base.session and alt.receiver==base.receiver and alt.release==base.release
+                            and alt.power==base.power and alt.distance and base.distance and math.abs(alt.distance-base.distance)<=5
+                            and ((dx==0 and base.yActive==true and alt.yActive==true and math.abs(dy)>0 and math.abs(dy)<=.5) or (dy==0 and math.abs(dx)>0 and math.abs(dx)<=.5)) then
+                            local altLow=wilson(alt.desired,alt.n)
+                            if altLow>baseHigh and badSettings[settingKey(alt.session,alt.X,alt.Y,alt.context)] then reject('ALTERNATIVE_HAS_OPPONENT_POSSESSION')
+                            elseif altLow>baseHigh then
+                                recommendations[#recommendations+1]={Mode='Fit',Axis=dx~=0 and 'X' or 'Y',From=dx~=0 and base.X or base.Y,
+                                    To=dx~=0 and alt.X or alt.Y,CurrentDesired=base.desired,CurrentN=base.n,ComparedDesired=alt.desired,ComparedN=alt.n,
+                                    CurrentIds=base.ids,ComparedIds=alt.ids,IntervalSeparation=altLow-baseHigh,
+                                    Kind='OBSERVED_STYLE_ALTERNATIVE_NOT_CAUSAL_FAULT',RequiredMovement='UNKNOWN',CompletionEffect='UNPROVEN'}
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        local signs={}
+        for _,a in ipairs(recommendations) do local sign=a.To>a.From and 1 or -1;if signs[a.Axis] and signs[a.Axis]~=sign then rejected.CONFLICTING_COMPARABLE_COHORTS=1;return {},rejected end;signs[a.Axis]=sign end
+        table.sort(recommendations,function(a,b) if a.IntervalSeparation~=b.IntervalSeparation then return a.IntervalSeparation>b.IntervalSeparation end;return a.To<b.To end)
+        return recommendations,rejected
+    end
+    function e.RefreshAdvice(force)
+        if not force and os.clock()<(e.nextAdviceAt or 0) then return end;e.nextAdviceAt=os.clock()+1
+        e.settings=e.ReadSettings()
+        e.advice,e.rejected=e.Evaluate(controller.history.Records(),e.settings,controller.history.SessionKey())
+    end
+    local function compact(rows,limit)
+        local out={};local step=math.max(1,math.ceil(#rows/limit))
+        for i=1,#rows,step do out[#out+1]=rows[i] end
+        if out[#out]~=rows[#rows] then out[#out+1]=rows[#rows] end
+        return out
+    end
+    function e.SnapshotActive()
+        local f=active
+        if not f or #f.rows==0 or f.publishedSamples==#f.rows then return end
+        f.publishedSamples=#f.rows
+        controller.history.AttachObservation(f.throwId,{EndReason='IN_PROGRESS',Association=f.association or 'RELEASE_NOT_OBSERVED',
+            ObservedOutcome='UNKNOWN',Fault='UNRESOLVED',RequiredMovement='UNKNOWN',ReceiverToken=f.receiverToken,
+            Movement={JumpObserved=f.jumped,DiveSignalObserved=f.dive,RequiredMovement='UNKNOWN'},
+            Quality={CleanComparison=false,PoseClassificationCalibrated=mappingVerified,Reason='FLIGHT_IN_PROGRESS'},
+            Samples=compact(f.rows,24),PhysicsSamples=compact(f.path,24),
+            SampleColumns={'t','bx','by','bz','rx','ry','rz','rvx','rvy','rvz','headY','grounded','state','diveLikePose','upY','torsoUpY','leftHandForward','rightHandForward','platformStand'},
+            AnimationAssets=f.animationAssets,LastPose=f.lastPose,FirstDivePose=f.firstDivePose,ClosestApproach=f.closest})
+    end
+    local function finish(reason)
+        local f=active;if not f then return end;active=nil
+        local physicsRows=compact(f.path,24)
+        local physics,fitReason=fitPath(physicsRows)
+        local fittedSpeed=physics and math.sqrt(physics.Velocity[1]^2+physics.Velocity[3]^2)
+        local speedError=fittedSpeed and math.abs(fittedSpeed-flat(f.shot.velocity).Magnitude)
+        local speed=f.initialSpeed
+        local movement={JumpObserved=f.jumped,JumpAtPossession=f.jumpAtPossession==true,JumpCount=f.jumpCount,JumpAt=f.jumpAt,DiveAt=f.diveAt,DiveSignalObserved=f.dive,AirborneBeforeThrow=f.airborneBefore,
+            ContinuedRoute=f.maxTurn<=15 and f.minSpeedRatio>=.7 and f.observedTurn<=15 and f.observedRatio>=.7,InitialSpeed=f.initialSpeed,ObservedTurn=f.observedTurn,ObservedSpeedRatio=f.observedRatio,MaxRouteTurnDegrees=f.maxTurn,MinSpeedRatio=f.minSpeedRatio,
+            MaxRise=f.maxRise,MinimumReceiverSpeed=f.minSpeed,ExcessHeightSignal=f.excessHeight,
+            ObservedSequence=f.jumped and (f.dive and 'JUMP_AND_DIVE_LIKE_POSE' or 'JUMP_SIGNAL') or (f.dive and 'DIVE_LIKE_POSE_ONLY' or 'NO_JUMP_OR_DIVE_SIGNAL'),
+            DiveEvidence=mappingVerified and 'CONTROLLED_POSE_CALIBRATION' or 'AIRBORNE_BODY_HAND_POSE_UNCALIBRATED',RequiredMovement='UNKNOWN',CatchInput='UNOBSERVABLE',AnglingTechnique='UNVERIFIED; NOMINAL_HEIGHT_COMPARISON_ONLY'}
+        local clean=f.association=='EXACT_HELD_PART' and physics~=nil and physics.RMS<=.35
+            and math.abs(physics.Gravity-CFG.Gravity)<=3 and physics.HorizontalAcceleration<=3 and speedError<=3
+            and not f.changed and (not f.poseUnknown or f.diveVerified) and f.physicalPossession and not f.airborneBefore and not f.diveBefore and f.jumpCount<=1 and f.maxGap<=.25
+            and f.maxTurn<=15 and f.minSpeedRatio>=.7 and f.observedTurn<=15 and f.observedRatio>=.7 and not f.excessHeight and f.nearestDB>15
+        local qcReason=clean and 'OBSERVATIONAL_QC_PASSED' or f.changed and 'RECEIVER_OR_CONTEXT_CHANGED'
+            or f.association~='EXACT_HELD_PART' and 'BALL_IDENTITY_UNVERIFIED'
+            or f.airborneBefore and 'AIRBORNE_BEFORE_THROW' or f.diveBefore and 'DIVE_ACTIVE_BEFORE_THROW' or f.jumpCount>1 and 'REPEATED_JUMP_SIGNALS' or f.maxGap>.25 and 'SAMPLE_GAP'
+            or (f.maxTurn>15 or f.observedTurn>15) and 'ROUTE_CHANGED' or (f.minSpeedRatio<.7 or f.observedRatio<.7) and 'RECEIVER_SLOWED'
+            or (f.poseUnknown and not f.diveVerified) and 'POSE_CHANNEL_UNCLASSIFIED' or not f.physicalPossession and 'POSSESSION_WELD_NOT_OBSERVED'
+            or f.nearestDB<=15 and 'DEFENDER_NEARBY_QC' or fitReason or 'PHYSICS_OR_EXTRA_HEIGHT_UNRESOLVED'
+        local observation={EndReason=reason,Association=f.association or 'RELEASE_NOT_OBSERVED',ObservedOutcome=f.outcome or 'UNKNOWN',
+            Fault='UNRESOLVED',RequiredMovement='UNKNOWN',Movement=movement,ReceiverToken=f.receiverToken,Quality={CleanComparison=clean==true,PoseClassificationCalibrated=mappingVerified,PhysicalPossessionWitness=f.physicalPossession==true,Reason=qcReason},
+            SampleColumns={'t','bx','by','bz','rx','ry','rz','rvx','rvy','rvz','headY','grounded','state','diveLikePose','upY','torsoUpY','leftHandForward','rightHandForward','platformStand'},Samples=compact(f.rows,24),PhysicsSamples=physicsRows,CriticalFrames={MaxTurn=f.maxTurnAt,MinSpeed=f.minSpeedAt,Apex=f.apexAt,JumpEvents=f.jumpEvents},
+            FreeFlightSamples=#f.path,Physics=physics,SpeedModelDifference=speedError,PhysicsReason=fitReason,ClosestApproach=f.closest,MaxSampleGap=f.maxGap,
+            NearestDefenderToReceiver=f.nearestDB<1e6 and f.nearestDB or nil,AnimationAssets=f.animationAssets,LastPose=f.lastPose,FirstDivePose=f.firstDivePose,PoseCalibrationReference=poseCalibration and poseCalibration.Reference,Attribution='MOVEMENT_AND_GEOMETRY_ONLY; INTENT_AND_CATCH_WINDOW_UNKNOWN'}
+        controller.history.AttachObservation(f.throwId,observation)
+        e.last=observation;e.status=reason;e.observations=e.observations+1;e.candidates={};e.RefreshAdvice(true)
+        observation.Advisor={Alternatives=e.advice,Rejected=e.rejected,Scope='CURRENT_SESSION_FIT_STYLE_ONLY; OBSERVATIONAL_NOT_CAUSAL'}
+        controller.history.AttachObservation(f.throwId,observation)
+    end
+    function e.Begin(ball,player,shot,throwId)
+        if not e.enabled or e.disabled then return end
+        if active then finish('NEW_REQUEST') end
+        if not throwId or not player or not shot.appliedLead then return end
+        local p=pose(player);if not p then return end
+        local aliases=env.PELICAN_FF3_RECEIVER_ALIASES
+        if type(aliases)~='table' or aliases.job~=game.JobId then aliases={job=game.JobId,players=setmetatable({}, {__mode='k'}),n=0};env.PELICAN_FF3_RECEIVER_ALIASES=aliases end
+        if not aliases.players[player] then aliases.n=aliases.n+1;aliases.players[player]='R'..aliases.n end
+        local handle=ball.tool:FindFirstChild('Handle')
+        local speed=flat(p.v).Magnitude
+        local jump=p.hum.UseJumpPower~=false and finite(p.hum.JumpPower) and p.hum.JumpPower^2/(2*workspace.Gravity)
+            or finite(p.hum.JumpHeight) and p.hum.JumpHeight or nil
+        active={at=os.clock(),throwId=throwId,receiverToken=aliases.players[player],player=player,model=p.model,team=player.Team,qbModel=ball.model,handle=handle,
+            shot=shot,rows={},path={},initial=p,initialSpeed=speed,route=speed>0 and flat(p.v).Unit or V(),
+            minSpeedRatio=1,minSpeed=speed,maxTurn=0,maxRise=0,maxGap=0,jumpCount=0,jumpEvents={},motion={},observedTurn=0,observedRatio=1,lastAt=os.clock(),jumped=false,dive=false,
+            airborneBefore=not p.grounded,wasGrounded=p.grounded,normalJump=jump,excessHeight=false,
+            animationAssets={},nearestDB=1e6,ground=lines.ground,generation=lines.generation}
+        animations(active,p);active.diveBefore=observePose(active,p);active.dive=active.diveBefore
+        e.candidates={};e.candidateSet=setmetatable({}, {__mode='k'});e.status='OBSERVING_RECEIVER';e.nextAt=0
+    end
+    function e.Update(now)
+        if e.disabled then return end
+        if now<e.nextAt then return end;e.nextAt=now+.08
+        if not active then
+            if e.panel and e.panel.Visible then e.RefreshAdvice();e.Paint() end
+            return
+        end
+        local begun=os.clock();local f=active;local p=pose(f.player)
+        if not p or p.model~=f.model or f.player.Team~=f.team or f.qbModel~=me.Character or lines.ground~=f.ground then
+            f.changed=true;finish('ACTOR_OR_FIELD_CHANGED');return
+        end
+        local elapsed=now-f.at
+        f.maxGap=math.max(f.maxGap,now-f.lastAt);f.lastAt=now
+        f.motion[#f.motion+1]={at=now,p=p.p};if #f.motion>4 then table.remove(f.motion,1) end
+        local first=f.motion[1];local span=now-first.at
+        if span>=.2 and f.initialSpeed>0 then
+            local observed=flat(p.p-first.p)/span;f.observedRatio=math.min(f.observedRatio,observed.Magnitude/f.initialSpeed)
+            if observed.Magnitude>0 then f.observedTurn=math.max(f.observedTurn,math.deg(math.acos(clamp(observed.Unit:Dot(f.route),-1,1)))) end
+        end
+        local horizontal=flat(p.v);local speed=horizontal.Magnitude
+        if speed<f.minSpeed then f.minSpeed=speed;f.minSpeedAt={At=elapsed,Velocity=vec(p.v)} end
+        if f.initialSpeed>0 then f.minSpeedRatio=math.min(f.minSpeedRatio,speed/f.initialSpeed) end
+        if speed>0 and f.initialSpeed>0 then
+            local turn=math.deg(math.acos(clamp(horizontal.Unit:Dot(f.route),-1,1)))
+            if turn>f.maxTurn then f.maxTurn=turn;f.maxTurnAt={At=elapsed,Velocity=vec(p.v)} end
+        end
+        local rise=p.p.Y-f.initial.p.Y
+        if rise>f.maxRise then f.maxRise=rise;f.apexAt={At=elapsed,Position=vec(p.p),VerticalVelocity=p.v.Y} end
+        local newJump=(f.wasGrounded and not p.grounded and p.v.Y>0) or p.state=='Jumping' and f.lastState~='Jumping'
+        if newJump then
+            f.jumped=true;f.jumpCount=f.jumpCount+1;f.jumpAt=elapsed
+            if #f.jumpEvents<4 then f.jumpEvents[#f.jumpEvents+1]={At=elapsed,State=p.state,VerticalVelocity=p.v.Y} end
+        end
+        f.lastState=p.state
+        f.wasGrounded=p.grounded
+        if f.normalJump and rise>f.normalJump+1 then f.excessHeight=true end
+        animations(f,p);local dive,bodyPose=observePose(f,p);if dive and not f.dive then f.diveAt=elapsed end;f.dive=f.dive or dive
+        local roster=Players:GetPlayers();if #roster>CFG.MaxRoster then f.changed=true;finish('ROSTER_CAP');return end
+        for _,other in ipairs(roster) do
+            if other.Team and not other.Neutral and other.Team~=f.team then
+                local _,root=body(other);if root then f.nearestDB=math.min(f.nearestDB,(root.Position-p.p).Magnitude) end
+            end
+        end
+        local part=f.part
+        if not part then
+            local same=f.handle
+            if instance(same,'BasePart') and same.Parent then
+                local carrier,why=owner(same)
+                if not carrier and not why and not same:IsDescendantOf(f.qbModel) and same.AssemblyLinearVelocity.Magnitude>1 then
+                    part=same;f.part=part;f.association='EXACT_HELD_PART'
+                end
+            end
+            if not part and elapsed<=1 then
+                local candidates={}
+                for _,candidate in ipairs(e.candidates) do
+                    if candidate.Parent and candidate.AssemblyLinearVelocity.Magnitude>1 and (candidate.Position-f.shot.origin).Magnitude<100 then
+                        local carrier,why=owner(candidate)
+                        if not carrier and not why then candidates[#candidates+1]=candidate end
+                    end
+                end
+                if #candidates==1 then f.part=candidates[1];part=f.part;f.association='CLONE_CANDIDATE_UNVERIFIED'
+                elseif #candidates>1 then f.ambiguous=true end
+            end
+        end
+        local point=part and part.Parent and part.Position
+        if point and not vector(point) then f.changed=true;finish('INVALID_BALL_POSITION');return end
+        if #f.rows<80 then f.rows[#f.rows+1]={round(elapsed),point and round(point.X) or false,point and round(point.Y) or false,point and round(point.Z) or false,
+            round(p.p.X),round(p.p.Y),round(p.p.Z),round(p.v.X),round(p.v.Y),round(p.v.Z),round(p.head.Position.Y),p.grounded,p.state,dive,p.up or false,bodyPose.TorsoUpY or false,bodyPose.LeftHandForward or false,bodyPose.RightHandForward or false,bodyPose.PlatformStand} end
+        if point then
+            local carrier,why=owner(part)
+            if why then f.changed=true;finish(why);return end
+            if carrier then
+                if carrier==f.player and f.departed then
+                    f.ownerSamples=(f.ownerSamples or 0)+1
+                    if f.ownerSamples>=2 then
+                        local airtime=f.normalJump and 2*math.sqrt(2*f.normalJump/workspace.Gravity) or 0
+                        f.jumpAtPossession=f.jumped and not p.grounded and f.jumpAt and elapsed-f.jumpAt<=airtime+.16
+                        local connectedOK,parts=pcall(function() return part:GetConnectedParts(false) end)
+                        if connectedOK and type(parts)=='table' then
+                            for i=1,math.min(#parts,64) do
+                                local other=parts[i]
+                                if other~=part and other.Parent==f.model and instance(other,'BasePart') then f.physicalPossession=true;break end
+                            end
+                        end
+                        f.outcome='RECEIVER_POSSESSION_OBSERVED';finish('OBSERVED_CARRIER');return end
+                elseif carrier~=me and f.departed then
+                    f.outcome=carrier.Team==f.team and 'OTHER_TEAMMATE_POSSESSION_OBSERVED' or 'OPPONENT_POSSESSION_OBSERVED';finish('OTHER_CARRIER');return
+                end
+            else
+                f.ownerSamples=0;f.departed=true
+                if #f.path<80 then f.path[#f.path+1]={elapsed,point.X,point.Y,point.Z} end
+                local relative=point-p.head.Position;local distance=relative.Magnitude
+                if not f.closest or distance<f.closest.Distance then f.closest={At=elapsed,Distance=distance,AlongRoute=flat(relative):Dot(f.route),
+                    VerticalToHead=relative.Y,ReceiverGrounded=p.grounded,ReceiverVerticalVelocity=p.v.Y} end
+                local ground=f.ground
+                if ground and point.Y<ground.Position.Y+ground.Size.Y*.5 then f.outcome='BELOW_GROUND_GEOMETRY_OBSERVED';finish('GROUND_GEOMETRY');return end
+            end
+        elseif f.part then finish('BALL_REMOVED');return end
+        if f.ambiguous then f.association='AMBIGUOUS_CLONES' end
+        if elapsed>math.min(7,math.max(2,f.shot.time+1.5)) or #f.rows>=80 then finish('OBSERVATION_LIMIT') end
+        e.maxSeconds=math.max(e.maxSeconds,os.clock()-begun)
+        if e.panel and e.panel.Visible then e.Paint() end
+    end
+    function e.Stop(reason)
+        local ok=pcall(function() if active then finish(reason or 'STOPPED') end end)
+        active=nil;e.candidates={}
+        if not ok then e.disabled=true;e.status='CAPTURE_FINALIZE_ERROR_DISABLED' end
+        return true
+    end
+    function e.Disable(reason) e.disabled=true;e.Stop(reason);e.status=reason or 'CAPTURE_ERROR_DISABLED' end
+    function e.Paint()
+        if not e.panel or os.clock()<(e.nextPaintAt or 0) then return end;e.nextPaintAt=os.clock()+.25
+        e.settings=e.ReadSettings()
+        local rows={'LEADS (read only)'}
+        for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
+            local v=e.settings[mode]
+            rows[#rows+1]=mode..(v and string.format('  X %.9g  Y %.9g',v.X,v.Y) or '  not verified')
+        end
+        local advice=e.advice[1]
+        rows[#rows+1]=advice and string.format('Observed Fit %s: %.9g -> %.9g',advice.Axis,advice.From,advice.To) or (mappingVerified and 'Advice: insufficient matched evidence' or 'Advice held: dive pose uncalibrated')
+        if advice then rows[#rows+1]='Style only; catch benefit unproven' end
+        rows[#rows+1]=e.last.Movement and e.last.Movement.ObservedSequence or e.status
+        if e.last.ClosestApproach then
+            local gap=e.last.ClosestApproach
+            rows[#rows+1]=string.format('Ball %.2f along run; %.2f vs head',gap.AlongRoute,gap.VerticalToHead)
+        end
+        rows[#rows+1]='Required action / fault: unknown'
+        e.panel.Text=table.concat(rows,'\n')
+    end
+    function e.Report()
+        local rows={'RECEIVER_EVIDENCE|'..e.status,'RECEIVER_OBSERVATIONS|'..e.observations,
+            'RECEIVER_OBSERVER_MAX_SECONDS|'..string.format('%.6f',e.maxSeconds),'RECEIVER_REQUIRED_ACTION|UNKNOWN; OBSERVED_ACTION_IS_NOT_NECESSITY',
+            'RECEIVER_FAULT|UNRESOLVED; REMOTE_INPUT_INTENT_UNAVAILABLE','DIVE_CLASSIFICATION|'..(mappingVerified and 'CONTROLLED_POSE_CALIBRATION' or 'UNCALIBRATED; BODY_AND_HAND_POSE_ONLY'),'LEAD_ADVICE_POLICY|READ_ONLY; PREVIOUSLY_OBSERVED_SINGLE_AXIS_FIT_ALTERNATIVES_ONLY; CONDITIONAL_ON_CATCHES; NOT_CAUSAL'}
+        if e.last.Movement then
+            rows[#rows+1]='LAST_RECEIVER_ACTION|'..e.last.Movement.ObservedSequence
+            rows[#rows+1]='LAST_OBSERVED_OUTCOME|'..e.last.ObservedOutcome
+            rows[#rows+1]='LAST_CAPTURE_QC|'..e.last.Quality.Reason
+        end
+        for mode,lead in pairs(e.ReadSettings()) do rows[#rows+1]=string.format('CURRENT_LEAD|%s X=%.9g Y=%.9g',mode,lead.X,lead.Y) end
+        for reason,n in pairs(e.rejected) do rows[#rows+1]='LEAD_EVIDENCE_REJECT|'..reason..' '..n end
+        for i,a in ipairs(e.advice) do if i>3 then break end
+            rows[#rows+1]=string.format('LEAD_STYLE_ALTERNATIVE|%s.%s %.9g -> %.9g observed=%d/%d compared=%d/%d; REQUIRED_MOVEMENT_UNKNOWN; COMPLETION_EFFECT_UNPROVEN',a.Mode,a.Axis,a.From,a.To,a.CurrentDesired,a.CurrentN,a.ComparedDesired,a.ComparedN)
+            rows[#rows+1]='LEAD_SUPPORT_CURRENT|'..table.concat(a.CurrentIds,',')
+            rows[#rows+1]='LEAD_SUPPORT_COMPARED|'..table.concat(a.ComparedIds,',')
+        end
+        return table.concat(rows,'\n')
+    end
+    e.FitPath=fitPath
+    return e
+end)()
+-- END RECEIVER EVIDENCE
+
 local function releaseNow(ball,selected,defenders,now)
     if not sequence or sequence.player~=selected.player or sequence.epoch~=possession.epoch then return end
     if usedTools[ball.tool]==possession.epoch then setGate('REQUEST_ALREADY_ATTEMPTED'); return end
@@ -2576,7 +3086,11 @@ local function releaseNow(ball,selected,defenders,now)
     local ok,err=pcall(function()
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
     end)
-    controller.history.Shot(shot,selected.player,selected.sample,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','AUTO_QB',defenders)
+    local throwId=controller.history.Shot(shot,selected.player,selected.sample,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','AUTO_QB',defenders)
+    if ok then
+        local observed,why=pcall(controller.receiverEvidence.Begin,ball,selected.player,shot,throwId)
+        if not observed then controller.receiverEvidence.Disable('CAPTURE_START_ERROR_DISABLED');log('RECEIVER_OBSERVER_ERROR',why) end
+    end
     if ok then sent=sent+1; pending.outcome='API_ACCEPTED_UNCONFIRMED'; setGate('REQUEST_SENT_UNCONFIRMED')
     else
         ambiguous=ambiguous+1; pending.outcome='AMBIGUOUS_NO_RETRY'; fatalError=clean(err)
@@ -2839,6 +3353,17 @@ local built,buildError=pcall(function()
     connect(controller.comeback.button.Activated,function() controller.SetComebackChat(not controller.comeback.enabled) end)
     controller.jumpBullet.button=button(controller.jumpBullet.enabled and 'JB ON' or 'JB OFF',-226,54,112)
     controller.history.button=button('DATA',-226,54,137);controller.history.button.Name='History';controller.history.button.Visible=false
+    controller.receiverEvidence.button=button('LEADS',-286,54,137);controller.receiverEvidence.button.Visible=false
+    controller.receiverEvidence.panel=Instance.new('TextLabel');controller.receiverEvidence.panel.Name='LeadEvidence'
+    controller.receiverEvidence.panel.Size=UDim2.fromOffset(282,139);controller.receiverEvidence.panel.Position=UDim2.new(1,-286,0,162)
+    controller.receiverEvidence.panel.BackgroundColor3=Color3.fromRGB(24,30,28);controller.receiverEvidence.panel.TextColor3=Color3.new(1,1,1)
+    controller.receiverEvidence.panel.Font=Enum.Font.Code;controller.receiverEvidence.panel.TextSize=10;controller.receiverEvidence.panel.TextXAlignment=Enum.TextXAlignment.Left
+    controller.receiverEvidence.panel.Parent=gui;controller.receiverEvidence.panel.Visible=false
+    connect(controller.receiverEvidence.button.Activated,function()
+        controller.receiverEvidence.panel.Visible=not controller.receiverEvidence.panel.Visible
+        if controller.receiverEvidence.panel.Visible and receiverMenu then receiverMenu.Visible=false end
+        controller.receiverEvidence.RefreshAdvice(true);controller.receiverEvidence.nextPaintAt=0;controller.receiverEvidence.Paint()
+    end)
     connect(controller.history.button.Activated,function()
         local ok,result=controller.history.Export();controller.history.button.Text=ok and 'COPIED' or 'FAIL';log('HISTORY_COPY',result)
     end)
@@ -2883,7 +3408,7 @@ local built,buildError=pcall(function()
     connect(prev.Activated,function() page=math.max(1,page-1); renderReceivers() end)
     connect(nextPage.Activated,function() page=page+1; renderReceivers() end)
     connect(receiverButton.Activated,function()
-        receiverMenu.Visible=not receiverMenu.Visible; if cancelSequence then cancelSequence('RECEIVER_MENU') end;clearGuide();cancelJump('RECEIVER_MENU'); clearWindows(); if choice then choice.openSince=nil end
+        receiverMenu.Visible=not receiverMenu.Visible;if receiverMenu.Visible then controller.receiverEvidence.panel.Visible=false end; if cancelSequence then cancelSequence('RECEIVER_MENU') end;clearGuide();cancelJump('RECEIVER_MENU'); clearWindows(); if choice then choice.openSince=nil end
         if receiverMenu.Visible then renderReceivers() end
     end)
     autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false;riskButton.Visible=false; receiverMenu.Visible=false
@@ -2891,7 +3416,8 @@ local built,buildError=pcall(function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
         controller.comeback.button.Visible=expanded
-        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded
+        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded
+        if not expanded then controller.receiverEvidence.panel.Visible=false end
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
@@ -2928,6 +3454,10 @@ local built,buildError=pcall(function()
         if not guideOK then fatalError=clean(guideError);log('GUIDE_ERROR',guideError);controller.Stop('GUIDE_RUNTIME_ERROR');return end
         local chatOK,chatError=pcall(controller.comeback.update,os.clock())
         if not chatOK then fatalError=clean(chatError);log('COMEBACK_ERROR',chatError);controller.Stop('COMEBACK_RUNTIME_ERROR_NO_RETRY');return end
+        local captureAt=os.clock()
+        local observed,observeError=pcall(controller.receiverEvidence.Update,captureAt)
+        controller.receiverEvidence.maxSeconds=math.max(controller.receiverEvidence.maxSeconds,os.clock()-captureAt)
+        if not observed then controller.receiverEvidence.Disable('CAPTURE_ERROR_DISABLED');log('RECEIVER_OBSERVER_ERROR',observeError) end
         controller.history.Update(os.clock())
         maxHeartbeat=math.max(maxHeartbeat,os.clock()-now)
     end)

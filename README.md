@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v26.5` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v26.6` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V26.5 adds an optional separate auto-execute companion: type exactly **a** in your own Roblox chat to upload retained current-session data. It shares the QB recorder and sole upload worker, keeps cloud uploads manual, and adds no permanent HUD. [Companion setup and limits](FF3_CHAT_UPLOAD.md). Device history remains automatic; private credentials stay in the local device artifact. Existing distance/coverage Bullet power, strict Bullet risk, timing-only Fit, opt-in JB, immediate jump/release, Goal LOS, AFK/manual exclusions, COPY/X, AWAY and optional comeback chat remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Throw behavior](FF3_AUTO_QB.md) · [History and storage](FF3_HISTORY.md). Immutable `ff3-v26.4.1` preserves the prior release.
+**FF3:** V26.6 adds passive post-throw ball/receiver recording and a folded read-only **LEADS** panel with current native X/Y values. Dive-like motion uses body angle, hands-forward pose and airborne/physics state; no playing animation is required. Required movement and fault remain unknown, and numeric style comparisons require controlled pose calibration and matched evidence. [Evidence, advice gates and limits](FF3_RECEIVER_EVIDENCE.md). V26.5 adds an optional separate auto-execute companion: type exactly **a** in your own Roblox chat to upload retained current-session data. It shares the QB recorder and sole upload worker, keeps cloud uploads manual, and adds no permanent HUD. [Companion setup and limits](FF3_CHAT_UPLOAD.md). Device history remains automatic; private credentials stay in the local device artifact. Existing distance/coverage Bullet power, strict Bullet risk, timing-only Fit, opt-in JB, immediate jump/release, Goal LOS, AFK/manual exclusions, COPY/X, AWAY and optional comeback chat remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Throw behavior](FF3_AUTO_QB.md) · [History and storage](FF3_HISTORY.md). Immutable `ff3-v26.5` preserves the prior release.
 
 Historical stats/GUI diagnostics are separate tools, not regular-loader dependencies. The V23 runtime is preserved in its immutable tag; its stats integration is withdrawn.
 
