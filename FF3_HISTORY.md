@@ -60,7 +60,7 @@ An assistant does not automatically gain access to a private bin by knowing its 
 
 Together with the existing current suites, **987 mocked assertions pass**. The generated bundle and runtime load under Lua 5.4. No Roblox session, phone, live chat or football request was tested. Actual JSONBin privacy/initialization readback was checked separately; mocked executor sync checks are not a phone runtime test. iPhone IO latency, current executor HTTP support, phone-side key use/quota, persistence and live catchability remain unverified. This is substantial progress in retained diagnostic evidence; it is not proof of improved passing outcomes.
 
-The loader pins `ff3-v26.10`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
+The loader pins `ff3-v26.11`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
 
 Protocol references: [JSONBin Read API](https://jsonbin.io/api-reference/bins/read/) and [Update API](https://jsonbin.io/api-reference/bins/update/).
 
@@ -75,3 +75,5 @@ V26.7 adds `CurrentSettings`, tagged with session/run and observation time, for 
 V26.9 saves PassPlan, 20-yard DeepYards and WideOpenJump in current settings; throw records add the active plan, catch depth beyond LOS, observed deep-comeback flag and wide-open/Jump-preference result. These are policy/model observations, not game catch awards. [Plan behavior](FF3_PASS_PLANS.md).
 
 V26.10 retains ReceiverFilter (ANY or FRIENDS) in current settings and per-throw metadata. The friendship cache, platform user IDs and friend list are not exported. [Friend-filter behavior](FF3_FRIENDS.md).
+
+V26.11 adds coverage-based friend route calls. The last attempted instruction appears in the controller report; friendship caches and friend identities remain outside retained history. [Call policy](FF3_ROUTE_CALLS.md).

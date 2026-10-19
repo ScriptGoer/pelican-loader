@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.10): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.11): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -141,8 +141,7 @@ controller.receiverFilter=(function()
         local id=player.UserId
         return type(id)=='number' and id==id and id>0 and id<1e15 and id%1==0 and id or nil
     end
-    function f.allowed(player)
-        if f.mode=='ANY' then return true end
+    function f.friend(player)
         local id=uid(player);if not id then return false,'FRIENDSHIP_UNVERIFIED' end
         local saved=f.cache[player]
         if saved and saved.uid==id and os.clock()<saved.untilAt then
@@ -151,6 +150,10 @@ controller.receiverFilter=(function()
         end
         if not f.pending[player] and #f.queue<CFG.MaxRoster then f.pending[player]=true;f.queue[#f.queue+1]=player end
         return false,'FRIENDSHIP_CHECK_PENDING'
+    end
+    function f.allowed(player)
+        if f.mode=='ANY' then return true end
+        return f.friend(player)
     end
     function f.cancel()
         local work=f.worker
@@ -167,7 +170,8 @@ controller.receiverFilter=(function()
         return true
     end
     function f.update(now)
-        if stopped or f.mode=='ANY' then return end
+        if stopped then return end
+        if f.mode=='ANY' and (not controller.comeback.enabled or not auto or not throwing) then f.cancel();return end
         if f.worker then
             if now-f.worker.at>15 then
                 local player=f.worker.player
@@ -191,12 +195,12 @@ controller.receiverFilter=(function()
         if not id or player==me or player.Neutral or player.Team~=me.Team then f.pending[player]=nil;return end
         local work={active=true,at=now,player=player};f.worker=work;f.status='CHECKING'
         work.thread=task.defer(function()
-            if stopped or not work.active or f.worker~=work or f.mode~='FRIENDS' then return end
+            if stopped or not work.active or f.worker~=work then return end
             f.checks=f.checks+1
             local ok,result=pcall(f.lookup,me,id)
             if f.worker==work then
                 f.worker=nil;f.pending[player]=nil
-                if not stopped and work.active and f.mode=='FRIENDS' and uid(player)==id then
+                if not stopped and work.active and uid(player)==id then
                     local friend=ok and result==true
                     local reason=not ok and 'FRIENDSHIP_LOOKUP_FAILED' or type(result)~='boolean' and 'FRIENDSHIP_UNVERIFIED' or 'FRIENDS_ONLY'
                     f.cache[player]={uid=id,friend=friend,untilAt=os.clock()+30,reason=reason}
@@ -317,7 +321,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.10',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.11',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -431,7 +435,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.10'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.11'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1239,7 +1243,8 @@ function controller.GetReport()
         'COPY_RESULT|'..copyResult,'FILE_RESULT|'..fileResult,
         'COMEBACK_CHAT|'..tostring(controller.comeback.enabled),'COMEBACK_STATUS|'..controller.comeback.status,
         'COMEBACK_ATTEMPTS|'..controller.comeback.attempts,'COMEBACK_OUTCOME|'..controller.comeback.outcome,
-        'COMEBACK_POLICY|EXACT_cut_back; VERIFIED_DEFAULT_TEAM_CHANNEL_ONLY; SAME_DB_2_SECONDS_WITHIN_5_YARDS; ONCE_PER_POSSESSION; 30_SECOND_SESSION_COOLDOWN; ADVISORY_NOT_ROLE_DETECTION',
+        'ROUTE_CALL_LAST|'..(controller.comeback.instruction or 'NONE'),
+        'COMEBACK_POLICY|FRIEND_STREAK_PREVENT: slant_right/slant_left/cut_back; WR_FACING_DOWNFIELD; STABLE_DIRECTION_0.65_SECONDS; LEGACY_COVERED_cut_back_2_SECONDS; VERIFIED_TEAM_CHANNEL_ONLY; ONCE_PER_POSSESSION; 30_SECOND_SESSION_COOLDOWN; ADVISORY_UNCALIBRATED',
         'LOS_STATUS|'..lines.status,'LOS_WORLD_Z|'..(lines.los and string.format('%.2f',lines.los.Z) or 'NONE'),
         'ATTACK_FORWARD_Z|'..(lines.forward and string.format('%.0f',lines.forward.Z) or 'NONE'),
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
@@ -1260,7 +1265,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.10','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.11','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -1960,7 +1965,59 @@ function controller.comeback.near(s,d)
         and flat(s.v):Dot(lines.forward)>=-2
         and (distance<.1 or flat(s.v-d.v):Dot(gap/distance)<=2)
 end
-function controller.comeback.valid(data,player,defender)
+-- Route advice only: these explicit space/observation policies are not catch
+-- radii or a new throw solver. Right is the WR's right while facing downfield.
+function controller.comeback.prevent(s,defenders)
+    if not lines.forward then return end
+    local forward=lines.forward;local velocity=flat(s.v);local speed=velocity.Magnitude
+    if speed<8 or velocity:Dot(forward)<speed*.85 then return end
+    local right=V(-forward.Z,0,forward.X);local prevent,nearest=nil,math.huge
+    for _,d in ipairs(defenders) do
+        local gap=flat(d.p-s.p);local ahead=gap:Dot(forward)
+        if onField(d.p) and ahead>=0 and ahead<=speed*1.4+12 and math.abs(gap:Dot(right))<=12 then
+            local future=flat(d.p+d.v*.9-s.p-velocity*.9).Magnitude
+            if future<16 and future<nearest then prevent,nearest=d,future end
+        end
+    end
+    return prevent
+end
+function controller.comeback.route(s,defenders,prevent)
+    prevent=prevent or controller.comeback.prevent(s,defenders)
+    if not prevent then return end
+    local forward=lines.forward;local right=V(-forward.Z,0,forward.X);local speed=flat(s.v).Magnitude
+    local function space(direction)
+        local minimum,finish=math.huge,math.huge
+        for i=1,3 do
+            local time=i*.3;local point=s.p+direction*speed*time
+            if not onField(point) or downfield(point)<0 then return end
+            local clearance=math.huge
+            for _,d in ipairs(defenders) do
+                -- Extrapolate observed motion and reserve growing uncertainty
+                -- for a defender changing direction. Advisory, never pass safety.
+                local gap=flat(point-d.p-d.v*time).Magnitude-(3+time*3)
+                clearance=math.min(clearance,gap)
+            end
+            minimum=math.min(minimum,clearance);finish=clearance
+        end
+        return {minimum=minimum,finish=finish}
+    end
+    local straight=space(flat(s.v)/speed)
+    if not straight then return nil,prevent end
+    local best
+    for _,option in ipairs({{'slant right',(forward+right)/math.sqrt(2)}, {'slant left',(forward-right)/math.sqrt(2)}, {'cut back',-forward}}) do
+        local room=space(option[2])
+        if room and room.minimum>=2 and room.finish>=6 and room.finish>=straight.finish+4
+            and room.minimum>=straight.minimum+1 then
+            -- Retain useful downfield progress when a diagonal has room; come
+            -- back only when neither slant qualifies. Opponents break side ties.
+            if not best or option[1]~='cut back' and room.finish+room.minimum>best.score then
+                best={text=option[1],score=room.finish+room.minimum}
+            end
+        end
+    end
+    return best and best.text or nil,prevent
+end
+function controller.comeback.valid(data,player,defender,instruction)
     if stopped or not controller.comeback.enabled or not auto or not throwing or pending or sequence
         or receiverMenu and receiverMenu.Visible or not choice or not choice.manualOnly then return false end
     if os.clock()-data.at>.3 or data.epoch~=possession.epoch or data.generation~=lines.generation
@@ -1973,6 +2030,22 @@ function controller.comeback.valid(data,player,defender)
     if not db or db.Neutral or not db.Team or db.Team==me.Team then return false end
     local model,root=body(db)
     if model~=defender or not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude>55 then return false end
+    if instruction then
+        if not controller.receiverFilter.friend(player) then return false end
+        -- Re-read the complete bounded opponent roster before sending, including
+        -- players who entered/respawned since the decision snapshot.
+        local roster=Players:GetPlayers();if #roster>CFG.MaxRoster then return false end
+        local defenders={}
+        for _,p in ipairs(roster) do
+            if p~=me and not p.Neutral and p.Team and p.Team~=me.Team then
+                local m,r=body(p)
+                if not m or not vector(r.AssemblyLinearVelocity) or flat(r.AssemblyLinearVelocity).Magnitude>55 then return false end
+                defenders[#defenders+1]={model=m,p=r.Position,v=r.AssemblyLinearVelocity}
+            end
+        end
+        local text,prevent=controller.comeback.route(s,defenders)
+        return text==instruction and prevent and prevent.model==defender
+    end
     return controller.comeback.near(s,{p=root.Position,v=root.AssemblyLinearVelocity})
 end
 function controller.comeback.channel()
@@ -2024,25 +2097,35 @@ function controller.comeback.update(now)
     end
     local last=env.PELICAN_FF3_COMEBACK_LAST_ATTEMPT
     if c.calledEpoch==data.epoch or finite(last) and now>=last and now-last<30 then c.observations={};c.status='COOLDOWN';return end
-    local seen={};local candidate
+    local seen={};local candidate;local routeBudget=2
     for _,r in ipairs(data.receivers) do
         local s=r.sample;local nearest,dist=nil,math.huge
-        for _,d in ipairs(data.defenders) do
-            if c.near(s,d) then
-                local gap=flat(s.p-d.p).Magnitude
-                if gap<dist then nearest,dist=d,gap end
+        local instruction;local prevent=c.prevent(s,data.defenders)
+        if prevent then
+            -- Never turn an unknown/nonfriend streak into a generic call.
+            -- ANY targeting remains ANY; only this advisory needs friendship.
+            if controller.receiverFilter.friend(r.player) and routeBudget>0 then
+                routeBudget=routeBudget-1;instruction=c.route(s,data.defenders,prevent)
+                if instruction then nearest=prevent end
+            end
+        else
+            for _,d in ipairs(data.defenders) do
+                if c.near(s,d) then
+                    local gap=flat(s.p-d.p).Magnitude
+                    if gap<dist then nearest,dist=d,gap end
+                end
             end
         end
         if nearest then
             seen[r.player]=true
             local old=c.observations[r.player]
             if not old or old.model~=s.model or old.defender~=nearest.model or old.epoch~=data.epoch
-                or old.team~=data.team or old.generation~=data.generation or now-old.at>.3 then
-                old={model=s.model,defender=nearest.model,epoch=data.epoch,team=data.team,generation=data.generation,since=now}
+                or old.instruction~=instruction or old.team~=data.team or old.generation~=data.generation or now-old.at>.3 then
+                old={model=s.model,defender=nearest.model,instruction=instruction,epoch=data.epoch,team=data.team,generation=data.generation,since=now}
                 c.observations[r.player]=old
             end
             old.at=now
-            if now-old.since>=2 and (not candidate or old.since<candidate.since) then candidate=old;candidate.player=r.player end
+            if now-old.since>=(instruction and .65 or 2) and (not candidate or old.since<candidate.since) then candidate=old;candidate.player=r.player end
         end
     end
     for p in pairs(c.observations) do if not seen[p] then c.observations[p]=nil end end
@@ -2056,12 +2139,13 @@ function controller.comeback.update(now)
     local work={active=true,at=now};c.worker=work;c.status='QUEUED'
     work.thread=task.defer(function()
         local ok,err=pcall(function()
-            if not work.active or not c.valid(data,candidate.player,candidate.defender) or c.channel()~=channel then c.status='CANCELLED_BEFORE_SEND';return end
+            if not work.active or not c.valid(data,candidate.player,candidate.defender,candidate.instruction) or c.channel()~=channel then c.status='CANCELLED_BEFORE_SEND';return end
             c.calledEpoch=data.epoch;c.attempts=c.attempts+1;env.PELICAN_FF3_COMEBACK_LAST_ATTEMPT=os.clock()
             work.invoked=true;c.status='SENDING';c.outcome='AWAITING_RESULT'
             -- Exactly the requested text. No /team prefix, name, suffix or UI
             -- target switch. SendAsync may be denied by platform chat policy.
-            local result=channel:SendAsync('cut back')
+            c.instruction=candidate.instruction or 'cut back'
+            local result=channel:SendAsync(c.instruction)
             if not work.active or stopped then return end
             c.outcome=result and tostring(result.Status) or 'NO_RESULT_DELIVERY_UNKNOWN'
             c.status='RESULT_RECORDED_NO_RETRY'
