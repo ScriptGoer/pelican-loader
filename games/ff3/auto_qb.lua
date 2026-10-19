@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.9): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.10): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -128,6 +128,86 @@ assert(controller.passPlan.mode,'FF3.PassPlan must be NORMAL, DEEP or SHORT')
 assert(finite(controller.passPlan.deepYards) and controller.passPlan.deepYards>=6 and controller.passPlan.deepYards<=100,'FF3.DeepYards must be 6..100 yards')
 assert(ff3Options.WideOpenJump==nil or type(ff3Options.WideOpenJump)=='boolean','FF3.WideOpenJump must be boolean')
 env.PELICAN_FF3_PASS_PLAN=controller.passPlan.mode
+-- Read-only friend checks run in one cancellable deferred worker, never in a solve.
+controller.receiverFilter=(function()
+    local f={cache=setmetatable({}, {__mode='k'}),pending=setmetatable({}, {__mode='k'}),queue={},status='ANY',checks=0}
+    function f.normalize(value)
+        if type(value)=='string' then value=value:upper();if value=='ANY' or value=='FRIENDS' then return value end end
+    end
+    f.mode=f.normalize(ff3Options.ReceiverFilter or env.PELICAN_FF3_RECEIVER_FILTER or 'ANY')
+    assert(f.mode,'FF3.ReceiverFilter must be ANY or FRIENDS')
+    env.PELICAN_FF3_RECEIVER_FILTER=f.mode;f.status=f.mode=='ANY' and 'ANY' or 'WAIT_FRIEND_CHECKS'
+    local function uid(player)
+        local id=player.UserId
+        return type(id)=='number' and id==id and id>0 and id<1e15 and id%1==0 and id or nil
+    end
+    function f.allowed(player)
+        if f.mode=='ANY' then return true end
+        local id=uid(player);if not id then return false,'FRIENDSHIP_UNVERIFIED' end
+        local saved=f.cache[player]
+        if saved and saved.uid==id and os.clock()<saved.untilAt then
+            if saved.friend then return true end
+            return false,saved.reason
+        end
+        if not f.pending[player] and #f.queue<CFG.MaxRoster then f.pending[player]=true;f.queue[#f.queue+1]=player end
+        return false,'FRIENDSHIP_CHECK_PENDING'
+    end
+    function f.cancel()
+        local work=f.worker
+        if work then
+            work.active=false
+            if work.thread and coroutine.status(work.thread)~='dead' then
+                if coroutine.running()==work.thread or not task or type(task.cancel)~='function' or not pcall(task.cancel,work.thread) then
+                    f.status='CLEANUP_UNCONFIRMED';return false
+                end
+            end
+            f.worker=nil
+        end
+        f.queue={};f.pending=setmetatable({}, {__mode='k'})
+        return true
+    end
+    function f.update(now)
+        if stopped or f.mode=='ANY' then return end
+        if f.worker then
+            if now-f.worker.at>15 then
+                local player=f.worker.player
+                if not f.cancel() then return end
+                f.cache[player]={uid=uid(player),friend=false,untilAt=now+30,reason='FRIENDSHIP_TIMEOUT'}
+                f.status='LOOKUP_TIMEOUT'
+            end
+            return
+        end
+        if #f.queue==0 then return end
+        if not task or type(task.defer)~='function' or type(task.cancel)~='function' then f.status='ASYNC_UNAVAILABLE';return end
+        if not f.method then
+            for _,name in ipairs({'IsFriendsWithAsync','IsFriendsWith'}) do
+                local ok,fn=pcall(function() return me[name] end)
+                if ok and type(fn)=='function' then f.method=name;f.lookup=fn;break end
+            end
+            if not f.method then f.method='UNAVAILABLE';f.status='FRIEND_API_UNAVAILABLE';return end
+        end
+        if not f.lookup then return end
+        local player=table.remove(f.queue,1);local id=uid(player)
+        if not id or player==me or player.Neutral or player.Team~=me.Team then f.pending[player]=nil;return end
+        local work={active=true,at=now,player=player};f.worker=work;f.status='CHECKING'
+        work.thread=task.defer(function()
+            if stopped or not work.active or f.worker~=work or f.mode~='FRIENDS' then return end
+            f.checks=f.checks+1
+            local ok,result=pcall(f.lookup,me,id)
+            if f.worker==work then
+                f.worker=nil;f.pending[player]=nil
+                if not stopped and work.active and f.mode=='FRIENDS' and uid(player)==id then
+                    local friend=ok and result==true
+                    local reason=not ok and 'FRIENDSHIP_LOOKUP_FAILED' or type(result)~='boolean' and 'FRIENDSHIP_UNVERIFIED' or 'FRIENDS_ONLY'
+                    f.cache[player]={uid=id,friend=friend,untilAt=os.clock()+30,reason=reason}
+                    f.status=friend and 'VERIFIED_FRIEND' or ok and type(result)=='boolean' and 'VERIFIED_NOT_FRIEND' or 'LOOKUP_FAILED'
+                end
+            end
+        end)
+    end
+    function f.stop() return f.cancel() end
+    return f
+end)()
 -- Explicit application risk policies, not calibrated game catch windows.
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
     MOD={margin=2,lane=CFG.ThrowLane,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
@@ -237,7 +317,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.9',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.10',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -251,7 +331,7 @@ controller.history=(function()
         if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
         local context=e.NativeContext()
         local control=touch.lastControl or {}
-        local values={controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        local values={controller.receiverFilter.mode,controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
         for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
             local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
         end
@@ -259,7 +339,7 @@ controller.history=(function()
         if h.settingsSignature==signature then return end
         h.settingsSignature=signature
         data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
-            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',ReceiverFilter=controller.receiverFilter.mode,PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
         data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
@@ -296,7 +376,7 @@ controller.history=(function()
         end
         return h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
-            PassPlan=controller.passPlan.mode,CatchDepthYards=shot.catchDepthYards,DeepComeback=shot.deepComeback,WideOpen=shot.wideOpen,WideMargin=shot.wideMargin,WideLane=shot.wideLane,JumpPreferred=shot.jumpPreferred,
+            ReceiverFilter=controller.receiverFilter.mode,PassPlan=controller.passPlan.mode,CatchDepthYards=shot.catchDepthYards,DeepComeback=shot.deepComeback,WideOpen=shot.wideOpen,WideMargin=shot.wideMargin,WideLane=shot.wideLane,JumpPreferred=shot.jumpPreferred,
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
@@ -351,7 +431,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.9'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.10'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -683,7 +763,7 @@ local function restoreLock()
     lease=nil
 end
 local function lock(player)
-    if stopped or not profile or not teammate(player) then return false end
+    if stopped or not profile or not teammate(player) or not controller.receiverFilter.allowed(player) then return false end
     local q=profile.q
     if lease and (lease.q~=q or not ownsLock()) then restoreLock(); return false end
     if not lease then
@@ -1148,6 +1228,7 @@ function controller.GetReport()
     local selectedRisk=riskPolicy.profiles[riskPolicy.mode]
     local rows={VERSION,'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
         'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'RISK_MODE|'..riskPolicy.mode,'PASS_PLAN|'..controller.passPlan.mode,
+        'RECEIVER_FILTER|'..controller.receiverFilter.mode,'FRIEND_LOOKUP_STATUS|'..controller.receiverFilter.status,'FRIEND_LOOKUP_METHOD|'..(controller.receiverFilter.method or 'NOT_USED'),'FRIEND_LOOKUP_CALLS|'..controller.receiverFilter.checks,
         'PASS_PLAN_DEEP_YARDS|'..controller.passPlan.deepYards,'WIDE_OPEN_JUMP|'..tostring(controller.passPlan.preferJump),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
         'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
@@ -1158,7 +1239,7 @@ function controller.GetReport()
         'COPY_RESULT|'..copyResult,'FILE_RESULT|'..fileResult,
         'COMEBACK_CHAT|'..tostring(controller.comeback.enabled),'COMEBACK_STATUS|'..controller.comeback.status,
         'COMEBACK_ATTEMPTS|'..controller.comeback.attempts,'COMEBACK_OUTCOME|'..controller.comeback.outcome,
-        'COMEBACK_POLICY|EXACT_comeback; VERIFIED_DEFAULT_TEAM_CHANNEL_ONLY; SAME_DB_2_SECONDS_WITHIN_5_YARDS; ONCE_PER_POSSESSION; 30_SECOND_SESSION_COOLDOWN; ADVISORY_NOT_ROLE_DETECTION',
+        'COMEBACK_POLICY|EXACT_cut_back; VERIFIED_DEFAULT_TEAM_CHANNEL_ONLY; SAME_DB_2_SECONDS_WITHIN_5_YARDS; ONCE_PER_POSSESSION; 30_SECOND_SESSION_COOLDOWN; ADVISORY_NOT_ROLE_DETECTION',
         'LOS_STATUS|'..lines.status,'LOS_WORLD_Z|'..(lines.los and string.format('%.2f',lines.los.Z) or 'NONE'),
         'ATTACK_FORWARD_Z|'..(lines.forward and string.format('%.0f',lines.forward.Z) or 'NONE'),
         'LOS_SCAN_COMPLETE|'..tostring(lines.complete),'LOS_SCAN_CAPPED|'..tostring(lines.capped),
@@ -1179,7 +1260,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.9','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.10','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -1291,8 +1372,9 @@ function controller.Stop(reason)
     connections=remaining; log('STOP',reason or 'USER_END'); gate='STOPPED'
     if gui then local ok=pcall(function() gui:Destroy() end); if ok then gui=nil;assistance.guideUI=nil;assistance.guideArrow=nil end end
     if controller.receiverEvidence then controller.receiverEvidence.Stop(stopReason) end
+    local friendsClean=controller.receiverFilter.stop()
     local historyClean=controller.history.Stop(stopReason,fatalError~='NONE')
-    cleanupComplete=historyClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
+    cleanupComplete=historyClean and friendsClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -1334,6 +1416,21 @@ function controller.SetRiskMode(value)
         log('RISK_MODE',name);setGate('RISK_MODE_'..name)
     end
     if riskButton then riskButton.Text=riskPolicy.mode end
+    return true
+end
+function controller.SetReceiverFilter(value)
+    if stopped then return false end
+    local f=controller.receiverFilter;local name=f.normalize(value)
+    if not name then return false end
+    if name~=f.mode then
+        releaseChoice()
+        if controller.comeback.cancel and not controller.comeback.cancel() then return false end
+        if not f.cancel() then return false end
+        if f.method=='UNAVAILABLE' then f.method=nil end
+        f.mode=name;f.status=name=='ANY' and 'ANY' or 'WAIT_FRIEND_CHECKS';env.PELICAN_FF3_RECEIVER_FILTER=name
+        log('RECEIVER_FILTER',name);setGate('RECEIVER_FILTER_'..name)
+    end
+    if f.button then f.button.Text=f.mode end
     return true
 end
 function controller.SetPassPlan(value)
@@ -1827,7 +1924,7 @@ local function receiverReady(player,s,now,point)
     for i=2,#s.path do travel=travel+flat(s.path[i].p-s.path[i-1].p).Magnitude end
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
     if point and (downfield(point)<(lines.goalToGo and 0 or CFG.MinDownfieldYards*3) or not onField(point)) then return false,'ARRIVAL_INSIDE_LOS_OR_OFF_FIELD' end
-    return true
+    return controller.receiverFilter.allowed(player)
 end
 -- Optional team-only route call. Reuses the decision snapshot; no native solves,
 -- world scan, chat UI manipulation, public-channel or guessed remote fallback.
@@ -1964,7 +2061,7 @@ function controller.comeback.update(now)
             work.invoked=true;c.status='SENDING';c.outcome='AWAITING_RESULT'
             -- Exactly the requested text. No /team prefix, name, suffix or UI
             -- target switch. SendAsync may be denied by platform chat policy.
-            local result=channel:SendAsync('comeback')
+            local result=channel:SendAsync('cut back')
             if not work.active or stopped then return end
             c.outcome=result and tostring(result.Status) or 'NO_RESULT_DELIVERY_UNKNOWN'
             c.status='RESULT_RECORDED_NO_RETRY'
@@ -3167,7 +3264,7 @@ local function releaseNow(ball,selected,defenders,now)
             setGate('RECEIVER_BROKE_BURN');return
         end
     end
-    if not throwing or not auto or not ownsLock() or not teammate(selected.player) or receiverMenu and receiverMenu.Visible then return end
+    if not throwing or not auto or not ownsLock() or not teammate(selected.player) or not controller.receiverFilter.allowed(selected.player) or receiverMenu and receiverMenu.Visible then return end
     current,reason=ready()
     if not current or current.tool~=ball.tool or current.remote~=ball.remote then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
@@ -3387,7 +3484,7 @@ local function tick(now)
             r.burnLook=lines.forward~=nil and flat(r.sample.v):Dot(lines.forward)>0 and not safetyAhead(r.sample,defenders,r.estimate)
         end
         table.sort(receivers,function(a,b) if a.burnLook~=b.burnLook then return a.burnLook end; if a.estimate~=b.estimate then return a.estimate<b.estimate end; if a.rank==b.rank then return a.player.Name<b.player.Name end; return a.rank>b.rank end)
-        if #receivers==0 then releaseChoice(); setGate('NO_ACTIVE_DOWNFIELD_RECEIVER'); return end
+        if #receivers==0 then releaseChoice();setGate(controller.receiverFilter.mode=='FRIENDS' and 'WAIT_ELIGIBLE_FRIEND_RECEIVER' or 'NO_ACTIVE_DOWNFIELD_RECEIVER');return end
         planRound=planRound+1
         local incumbent
         if choice then for i,r in ipairs(receivers) do if r.player==choice.player then incumbent=i; break end end end
@@ -3472,6 +3569,10 @@ local built,buildError=pcall(function()
     controller.comeback.button=button(controller.comeback.enabled and 'CB ON' or 'CB OFF',-226,54,87)
     controller.comeback.button.Name='ComebackChat';controller.comeback.button.Visible=false
     connect(controller.comeback.button.Activated,function() controller.SetComebackChat(not controller.comeback.enabled) end)
+    controller.receiverFilter.button=button(controller.receiverFilter.mode,-286,54,87);controller.receiverFilter.button.Name='ReceiverFilter';controller.receiverFilter.button.Visible=false
+    connect(controller.receiverFilter.button.Activated,function()
+        controller.SetReceiverFilter(controller.receiverFilter.mode=='ANY' and 'FRIENDS' or 'ANY')
+    end)
     controller.passPlan.button=button(controller.passPlan.mode,-286,54,112);controller.passPlan.button.Name='PassPlan';controller.passPlan.button.Visible=false
     connect(controller.passPlan.button.Activated,function()
         local mode=controller.passPlan.mode
@@ -3542,7 +3643,7 @@ local built,buildError=pcall(function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
         controller.comeback.button.Visible=expanded
-        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded
+        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded;controller.receiverFilter.button.Visible=expanded
         if not expanded then controller.receiverEvidence.panel.Visible=false end
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
@@ -3578,6 +3679,8 @@ local built,buildError=pcall(function()
             updateJump(os.clock());drawGuide(os.clock())
         end)
         if not guideOK then fatalError=clean(guideError);log('GUIDE_ERROR',guideError);controller.Stop('GUIDE_RUNTIME_ERROR');return end
+        local friendOK,friendError=pcall(controller.receiverFilter.update,os.clock())
+        if not friendOK then fatalError=clean(friendError);log('FRIEND_FILTER_ERROR',friendError);controller.Stop('FRIEND_FILTER_RUNTIME_ERROR');return end
         local chatOK,chatError=pcall(controller.comeback.update,os.clock())
         if not chatOK then fatalError=clean(chatError);log('COMEBACK_ERROR',chatError);controller.Stop('COMEBACK_RUNTIME_ERROR_NO_RETRY');return end
         local captureAt=os.clock()
