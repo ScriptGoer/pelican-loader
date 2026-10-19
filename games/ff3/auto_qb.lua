@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.13): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.13.1): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -341,7 +341,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.13',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.13.1',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -413,7 +413,7 @@ controller.history=(function()
             Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},ManualInput=shot.nativeInput,
             MagTrial=shot.magTrial,MagExtraY=shot.magExtraY,MagTrustSource=shot.magTrustSource,
             MagBaseLead=shot.magBaseLead and {shot.magBaseLead.X,shot.magBaseLead.Y},MagCatchCalibration=shot.magTrial and 'MISSING; ANGLE_REQUIRED_UNVERIFIED' or nil,
-            ActualAngleDegrees=shot.actualAngle,AdaptiveAngle=shot.angleControl~=nil,AngleRequest=shot.angleControl,EndzoneTarget=shot.endzoneTarget,
+            ActualAngleDegrees=shot.actualAngle,AdaptiveAngle=shot.angleControl~=nil,AngleRequest=shot.angleControl,NativeAngleAdjustment=shot.nativeAngleAdjustment,EndzoneTarget=shot.endzoneTarget,
             InputKind=shot.nativeInputKind,Ping=shot.networkPing,DistanceYards=shot.passYards,
             FitReason=shot.fitReason,ComparedMode=shot.fitAlternativeVariant,ComparedTime=shot.fitAlternativeTime,
             ComparedDBETA=shot.fitAlternativeDB,OverTop=shot.safetyOverTop,ClearBurn=shot.clearBurn,
@@ -458,7 +458,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.13'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.13.1'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1350,7 +1350,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.13','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.13.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -2680,8 +2680,11 @@ local function solve(player,mode)
     if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
     local actualAngle=math.deg(math.atan(velocity.Y/math.max(.0001,flat(velocity).Magnitude)))
     if angleControl then
-        if math.abs(actualAngle-angleControl.requested)>.25 or power>angleControl.powerCap+1 then
-            controller.angle.status='NATIVE_ADAPTIVE_ANGLE_NOT_HONORED';return nil,'NATIVE_ADAPTIVE_ANGLE_NOT_HONORED'
+        -- Recorded live Dimes used input 45 but returned ~40-41 degrees.
+        -- Native AutoCorrect/placement may change pitch; validate its returned
+        -- path, not an invented equality between input and release elevation.
+        if power>angleControl.powerCap+1 then
+            controller.angle.status='NATIVE_ADAPTIVE_POWER_CAP_EXCEEDED';return nil,'NATIVE_ADAPTIVE_POWER_CAP_EXCEEDED'
         end
         controller.angle.origins[player]={origin=origin,head=launchHead,at=os.clock(),epoch=possession.epoch,profile=profile}
     end
@@ -2719,7 +2722,7 @@ local function solve(player,mode)
         variant=mode,softBullet=soft,jumpBullet=jump,nativeMode=nativeMode,appliedLead=appliedLead,
         magTrial=mag,magPlayer=mag and player or nil,magTrustSource=mag and controller.mag.Source(player,false) or nil,
         magExtraY=mag and controller.mag.extraY or nil,magBaseLead=mag and profile.leads.Dime or nil,
-        angleControl=angleControl,actualAngle=actualAngle,
+        angleControl=angleControl,actualAngle=actualAngle,nativeAngleAdjustment=angleControl and actualAngle-angleControl.requested or nil,
         powerMethod=soft and touch.method or 'NATIVE',requestedPower=requestedPower,
         effectiveYLead=arrival.Y-aimpoint.Y,verticalLeadControlActive=math.abs((arrival.Y-aimpoint.Y)-appliedLead.Y)<=endpointTolerance,
         nativeInput=nativeInput,nativeInputKind=angleControl and 'ANGLE_DEGREES' or ((soft or jump) and (not soft or touch.method=='POWER') or not soft and not jump and q.ManualType=='Power') and 'POWER' or 'ANGLE_DEGREES',
