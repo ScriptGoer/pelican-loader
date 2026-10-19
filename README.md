@@ -8,7 +8,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 | Game/place | Route | Pinned release |
 |---|---|---|
-| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v26.4` |
+| FF3 live `82866880824588` | Casual Auto QB; LOS/movement gates and blacklist | `ff3-v26.4.1` |
 | FF3 practice `81310542478972` | Separate manual practice baseline | `v13` |
 | Threshold lobby `78453398695059` | Opt-in feature menu | `threshold-v1` |
 | Threshold Chase `129085487311457` | Same menu; Eli/Scrow phase-aware features | `threshold-v1` |
@@ -17,7 +17,7 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V26.4 adds retained anonymous throw/block history, alternating file checkpoints and a folded **DATA** export button. Optional private JSONBin sync needs a locally configured Access Key; no credentials are included. [Storage and private sync setup](FF3_HISTORY.md). V26.3 distance/coverage Bullet power, strict Bullet risk, timing-only Fit, opt-in JB, immediate jump/release, Goal LOS, AFK/manual exclusions, COPY/X, AWAY and optional comeback chat remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Throw behavior and controls](FF3_AUTO_QB.md). Immutable `ff3-v26.3` preserves the prior release.
+**FF3:** V26.4.1 supports explicit local AccessKey or MasterKey authentication; no credential is included in the public code. V26.4 adds retained anonymous throw/block history, alternating file checkpoints and a folded **DATA** export button. Optional private JSONBin sync needs a locally configured credential; no credentials are included. [Storage and private sync setup](FF3_HISTORY.md). V26.3 distance/coverage Bullet power, strict Bullet risk, timing-only Fit, opt-in JB, immediate jump/release, Goal LOS, AFK/manual exclusions, COPY/X, AWAY and optional comeback chat remain. Keep Yuna **QB Aimbot ON**, **Mouse Aimbot OFF**, **Auto Throw Type ON**. [Throw behavior and controls](FF3_AUTO_QB.md). Immutable `ff3-v26.3` preserves the prior release.
 
 Historical stats/GUI diagnostics are separate tools, not regular-loader dependencies. The V23 runtime is preserved in its immutable tag; its stats integration is withdrawn.
 

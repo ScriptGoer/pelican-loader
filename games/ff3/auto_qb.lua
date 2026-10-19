@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.4): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.4.1): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -155,6 +155,7 @@ controller.history=(function()
     local codec,cache,data,runId,started,ended
     local cfg=env.PELICAN_FF3_JSONBIN
     local accessKey,binId,requestFn
+    local keyHeader='X-Access-Key'
     local async=type(task)=='table' and type(task.defer)=='function' and type(task.cancel)=='function'
     local interval=120
     local function number(n) return type(n)=='number' and n==n and math.abs(n)<1e12 end
@@ -224,7 +225,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Kind=kind,
-            Release='ff3-v26.4',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.4.1',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -303,7 +304,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={['X-Access-Key']=accessKey,['X-Bin-Meta']='true'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.4.1'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -419,7 +420,10 @@ controller.history=(function()
         h.Append('run_start',{Runtime=VERSION,PreviousRecords=#data.Records,DiskRecovered=bestSlot~=nil})
         if cfg~=nil then
             if type(cfg)~='table' or type(cfg.BinId)~='string' or #cfg.BinId~=24 or not cfg.BinId:match('^%x+$')
-                or type(cfg.AccessKey)~='string' or #cfg.AccessKey<1 then h.sync='CONFIG_INVALID';return end
+                or cfg.AccessKey~=nil and cfg.MasterKey~=nil then h.sync='CONFIG_INVALID';return end
+            accessKey=cfg.MasterKey or cfg.AccessKey
+            if type(accessKey)~='string' or #accessKey<1 then h.sync='CONFIG_INVALID';return end
+            keyHeader=cfg.MasterKey~=nil and 'X-Master-Key' or 'X-Access-Key'
             if cfg.IntervalSeconds~=nil then
                 if not number(cfg.IntervalSeconds) or cfg.IntervalSeconds<60 or cfg.IntervalSeconds>3600 then h.sync='INTERVAL_INVALID';return end
                 interval=cfg.IntervalSeconds
@@ -428,7 +432,7 @@ controller.history=(function()
             if not async then h.sync='ASYNC_UNAVAILABLE';return end
             requestFn=request or http_request or (type(syn)=='table' and syn.request) or (type(http)=='table' and http.request)
             if type(requestFn)~='function' then h.sync='HTTP_UNAVAILABLE';return end
-            accessKey=cfg.AccessKey;binId=cfg.BinId
+            binId=cfg.BinId
             h.remoteReady=true;h.sync=cache.remoteUnsafe and 'PREVIOUS_IO_UNCERTAIN_NO_RETRY' or 'READY'
             h.lastSync=os.clock()-interval+10 -- allow startup/throw work first
         end
@@ -1008,7 +1012,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.4','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.4.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
