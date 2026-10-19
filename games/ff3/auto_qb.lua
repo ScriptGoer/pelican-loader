@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.15): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.16): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -114,6 +114,10 @@ if type(ff3Options)~='table' then error('PELICAN: FF3 options must be a table') 
 controller.league={mode='CASUAL',requested=ff3Options.Profile or 'AUTO',source='DEFAULT',vipSeen=false,nextCheck=0,screenDepth=ff3Options.ScreenDepthYards or 3}
 assert(({AUTO=true,CASUAL=true,LEAGUE=true})[controller.league.requested],'FF3.Profile must be AUTO, CASUAL or LEAGUE')
 assert(finite(controller.league.screenDepth) and controller.league.screenDepth>0 and controller.league.screenDepth<=6,'FF3.ScreenDepthYards must be >0 and <=6')
+assert(ff3Options.CoverageWindows==nil or type(ff3Options.CoverageWindows)=='boolean','FF3.CoverageWindows must be boolean')
+controller.coverageWindows={enabled=ff3Options.CoverageWindows~=false}
+controller.jumpTiming={delay=ff3Options.JumpDelaySeconds==nil and .075 or ff3Options.JumpDelaySeconds,status='NO_JUMP',observations=0,cancelled=0}
+assert(finite(controller.jumpTiming.delay) and (controller.jumpTiming.delay==0 or controller.jumpTiming.delay>=.05 and controller.jumpTiming.delay<=.1),'FF3.JumpDelaySeconds must be 0 or 0.05 through 0.10')
 assert(ff3Options.NativeJump==nil or type(ff3Options.NativeJump)=='boolean','FF3.NativeJump must be boolean')
 controller.nativeJump={supported=ff3Options.NativeJump~=false,enabled=ff3Options.NativeJump~=false and (ff3Options.NativeJump==true or env.PELICAN_FF3_NATIVE_JUMP~=false),status='WAIT_CHEST_THREAT'}
 env.PELICAN_FF3_NATIVE_JUMP=controller.nativeJump.enabled
@@ -350,7 +354,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.15',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.16',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -364,7 +368,7 @@ controller.history=(function()
         if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
         local context=e.NativeContext()
         local control=touch.lastControl or {}
-        local values={controller.league.mode,tostring(controller.nativeJump.enabled),tostring(controller.passPlan.openComfort),controller.receiverFilter.mode,tostring(controller.angle.enabled),tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        local values={tostring(controller.coverageWindows.enabled),tostring(controller.jumpTiming.delay),controller.league.mode,tostring(controller.nativeJump.enabled),tostring(controller.passPlan.openComfort),controller.receiverFilter.mode,tostring(controller.angle.enabled),tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
         for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
             local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
         end
@@ -372,7 +376,7 @@ controller.history=(function()
         if h.settingsSignature==signature then return end
         h.settingsSignature=signature
         data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
-            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',Profile=controller.league.mode,NativeJump=controller.nativeJump.enabled,OpenComfort=controller.passPlan.openComfort,ReceiverFilter=controller.receiverFilter.mode,AdaptiveAngle=controller.angle.enabled,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',JumpDelaySeconds=controller.jumpTiming.delay,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,NativeJump=controller.nativeJump.enabled,OpenComfort=controller.passPlan.openComfort,ReceiverFilter=controller.receiverFilter.mode,AdaptiveAngle=controller.angle.enabled,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
         data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
@@ -409,7 +413,7 @@ controller.history=(function()
         end
         return h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
-            CoverageLayers=shot.coverageLayers,FitReason=shot.fitReason,FitComparison=shot.fitAlternativeVariant,FitSecondComparison=shot.fitSecondVariant,Profile=controller.league.mode,ProfileSource=controller.league.source,Screen=shot.screen,NativeCoverageJump=shot.nativeCoverageJump,OpenComfort=controller.passPlan.openComfort,JumpBulletReason=shot.jumpBulletReason,JumpBulletChest=shot.jumpBulletChest,ReceiverFilter=controller.receiverFilter.mode,PassPlan=controller.passPlan.mode,CatchDepthYards=shot.catchDepthYards,DeepComeback=shot.deepComeback,WideOpen=shot.wideOpen,WideMargin=shot.wideMargin,WideLane=shot.wideLane,JumpPreferred=shot.jumpPreferred,
+            JumpDelayTarget=controller.jumpTiming.delay,JumpObservedDelay=source~='MANUAL_AWAY' and sequence and sequence.jumpObservedDelay or nil,JumpTimingSource=source~='MANUAL_AWAY' and sequence and sequence.jumpTimingSource or nil,CoverageLayers=shot.coverageLayers,FitReason=shot.fitReason,FitComparison=shot.fitAlternativeVariant,FitSecondComparison=shot.fitSecondVariant,Profile=controller.league.mode,ProfileSource=controller.league.source,Screen=shot.screen,NativeCoverageJump=shot.nativeCoverageJump,OpenComfort=controller.passPlan.openComfort,JumpBulletReason=shot.jumpBulletReason,JumpBulletChest=shot.jumpBulletChest,ReceiverFilter=controller.receiverFilter.mode,PassPlan=controller.passPlan.mode,CatchDepthYards=shot.catchDepthYards,DeepComeback=shot.deepComeback,WideOpen=shot.wideOpen,WideMargin=shot.wideMargin,WideLane=shot.wideLane,JumpPreferred=shot.jumpPreferred,
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
@@ -467,7 +471,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.15'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.16'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1339,6 +1343,7 @@ function controller.GetReport()
         'SCREEN_MAX_BEHIND_LOS_YARDS|'..controller.league.screenDepth,
         'NATIVE_COVERAGE_JUMP|'..tostring(controller.nativeJump.enabled),'NATIVE_JUMP_POLICY|OWN_JUMP_LEAD_AND_NATIVE_CONTROLS; FRESH_CHEST_THREAT_REQUIRED; SAFE_ORDINARY_BULLET_VETO; CATCH_WINDOW_UNCALIBRATED',
         'LEAGUE_COVERAGE_POLICY|WHOLE_NATIVE_PATH_AND_ARRIVAL; DEFENDER_PING_BUDGET; GEOMETRIC_LAYERS_NOT_ASSIGNED_ROLES; FIT_WINDOW_REQUIRES_FRESH_BULLET_AND_DIME',
+        'SHARED_COVERAGE_WINDOWS|'..tostring(controller.coverageWindows.enabled),'SHARED_COVERAGE_SCOPE|CASUAL_AND_LEAGUE; ORIGINAL_CASUAL_UI_AND_RECEIVER_FILTERS_RETAINED',
         'OPEN_COMFORT|'..tostring(controller.passPlan.openComfort),'OPEN_COMFORT_POLICY|SAFE_ORDINARY_BULLET_FIRST; NATIVE_JUMP_NOT_PLANNED; CUSTOM_JB_REQUIRES_FRESH_CHEST_THREAT',
         'PASS_PLAN_DEEP_YARDS|'..controller.passPlan.deepYards,'WIDE_OPEN_JUMP|'..tostring(controller.passPlan.preferJump),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
         'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
@@ -1374,7 +1379,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.15','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.16','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1383,7 +1388,7 @@ function controller.GetReport()
         'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
-        'FIT_POLICY|CASUAL_TIMING_RESCUE; LEAGUE_ALSO_STRICT_LAYER_WINDOW; NO_SAFE_NON_FIT; ARRIVES_BEFORE_MODELED_DB; FRESH_COUNTERFACTUALS_AT_RELEASE',
+        'FIT_POLICY|TIMING_RESCUE_OR_ENABLED_STRICT_LAYER_WINDOW; NO_SAFE_NON_FIT; ARRIVES_BEFORE_MODELED_DB; FRESH_COUNTERFACTUALS_AT_RELEASE',
         'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
@@ -1397,7 +1402,10 @@ function controller.GetReport()
         'FULL_POWER_MIN_YARDS|'..(touch.full or 'ACTUAL_FLIGHT_ONLY'),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.comfort,
         'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
-        'AUTO_JUMP_POLICY|NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT',
+        'AUTO_JUMP_POLICY|'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
+        'JUMP_DELAY_TARGET_SECONDS|'..controller.jumpTiming.delay,'JUMP_TIMING_STATUS|'..controller.jumpTiming.status,
+        'JUMP_OBSERVATIONS|'..controller.jumpTiming.observations,'JUMP_TIMING_CANCELLED|'..controller.jumpTiming.cancelled,
+        'LAST_JUMP_RELEASE_DELAY_SECONDS|'..tostring(controller.jumpTiming.lastReleaseDelay),
         'DEEP_POLICY|FLIGHT_EXCEEDS_CURRENT_NORMAL_JUMP_AIRTIME; NO_YARD_CUTOFF',
         'BURN_CUT_CANCEL_DEGREES|45',
         'GUIDE_MODEL|ADVISORY_NATIVE_CONTINUATION; MAX_SIX_ESTIMATES_ONE_MS_BUDGET; PARALLEL_LEFT_RIGHT_BACK; NO_AUTO_MOVEMENT; NEVER_RELEASE_AUTHORITY',
@@ -1408,7 +1416,7 @@ function controller.GetReport()
         'GUIDE_TARGET|'..(assistance.guide and assistance.guide.player.Name or 'NONE'),
         'GUIDE_OPEN_IN_SECONDS|'..(assistance.guide and string.format('%.2f',assistance.guide.lead) or 'NONE'),
         'GUIDE_FORECAST_CHECKS|'..assistance.guideChecks,'GUIDE_MAX_SECONDS|'..string.format('%.6f',assistance.maxGuideSeconds),
-        'RELEASE_TIMING|SHORT_IMMEDIATE; DEEP_JUMP_THEN_IMMEDIATE; VISUAL_ANIMATION_AFTER_REQUEST; GUIDE_NEVER_GATES_RELEASE',
+        'RELEASE_TIMING|'..(controller.jumpTiming.delay>0 and 'GROUND_IMMEDIATE; OBSERVED_JUMP_SHORT_OFFSET; FRESH_NATIVE_FINAL_CHECKS' or 'SHORT_IMMEDIATE; DEEP_JUMP_THEN_IMMEDIATE')..'; VISUAL_ANIMATION_AFTER_REQUEST; GUIDE_NEVER_GATES_RELEASE',
         'RELEASE_PREPARED|'..tostring(sequence~=nil),'RELEASE_PREPARE_OUTCOME|'..lastSequenceOutcome,'THROW_ANIMATION_STATUS|'..animationStatus,'THROW_ANIMATION_SOURCE|'..animationSource,
         'THROW_ANIMATION_PLAYING|'..tostring(ownedAnimation~=nil and ownedAnimation.track.IsPlaying==true),
         'THROW_ANIMATION_ASSET|'..(ownedAnimation and clean(ownedAnimation.asset) or 'NONE'),
@@ -1481,6 +1489,7 @@ local function preserve(copy)
 end
 function controller.Stop(reason)
     if controller.league.ClearScreen then controller.league.ClearScreen('STOPPED') end
+    if controller.jumpTiming.Reset then controller.jumpTiming.Reset() end
     if cleanupComplete then return true end
     if not stopped then stopReason=clean(reason or 'USER_END') end
     stopped=true; controller.IsStopped=true; fieldWaitSince=nil
@@ -1498,7 +1507,7 @@ function controller.Stop(reason)
     if controller.receiverEvidence then controller.receiverEvidence.Stop(stopReason) end
     local friendsClean=controller.receiverFilter.stop()
     local historyClean=controller.history.Stop(stopReason,fatalError~='NONE')
-    cleanupComplete=historyClean and friendsClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and assistance.guide==nil and controller.comeback.worker==nil
+    cleanupComplete=historyClean and friendsClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and controller.jumpTiming.track==nil and controller.jumpTiming.last==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -2460,8 +2469,8 @@ local function risk(shot,receiver,defenders)
     local margin,laneMargin,wideMargin,wideLane=45,45,45,45; local t=shot.time
     local pingBudget=finite(shot.networkPing) and math.max(0,shot.networkPing) or 0
     local firstDB,directLane=math.huge,45
-    local league=controller.league.mode=='LEAGUE'
-    local layers=league and {Underneath=0,Deeper=0,LaneThreats=0,CatchThreats=0} or nil
+    local enhanced=controller.coverageWindows.enabled or controller.league.mode=='LEAGUE'
+    local layers=enhanced and {Underneath=0,Deeper=0,LaneThreats=0,CatchThreats=0} or nil
     local flight=flat(shot.arrival-shot.origin)
     shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
     for _,d in ipairs(defenders) do
@@ -2469,15 +2478,15 @@ local function risk(shot,receiver,defenders)
         -- A trailing defender must cover the actual distance before arrival;
         -- a stationary prevent defender can move instead of staying frozen.
         local distance=flat(shot.arrival-d.p).Magnitude
-        local clearance=distance-runSpeed(d)*(t+(league and pingBudget or 0))-(4.5+d.turn*3)
+        local clearance=distance-runSpeed(d)*(t+(enhanced and pingBudget or 0))-(4.5+d.turn*3)
         local speed=runSpeed(d)
         local eta=speed>0 and math.max(0,distance-(4.5+d.turn*3))/speed or (distance<=4.5+d.turn*3 and 0 or math.huge)
         firstDB=math.min(firstDB,eta)
         if riskPolicy.mode~='SAFE' then
-            directLane=math.min(directLane,lane(shot,d,true)-(league and speed*pingBudget or 0))
+            directLane=math.min(directLane,lane(shot,d,true)-(enhanced and speed*pingBudget or 0))
         end
         if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
-        local pathClearance=lane(shot,d)-(league and speed*pingBudget or 0)
+        local pathClearance=lane(shot,d)-(enhanced and speed*pingBudget or 0)
         if layers then
             local fraction=flight.Magnitude>0 and flat(d.p-shot.origin):Dot(flight)/(flight.Magnitude*flight.Magnitude) or 0
             if lines.forward and flat(d.p-receiver.p):Dot(lines.forward)>0 then layers.Deeper=layers.Deeper+1
@@ -2485,8 +2494,8 @@ local function risk(shot,receiver,defenders)
             if pathClearance<CFG.ThrowLane then layers.LaneThreats=layers.LaneThreats+1 end
             if clearance<CFG.ThrowMargin then layers.CatchThreats=layers.CatchThreats+1 end
         end
-        wideMargin=math.min(wideMargin,clearance-(league and 0 or speed*pingBudget))
-        wideLane=math.min(wideLane,pathClearance-(league and 0 or speed*pingBudget))
+        wideMargin=math.min(wideMargin,clearance-(enhanced and 0 or speed*pingBudget))
+        wideLane=math.min(wideLane,pathClearance-(enhanced and 0 or speed*pingBudget))
         if pathClearance<laneMargin then laneMargin=pathClearance;shot.laneDB=d.name;shot.laneActor=d end
     end
     shot.coverageLayers=layers
@@ -2625,7 +2634,7 @@ function controller.fit.assess(shot,alternatives,requiredVariant)
                 and shot.time<other.time and (not late or other.time<late.time) then late=other end
         end
     end
-    if not late and controller.league.mode=='LEAGUE' and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane and not shot.safetyOverTop then
+    if not late and (controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane and not shot.safetyOverTop then
         local chest,loft
         for _,other in ipairs(alternatives) do
             if other.margin<CFG.ThrowMargin or other.lane<CFG.ThrowLane or other.safetyOverTop then
@@ -2972,7 +2981,7 @@ local function evaluate(receivers,indices,defenders,now)
         groups[#groups+1]={r=r,cache=cache,tried={}}
     end
     local calls,started,limited=0,os.clock(),false
-    local callLimit=controller.league.mode=='LEAGUE' and math.min(5,CFG.PlanCalls) or CFG.PlanCalls
+    local callLimit=(controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and math.min(5,CFG.PlanCalls) or CFG.PlanCalls
     -- Interleave receivers before trying a second/third mode. A slow native
     -- solve cannot consume every frame's allowance on the same receiver.
     for pass=1,3 do
@@ -3138,34 +3147,84 @@ forecastGuide=function(data,now)
     controller.groundGuide.status=best and 'PREDICTED_PASSING_ROOM' or 'NO_PREDICTED_SAFE_ROOM'
     assistance.maxGuideSeconds=math.max(assistance.maxGuideSeconds,os.clock()-started)
 end
+do
+    local timing=controller.jumpTiming
+    function timing.Reset()
+        timing.track=nil;timing.last=nil
+    end
+    function timing.Observe(now)
+        if timing.delay==0 or stopped or not auto or not possession.wasReady or usedTools[possession.tool]==possession.epoch then timing.Reset();return end
+        local p=timing.track
+        if not p or p.model~=me.Character or not p.root.Parent or p.hum.Parent~=p.model then
+            local model,root,_,hum=body(me)
+            if not model then timing.Reset();return end
+            p={model=model,root=root,hum=hum,air=false,takeoffSeen=false};timing.track=p;timing.last=nil
+        end
+        if p.hum.Health<=0 then timing.Reset();return end
+        local state=p.hum:GetState()
+        local air=p.hum.FloorMaterial==Enum.Material.Air or state==Enum.HumanoidStateType.Jumping or state==Enum.HumanoidStateType.Freefall
+        if air and not p.takeoffSeen and vector(p.root.AssemblyLinearVelocity) and p.root.AssemblyLinearVelocity.Y>0 then
+            timing.last={at=now,model=p.model,hum=p.hum};p.takeoffSeen=true;timing.observations=timing.observations+1
+            timing.status='LOCAL_TAKEOFF_OBSERVED'
+        elseif not air then timing.last=nil;p.takeoffSeen=false end
+        p.air=air
+    end
+    function timing.Wait(seq,ball,now)
+        if timing.delay==0 then return true end
+        local jump=timing.last
+        if jump and jump.model==ball.model and jump.hum==ball.hum then
+            seq.jumpObservedAt=jump.at;seq.jumpTimingSource='OBSERVED_LOCAL_TAKEOFF'
+            if now-jump.at<timing.delay then timing.status='WAIT_JUMP_RELEASE_OFFSET';setGate(timing.status);return false end
+            timing.status='POST_JUMP_READY';return true
+        end
+        if seq.jumpObservedAt then
+            timing.status='JUMP_ENDED_BEFORE_RELEASE';timing.cancelled=timing.cancelled+1
+            cancelSequence(timing.status);cancelJump(timing.status);setGate(timing.status);return false
+        end
+        if not seq.jumpAwaitAt then
+            if ball.hum.Jump==true then seq.jumpAwaitAt=now
+            elseif seq.deep and assistance.jumpEpoch==possession.epoch then seq.jumpAwaitAt=assistance.jumpRequestedAt end
+        end
+        if seq.jumpAwaitAt then
+            if now-seq.jumpAwaitAt>=.25 then
+                timing.status='JUMP_TAKEOFF_NOT_OBSERVED';timing.cancelled=timing.cancelled+1
+                assistance.cancelledBurns[seq.player]=possession.epoch
+                cancelSequence(timing.status);cancelJump(timing.status);setGate(timing.status);return false
+            end
+            timing.status='WAIT_LOCAL_TAKEOFF';setGate(timing.status);return false
+        end
+        timing.status='NO_NEW_JUMP_IMMEDIATE';return true
+    end
+end
 local function deepThrow(shot,hum)
     if shot.softBullet or shot.screen then return false end -- softened close pass or deliberate stationary screen
     local ascent=ascentTime(hum)
     -- A timing policy relative to this character's normal jump, not an
     -- invented official FF3 yardage/catch threshold. Missing jump parameters
-    -- still request a normal jump for elevated native modes, without gating release.
+    -- still classify elevated native modes for a normal jump. The short takeoff
+    -- offset is handled separately; no yard cutoff or peak gate is introduced.
     return ascent and shot.time>ascent*2 or not ascent and shot.mode~='Bullet'
 end
--- The normal jump request precedes final native solve/release in the same
--- decision. Never wait for ascent, an apex, animation windup or a timer.
+-- Request the ordinary jump only. The optional short offset starts at observed
+-- local takeoff, never at the apex or animation windup.
 requestJump=function(ball,now)
     if assistance.jumpEpoch==possession.epoch then return end
     local hum=ball.hum
     if hum.Jump==true or hum.FloorMaterial==Enum.Material.Air then
-        assistance.jumpStatus='USER_JUMP_OR_AIRBORNE; RELEASE_IMMEDIATE';return
+        assistance.jumpStatus=controller.jumpTiming.delay>0 and 'USER_JUMP_OR_AIRBORNE; OFFSET_IF_RECENT_TAKEOFF' or 'USER_JUMP_OR_AIRBORNE; RELEASE_IMMEDIATE';return
     end
     if hum.Sit or hum.PlatformStand or not hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then
         assistance.jumpStatus='NORMAL_JUMP_UNAVAILABLE; RELEASE_IMMEDIATE';return
     end
-    assistance.jumpEpoch=possession.epoch;assistance.jumpCount=assistance.jumpCount+1
+    assistance.jumpEpoch=possession.epoch;assistance.jumpRequestedAt=now;assistance.jumpCount=assistance.jumpCount+1
     assistance.jumpPlan={hum=hum,model=ball.model,epoch=possession.epoch,before=hum.Jump,owned=true,requested=now}
     hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'
     if type(hum.ChangeState)=='function' then
         hum:ChangeState(Enum.HumanoidStateType.Jumping)
         assistance.jumpMethod='HUMANOID_JUMP_AND_CHANGE_STATE'
     end
-    assistance.jumpStatus='REQUESTED_RELEASE_IMMEDIATE'
-    log('AUTO_JUMP','method='..assistance.jumpMethod..'; no ascent or peak wait')
+    assistance.jumpStatus=controller.jumpTiming.delay>0 and 'REQUESTED_WAIT_LOCAL_TAKEOFF_OFFSET' or 'REQUESTED_RELEASE_IMMEDIATE'
+    log('AUTO_JUMP','method='..assistance.jumpMethod..(controller.jumpTiming.delay>0 and '; short observed-takeoff offset; no peak wait' or '; no ascent or peak wait'))
 end
 updateJump=function(now)
     local plan=assistance.jumpPlan
@@ -3897,6 +3956,9 @@ local function releaseNow(ball,selected,defenders,now)
     for i,d in ipairs(defenders) do lastDecision.actors[#lastDecision.actors+1]=actor('DB'..i..':'..clean(d.name),d) end
     decisionHistory[#decisionHistory+1]=lastDecision
     if #decisionHistory>6 then table.remove(decisionHistory,1) end
+    if sequence and sequence.jumpObservedAt then
+        sequence.jumpObservedDelay=os.clock()-sequence.jumpObservedAt;controller.jumpTiming.lastReleaseDelay=sequence.jumpObservedDelay
+    end
     log('REQUEST',evidence)
     local ok,err=pcall(function()
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
@@ -3929,6 +3991,9 @@ local function driveSequence(now)
     local seq=sequence
     if not seq then return end
     local ball,why=ready()
+    if not profile or not aliveConnection(profile.preview) or not aliveConnection(profile.release) then
+        cancelSequence('WAIT_YUNA_SOURCE_PROFILE');releaseChoice();setGate('WAIT_YUNA_SOURCE_PROFILE');return
+    end
     if not ball or ball.nativeThrow or not throwing or not choice or choice.player~=seq.player
         or seq.model~=seq.player.Character or seq.qbModel~=ball.model or seq.hum~=ball.hum
         or seq.epoch~=possession.epoch or seq.tool~=ball.tool
@@ -3944,6 +4009,7 @@ local function driveSequence(now)
         requestJump(ball,now)
         if stopped or sequence~=seq then return end
     end
+    if not controller.jumpTiming.Wait(seq,ball,now) then return end
     if not seq.animationStarted then seq.animation=visual.prepare(ball,now);seq.animationStarted=true end
     if stopped or sequence~=seq then return end
     local receiver,defenders,rejection=currentDefenders(seq.player,now)
@@ -3968,7 +4034,7 @@ local function submit(ball,selected,defenders,now)
         sequence={player=selected.player,model=selected.player.Character,qbModel=ball.model,hum=ball.hum,tool=ball.tool,epoch=possession.epoch,
             selected=selected,fastBurn=fastBurn,deep=deep,route=velocity.Magnitude>0 and velocity.Unit or V(),checked=now,started=now}
         lastSequenceOutcome='PREPARING'
-        log('PREPARE',selected.player.Name..' '..(deep and 'DEEP_JUMP_IMMEDIATE' or 'SHORT_IMMEDIATE'))
+        log('PREPARE',selected.player.Name..' '..(deep and (controller.jumpTiming.delay>0 and 'DEEP_JUMP_SHORT_OFFSET' or 'DEEP_JUMP_IMMEDIATE') or 'SHORT_IMMEDIATE'))
     else sequence.selected=selected end
     driveSequence(now)
 end
@@ -4316,7 +4382,7 @@ local built,buildError=pcall(function()
     connect(Run.Heartbeat,function()
         if stopped then return end
         local now=os.clock(); frameCalls=0;motionFrame=motionFrame+1
-        local ok,err=pcall(function() controller.league.Update(now);updateJump(now);driveSequence(now) end)
+        local ok,err=pcall(function() controller.league.Update(now);controller.jumpTiming.Observe(now);updateJump(now);driveSequence(now) end)
         if not ok then fatalError=clean(err); log('RELEASE_ERROR',err); controller.Stop('RELEASE_SEQUENCE_ERROR'); return end
         tick(now)
         if stopped then return end
@@ -4341,5 +4407,5 @@ local built,buildError=pcall(function()
     end)
 end)
 if not built then controller.Stop('STARTUP_ERROR'); error(buildError) end
-log('START','SAFE/MOD/TRUST; jump and immediate release; animation after request; optional team comeback; Goal blue LOS')
+log('START','SAFE/MOD/TRUST; '..(controller.jumpTiming.delay>0 and 'short observed-takeoff offset' or 'jump and immediate release')..'; animation after request; optional team comeback; Goal blue LOS')
 return controller

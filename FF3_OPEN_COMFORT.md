@@ -1,5 +1,7 @@
 # FF3 V26.14: ordinary open passes and a UI ground guide
 
+**V26.16 update:** automatic release targets 75 ms after observed local takeoff, with fresh final calculations and frame-bound timing. Strict layered Fit windows and defender ping grading now also run in casual/public matches; league-only UI/SCREEN eligibility stays separate. [Current timing and shared coverage](FF3_JUMP_TIMING.md).
+
 **V26.15 update:** safe ordinary Bullets still take priority, but the new conditional covered Jump uses native Jump’s own lead and strict fresh chest-threat checks. It replaces the default custom Bullet-X/Fit-Y trial and the older wide-open Jump preference. The compact competitive profile adds explicit one-possession screens and a league Fit coverage-window case. [Current behavior and limits](FF3_LEAGUE.md).
 
 The default `FF3.OpenComfort=true` removes native Jump from automatic planning and supersedes V26.9's wide-open Jump preference. A strict safe ordinary Bullet variant is preferred to an elevated candidate. Existing native-origin refinement chooses the gentlest supported safe power, with the unchanged 0.90-second gentle / 0.65-second tighter-window policies. These times are application preferences, not verified human reaction or catch thresholds. Nothing adds a release wait or changes the configured catch leads. SHORT still prioritizes a known safe shallow candidate over a deep option; modes are evaluated incrementally within the existing budget, not exhaustively before every release.
