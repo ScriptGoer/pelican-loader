@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.7): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.8): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -120,7 +120,7 @@ controller.jumpBullet={enabled=ff3Options.JumpBullet==true or ff3Options.JumpBul
 env.PELICAN_FF3_JUMP_BULLET=controller.jumpBullet.enabled
 -- Explicit application risk policies, not calibrated game catch windows.
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
-    MOD={margin=2,lane=-1,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
+    MOD={margin=2,lane=CFG.ThrowLane,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
     TRUST={margin=-2,lane=-4,race=-.02,lateral=6,turn=.5,arrivalSlack=.1}}}
 function riskPolicy.normalize(value)
     if type(value)~='string' then return end
@@ -227,7 +227,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.7',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.8',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -340,7 +340,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.7'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.8'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1138,7 +1138,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.7','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.8','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
