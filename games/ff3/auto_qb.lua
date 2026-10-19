@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.4.1): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.5): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -152,7 +152,7 @@ controller.history=(function()
     local schema='PELICAN_FF3_HISTORY_V1'
     local paths={'PELICAN_FF3_HISTORY_A.json','PELICAN_FF3_HISTORY_B.json'}
     local maxRecords,maxBytes=100,80000
-    local codec,cache,data,runId,started,ended
+    local codec,cache,data,runId,sessionId,started,ended
     local cfg=env.PELICAN_FF3_JSONBIN
     local accessKey,binId,requestFn
     local keyHeader='X-Access-Key'
@@ -224,8 +224,8 @@ controller.history=(function()
     function h.Append(kind,payload)
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
-        local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Kind=kind,
-            Release='ff3-v26.4.1',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+        local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
+            Release='ff3-v26.5',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -304,7 +304,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.4.1'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.5'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -325,7 +325,36 @@ controller.history=(function()
         for k in pairs(b) do if a[k]==nil then return false end end
         return true
     end
-    function h.Sync()
+    function h.Snapshot(currentSession)
+        local text=encode();if not text then return end
+        local snapshot=decode(text);if not snapshot then return end
+        if currentSession then
+            local records={}
+            for _,record in ipairs(snapshot.Records) do if record.Session==sessionId then records[#records+1]=record end end
+            snapshot.Records=records;snapshot.Scope='CURRENT_SESSION';snapshot.Session=sessionId
+            snapshot.TotalsScope='RETAINED_SESSION_RECORDS';snapshot.RetainedOnly=true
+            while true do
+                local totals={}
+                local function count(key) totals[key]=(totals[key] or 0)+1 end
+                for _,record in ipairs(records) do
+                    if record.Kind=='run_start' then count('Runs')
+                    elseif record.Kind=='throw' then count('Requests');count(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
+                    elseif record.Kind=='blocked' then count('Blocked')
+                    elseif record.Kind=='run_end' and record.Payload.Error then count('Errors') end
+                end
+                snapshot.Totals=totals
+                local ok,encoded=pcall(function() return codec:JSONEncode(snapshot) end)
+                if not ok or type(encoded)~='string' then return end
+                if #encoded<=maxBytes then text=encoded;break end
+                if #records==0 then return end
+                table.remove(records,1)
+            end
+        end
+        return text,snapshot
+    end
+    function h.Sync(currentSession)
+        local body,snapshot=h.Snapshot(currentSession)
+        if not body then h.sync='SNAPSHOT_INVALID';return end
         local remote,why=response('GET')
         if not remote then h.sync=why;return end
         local empty=next(remote)==nil
@@ -334,22 +363,23 @@ controller.history=(function()
         end
         if empty and cfg.Initialize==true then -- explicitly marked/empty dedicated bin only
         elseif not valid(remote) then h.sync='FOREIGN_SCHEMA_PRESERVED';return
-        elseif remote.Writer~=data.Writer then h.sync='OTHER_WRITER_PRESERVED';return
-        elseif remote.Revision>data.Revision then h.sync='REMOTE_AHEAD_PRESERVED';return end
-        if valid(remote) and remote.Revision==data.Revision then
-            if equal(remote,data,0) then h.syncedRevision=data.Revision;h.sync='READBACK_VERIFIED';return end
-            h.sync='REVISION_CONFLICT_PRESERVED';return
+        elseif remote.Writer~=snapshot.Writer then h.sync='OTHER_WRITER_PRESERVED';return
+        elseif remote.Revision>snapshot.Revision then h.sync='REMOTE_AHEAD_PRESERVED';return
+        elseif remote.Scope~=nil and remote.Scope~='CURRENT_SESSION' then h.sync='FOREIGN_SCOPE_PRESERVED';return end
+        if valid(remote) and remote.Revision==snapshot.Revision then
+            if equal(remote,snapshot,0) then h.syncedRevision=snapshot.Revision;h.sync='READBACK_VERIFIED';return end
+            -- The explicit companion switches the same writer between full and
+            -- current-session views. Other same-revision conflicts stay refused.
+            if remote.Scope==snapshot.Scope then h.sync='REVISION_CONFLICT_PRESERVED';return end
         end
-        local body=encode();if not body then h.sync='ENCODE_FAILED';return end
-        local snapshot=decode(body);if not snapshot then h.sync='SNAPSHOT_INVALID';return end
         local saved,err=response('PUT',body)
         if not saved or not equal(snapshot,saved,0) then cache.remoteUnsafe=true;h.sync=err or 'PUT_ECHO_MISMATCH_NO_RETRY';return end
         local confirmed,readError=response('GET')
         if not confirmed or not equal(snapshot,confirmed,0) then cache.remoteUnsafe=true;h.sync=readError or 'READBACK_MISMATCH_NO_RETRY';return end
         h.syncedRevision=snapshot.Revision;h.sync='READBACK_VERIFIED'
     end
-    local function schedule(field,fn)
-        local token={at=os.clock()};h[field]=token
+    local function schedule(field,fn,job)
+        local token={at=os.clock(),job=job};h[field]=token
         token.thread=task.defer(function()
             if ended or h[field]~=token then return end
             local ok=pcall(fn)
@@ -359,6 +389,60 @@ controller.history=(function()
             end
             if h[field]==token then h[field]=nil end
         end)
+        return token
+    end
+    function h.RequestUpload()
+        if ended or not started or not h.enabled then return nil,'HISTORY_NOT_RUNNING' end
+        if not h.remoteReady then return nil,h.sync end
+        if cache.remoteUnsafe then return nil,'IO_UNCERTAIN_NO_RETRY' end
+        if h.netWorker then return nil,'UPLOAD_BUSY' end
+        h.uploadSerial=(h.uploadSerial or 0)+1
+        local job={Id=h.uploadSerial,State='UPLOADING',Scope=cfg.CurrentSessionOnly and 'CURRENT_SESSION' or 'FULL_HISTORY'}
+        h.upload=job;h.lastSync=os.clock();h.sync='SYNCING'
+        schedule('netWorker',function()
+            local ok=pcall(h.Sync,cfg.CurrentSessionOnly==true)
+            if not ok then h.sync='WORKER_FAILED_NO_RETRY';cache.remoteUnsafe=true end
+            job.State=h.sync;job.Revision=h.sync=='READBACK_VERIFIED' and h.syncedRevision or nil
+        end,job)
+        return job
+    end
+    function h.CancelUpload(job)
+        if not job or h.upload~=job then return true end
+        if not h.netWorker or h.netWorker.job~=job then
+            if job.State=='UPLOADING' then job.State='CANCELLED' end
+            return true
+        end
+        if h.netWorker and h.netWorker.job==job then
+            local token=h.netWorker
+            if h.netIO then cache.remoteUnsafe=true end
+            if not pcall(task.cancel,token.thread) then return false end
+            h.netWorker=nil
+        end
+        job.State='CANCELLED';h.sync=cache.remoteUnsafe and 'STOPPED_IO_UNCERTAIN_NO_RETRY' or 'READY'
+        return true
+    end
+    function h.ConfigureJSONBin(value)
+        if ended or not started then return false,'HISTORY_NOT_RUNNING' end
+        if h.netWorker then return false,'UPLOAD_BUSY' end
+        h.remoteReady=false
+        if type(value)~='table' or type(value.BinId)~='string' or #value.BinId~=24 or not value.BinId:match('^%x+$')
+            or value.AccessKey~=nil and value.MasterKey~=nil then h.sync='CONFIG_INVALID';return false,h.sync end
+        local key=value.MasterKey or value.AccessKey
+        if type(key)~='string' or #key<1 then h.sync='CONFIG_INVALID';return false,h.sync end
+        for _,name in ipairs({'Initialize','ManualOnly','CurrentSessionOnly'}) do
+            if value[name]~=nil and type(value[name])~='boolean' then h.sync='CONFIG_INVALID';return false,h.sync end
+        end
+        local seconds=value.IntervalSeconds or 120
+        if not number(seconds) or seconds<60 or seconds>3600 then h.sync='INTERVAL_INVALID';return false,h.sync end
+        if not codec then h.sync='JSON_UNAVAILABLE';return false,h.sync end
+        if not async then h.sync='ASYNC_UNAVAILABLE';return false,h.sync end
+        requestFn=request or http_request or (type(syn)=='table' and syn.request) or (type(http)=='table' and http.request)
+        if type(requestFn)~='function' then h.sync='HTTP_UNAVAILABLE';return false,h.sync end
+        cfg={BinId=value.BinId,Initialize=value.Initialize==true,ManualOnly=value.ManualOnly==true,CurrentSessionOnly=value.CurrentSessionOnly==true}
+        binId=value.BinId;accessKey=key;keyHeader=value.MasterKey~=nil and 'X-Master-Key' or 'X-Access-Key';interval=seconds
+        h.remoteReady=true;h.sync=cache.remoteUnsafe and 'PREVIOUS_IO_UNCERTAIN_NO_RETRY' or 'READY'
+        h.lastSync=os.clock()-interval+10
+        return true,h.sync
     end
     function h.Update(now)
         if not h.enabled or not started or ended then return end
@@ -371,14 +455,15 @@ controller.history=(function()
             local token=h.netWorker
             if pcall(task.cancel,token.thread) then h.netWorker=nil end
             cache.remoteUnsafe=true;h.sync='TIMEOUT_NO_RETRY'
+            if h.upload and h.upload.State=='UPLOADING' then h.upload.State=h.sync end
         end
         if h.dirty and now-h.lastDisk>=10 and not h.diskWorker and h.canWrite and not cache.diskUnsafe then
             h.lastDisk=now
             if async then schedule('diskWorker',h.Flush) end -- synchronous fallback is confined to preserve/stop
         end
-        if h.remoteReady and not cache.remoteUnsafe and not h.netWorker and now-h.lastSync>=interval
+        if h.remoteReady and not cfg.ManualOnly and not cache.remoteUnsafe and not h.netWorker and now-h.lastSync>=interval
             and h.syncedRevision~=data.Revision and (h.sync=='READY' or h.sync=='READBACK_VERIFIED') then
-            h.lastSync=now;h.sync='SYNCING';schedule('netWorker',h.Sync)
+            h.lastSync=now;h.sync='SYNCING';schedule('netWorker',function() h.Sync(cfg.CurrentSessionOnly) end)
         end
     end
     function h.Start()
@@ -414,28 +499,15 @@ controller.history=(function()
         if bestSlot then cache.nextSlot=bestSlot==1 and 2 or 1 end
         if foreign or unreadable or sawInvalid and not data then cache.diskUnsafe=true end
         if not data then data={Schema=schema,Writer=guid(),Revision=0,Records={},Totals={}} end
-        cache.data=data;runId=guid();started=true
+        cache.data=data;runId=guid()
+        if type(cache.sessionId)~='string' or #cache.sessionId<1 or #cache.sessionId>100 or cache.sessionJobId~=game.JobId then
+            cache.sessionId=guid();cache.sessionJobId=game.JobId -- server ID stays in memory, never in history
+        end
+        sessionId=cache.sessionId;started=true
         h.storage=not codec and 'NO_JSON_MEMORY_ONLY' or cache.diskUnsafe and 'UNREADABLE_PRESERVED_MEMORY_ONLY'
             or type(readfile)~='function' and 'NO_READFILE_MEMORY_ONLY' or not h.canWrite and 'NO_FILES_MEMORY_ONLY' or 'READY'
         h.Append('run_start',{Runtime=VERSION,PreviousRecords=#data.Records,DiskRecovered=bestSlot~=nil})
-        if cfg~=nil then
-            if type(cfg)~='table' or type(cfg.BinId)~='string' or #cfg.BinId~=24 or not cfg.BinId:match('^%x+$')
-                or cfg.AccessKey~=nil and cfg.MasterKey~=nil then h.sync='CONFIG_INVALID';return end
-            accessKey=cfg.MasterKey or cfg.AccessKey
-            if type(accessKey)~='string' or #accessKey<1 then h.sync='CONFIG_INVALID';return end
-            keyHeader=cfg.MasterKey~=nil and 'X-Master-Key' or 'X-Access-Key'
-            if cfg.IntervalSeconds~=nil then
-                if not number(cfg.IntervalSeconds) or cfg.IntervalSeconds<60 or cfg.IntervalSeconds>3600 then h.sync='INTERVAL_INVALID';return end
-                interval=cfg.IntervalSeconds
-            end
-            if not codec then h.sync='JSON_UNAVAILABLE';return end
-            if not async then h.sync='ASYNC_UNAVAILABLE';return end
-            requestFn=request or http_request or (type(syn)=='table' and syn.request) or (type(http)=='table' and http.request)
-            if type(requestFn)~='function' then h.sync='HTTP_UNAVAILABLE';return end
-            binId=cfg.BinId
-            h.remoteReady=true;h.sync=cache.remoteUnsafe and 'PREVIOUS_IO_UNCERTAIN_NO_RETRY' or 'READY'
-            h.lastSync=os.clock()-interval+10 -- allow startup/throw work first
-        end
+        if cfg~=nil then h.ConfigureJSONBin(cfg) end
     end
     function h.Export()
         if not started then return nil,'OFF' end
@@ -448,6 +520,8 @@ controller.history=(function()
     function h.Report()
         return 'HISTORY_STORAGE|'..h.storage..'\nHISTORY_RECORDS|'..tostring(data and #data.Records or 0)
             ..'\nHISTORY_JSONBIN|'..h.sync..'\nHISTORY_SYNCED_REVISION|'..tostring(h.syncedRevision or 'NONE')
+            ..'\nHISTORY_UPLOAD_MODE|'..(type(cfg)=='table' and cfg.ManualOnly and 'MANUAL_ONLY' or 'AUTOMATIC')
+            ..'\nHISTORY_UPLOAD_RESULT|'..(h.upload and h.upload.State or 'NONE')
             ..'\nHISTORY_REVISION|'..tostring(data and data.Revision or 0)..'\nHISTORY_SAVED_REVISION|'..tostring(h.savedRevision or 'NONE')..'\nHISTORY_LIMIT|100_RECORDS_AND_80000_BYTES; OUTCOMES_UNKNOWN; NO_AUTO_TUNING'
     end
     function h.Stop(reason,hasError)
@@ -468,6 +542,7 @@ controller.history=(function()
         -- A synchronous COPY/file API may be yielding on another callback.
         -- Do not confirm cleanup until it returns; replacement stays blocked.
         if h.flushing then cache.diskUnsafe=true;h.storage='IO_UNCERTAIN_MEMORY_ONLY';return false end
+        if h.upload and h.upload.State=='UPLOADING' then h.upload.State='CANCELLED' end
         h.Flush();ended=true;accessKey=nil
         return h.netWorker==nil and h.diskWorker==nil
     end
@@ -1012,7 +1087,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.4.1','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.5','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
