@@ -42,7 +42,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 1,074 current mocked assertions pass, including 87 chat/session-upload checks and 138 retained-history/authentication checks, 56 adaptive-power checks and 33 native power/rollback checks. The new suite reproduces the archived short-95 fallback, checks intermediate power under closing coverage, unchanged open release readiness, marker independence, unsupported-control refusal, Angle recovery and transactional cleanup. Legacy non-power fixtures explicitly opt out while dedicated current power suites enable defaults. Source/bundle validation uses Lua 5.4.
 
-No live throws/chats were run. Native build compatibility, actual server speed conversion, catch comfort and iPhone performance remain unverified. The exact prior live failure cause is not established. The loader pins `ff3-v26.8` and retains `PELICAN_FF3_V26`.
+No live throws/chats were run. Native build compatibility, actual server speed conversion, catch comfort and iPhone performance remain unverified. The exact prior live failure cause is not established. The loader pins `ff3-v26.9` and retains `PELICAN_FF3_V26`.
 
 ## Preserved V26.2 and earlier behavior
 
@@ -86,7 +86,7 @@ Defender ETA uses the inherited speed-bounded pursuit/reach model (distance minu
 
 793 current mocked assertions pass, including 55 mode-policy checks. They cover the reproduced prior Bullet regression, timing-only Fit and fresh comparison, two-receiver call budget, lateral height retention, native speed/branch verification, rollback/conflicts/stop, unsupported output and the opt-in UI. Generic jump/frame tests now use Dime where an isolated Fit no longer qualifies; preserved historical regression cases remain.
 
-Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.8` and requires `PELICAN_FF3_V26`.
+Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.9` and requires `PELICAN_FF3_V26`.
 
 ## Preserved V26.1 comeback and V26 behavior
 
@@ -187,7 +187,7 @@ The V26 baseline comprised 635 mocked assertions: risk modes 60, visual release 
 
 New scenes distinguish a MOD burn from SAFE and a tighter TRUST burn from MOD, retain prevent/direct-path and eligibility gates, exercise the mobile cycle and a mid-solve mode change, retain SAFE packet/timing behavior and accept a jumping WR without mistaking vertical velocity for a route cut. A synthetic animation-driven head shift changes V25's packet but not V26's packet relative to the no-animation baseline. Post-send visual errors and stop-during-load resource cleanup are covered. The preparation-stage regression hooks now explicitly run during track loading rather than during post-send visual playback.
 
-Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.8` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
+Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.9` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
 
 ## V26.4 retained history
 
@@ -208,3 +208,7 @@ The separate [auto-execute companion](FF3_CHAT_UPLOAD.md) shares this controller
 ## V26.8 Moderate lane correction
 
 [Moderate requires a clear conservative lane](FF3_MODERATE.md): the old -1 lane minimum admitted nearly contested long-flight paths. Moderate now reuses CFG.ThrowLane (currently 4) while keeping its smaller endpoint/race allowance. SAFE and TRUST remain unchanged; Bullet remains strict. No additional solves, scans, release timers or lead adjustments are introduced. All 22 current suites pass **1,182 mocked assertions**; interception quality still requires live validation.
+
+## V26.9 target-depth plans and native Jump
+
+Expand the status pill and tap NORMAL to cycle NORMAL / DEEP / SHORT independently of risk. DEEP accepts catch points at least 20 yards beyond LOS or observed deep-route comebacks. SHORT prioritizes shallow completions and permits deep only when that trajectory is wide open. Native Jump is preferred only for its own conservative, latency-budgeted wide-open window. The current Angle/Power mode and configured leads remain; no extra release timer, native solve or world scan is added. [Full behavior, configuration and live limits](FF3_PASS_PLANS.md). All 23 local suites pass **1,249 mocked assertions**; native Jump catchability and in-game coverage remain unverified.

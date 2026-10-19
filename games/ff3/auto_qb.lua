@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.8): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.9): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -118,6 +118,16 @@ env.PELICAN_FF3_COMEBACK_CHAT=controller.comeback.enabled
 assert(ff3Options.JumpBullet==nil or type(ff3Options.JumpBullet)=='boolean','FF3.JumpBullet must be boolean')
 controller.jumpBullet={enabled=ff3Options.JumpBullet==true or ff3Options.JumpBullet==nil and env.PELICAN_FF3_JUMP_BULLET==true}
 env.PELICAN_FF3_JUMP_BULLET=controller.jumpBullet.enabled
+-- Target-depth preference is independent of SAFE/MOD/TRUST and native input mode.
+controller.passPlan={deepYards=ff3Options.DeepYards or 20,preferJump=ff3Options.WideOpenJump~=false}
+function controller.passPlan.normalize(value)
+    if type(value)=='string' then value=value:upper();if value=='NORMAL' or value=='DEEP' or value=='SHORT' then return value end end
+end
+controller.passPlan.mode=controller.passPlan.normalize(ff3Options.PassPlan or env.PELICAN_FF3_PASS_PLAN or 'NORMAL')
+assert(controller.passPlan.mode,'FF3.PassPlan must be NORMAL, DEEP or SHORT')
+assert(finite(controller.passPlan.deepYards) and controller.passPlan.deepYards>=6 and controller.passPlan.deepYards<=100,'FF3.DeepYards must be 6..100 yards')
+assert(ff3Options.WideOpenJump==nil or type(ff3Options.WideOpenJump)=='boolean','FF3.WideOpenJump must be boolean')
+env.PELICAN_FF3_PASS_PLAN=controller.passPlan.mode
 -- Explicit application risk policies, not calibrated game catch windows.
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
     MOD={margin=2,lane=CFG.ThrowLane,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
@@ -227,7 +237,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.8',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.9',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -241,7 +251,7 @@ controller.history=(function()
         if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
         local context=e.NativeContext()
         local control=touch.lastControl or {}
-        local values={table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        local values={controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
         for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
             local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
         end
@@ -249,7 +259,7 @@ controller.history=(function()
         if h.settingsSignature==signature then return end
         h.settingsSignature=signature
         data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
-            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
         data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
@@ -286,6 +296,7 @@ controller.history=(function()
         end
         return h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
+            PassPlan=controller.passPlan.mode,CatchDepthYards=shot.catchDepthYards,DeepComeback=shot.deepComeback,WideOpen=shot.wideOpen,WideMargin=shot.wideMargin,WideLane=shot.wideLane,JumpPreferred=shot.jumpPreferred,
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
@@ -340,7 +351,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.8'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.9'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1041,6 +1052,35 @@ end
 local function downfield(point)
     return lines.los and lines.forward and flat(point-lines.los):Dot(lines.forward) or -math.huge
 end
+function controller.passPlan.observe(s,player)
+    if not lines.los or not lines.forward or lines.status~='OBSERVED_LINES_STABLE' or not possession.wasReady then return end
+    local depth=downfield(s.p)/3
+    if s.depthEpoch~=possession.epoch or s.depthGeneration~=lines.generation or s.depthTeam~=player.Team then
+        s.depthPeakYards=depth;s.depthEpoch=possession.epoch;s.depthGeneration=lines.generation;s.depthTeam=player.Team
+    else s.depthPeakYards=math.max(s.depthPeakYards or depth,depth) end
+end
+function controller.passPlan.assess(shot,receiver)
+    local p=controller.passPlan
+    local verified=lines.los~=nil and lines.forward~=nil and lines.status=='OBSERVED_LINES_STABLE'
+    shot.catchDepthYards=verified and downfield(shot.arrival)/3 or nil
+    shot.deepTarget=shot.catchDepthYards~=nil and shot.catchDepthYards>=p.deepYards
+    local current=verified and downfield(receiver.p)/3 or nil
+    shot.deepComeback=verified and receiver.depthEpoch==possession.epoch and receiver.depthGeneration==lines.generation
+        and finite(receiver.depthPeakYards) and receiver.depthPeakYards>=p.deepYards
+        and current<=receiver.depthPeakYards-CFG.MinMotionTravel/3
+        and flat(receiver.v):Dot(lines.forward)<=-CFG.MinMoveSpeed or false
+    -- A wide-open policy uses the existing safety-surplus scales; these are
+    -- application preferences, not calibrated FF3 catch/interception radii.
+    local ping=shot.networkPing
+    shot.wideOpen=finite(ping) and ping>=0 and (shot.wideMargin or shot.margin)>=CFG.ThrowMargin*2 and (shot.wideLane or shot.lane)>=CFG.ThrowLane*2
+        and not shot.safetyOverTop and shot.defenderETA>shot.time+ping or false
+    shot.planAllowed=p.mode=='NORMAL' or verified and (p.mode=='DEEP' and (shot.deepTarget or shot.deepComeback)
+        or p.mode=='SHORT' and (not shot.deepTarget or shot.wideOpen)) or false
+    shot.planReason=shot.planAllowed and 'PASS_PLAN_ALLOWED' or (p.mode=='DEEP' and 'DEEP_OR_COMEBACK_ONLY' or 'SHORT_DEEP_NOT_WIDE_OPEN')
+    shot.jumpPreferred=p.preferJump and shot.mode=='Jump' and shot.wideOpen or false
+    if p.preferJump and shot.mode=='Jump' and not shot.wideOpen then shot.planAllowed=false;shot.planReason='JUMP_NOT_WIDE_OPEN_BEFORE_DEFENSE' end
+    return shot.planAllowed
+end
 local function onField(point)
     if not lines.ground then return false end
     local p=lines.ground.CFrame:PointToObjectSpace(point)
@@ -1107,7 +1147,8 @@ end
 function controller.GetReport()
     local selectedRisk=riskPolicy.profiles[riskPolicy.mode]
     local rows={VERSION,'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
-        'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'RISK_MODE|'..riskPolicy.mode,'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
+        'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'RISK_MODE|'..riskPolicy.mode,'PASS_PLAN|'..controller.passPlan.mode,
+        'PASS_PLAN_DEEP_YARDS|'..controller.passPlan.deepYards,'WIDE_OPEN_JUMP|'..tostring(controller.passPlan.preferJump),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
         'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
         'LOCK_ONLY|'..tostring(choice~=nil and choice.manualOnly==true),
@@ -1138,7 +1179,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.8','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.9','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -1267,7 +1308,10 @@ function controller.Stop(reason)
 end
 function controller.SetAuto(value)
     auto=value==true
-    if not auto then resetFieldWait(); releaseChoice();if controller.comeback.cancel then controller.comeback.cancel() end end
+    if not auto then
+        resetFieldWait(); releaseChoice();if controller.comeback.cancel then controller.comeback.cancel() end
+        for _,s in pairs(samples) do s.depthPeakYards=nil;s.depthEpoch=nil end
+    end
     if autoButton then autoButton.Text=auto and 'AUTO ON' or 'AUTO OFF' end
     log('AUTO',auto)
 end
@@ -1290,6 +1334,17 @@ function controller.SetRiskMode(value)
         log('RISK_MODE',name);setGate('RISK_MODE_'..name)
     end
     if riskButton then riskButton.Text=riskPolicy.mode end
+    return true
+end
+function controller.SetPassPlan(value)
+    if stopped then return false end
+    local p=controller.passPlan;local name=p.normalize(value)
+    if not name then return false end
+    if name~=p.mode then
+        releaseChoice();p.mode=name;env.PELICAN_FF3_PASS_PLAN=name
+        log('PASS_PLAN',name);setGate('PASS_PLAN_'..name)
+    end
+    if p.button then p.button.Text=p.mode end
     return true
 end
 function controller.SetJumpBullet(value)
@@ -1754,6 +1809,7 @@ local function sample(player,now)
     s.p,s.v,s.at=root.Position,velocity,now
     while #s.path>1 and now-s.path[1].at>CFG.MotionWindow do table.remove(s.path,1) end
     s.hum,s.head,s.name=hum,head,player.Name
+    controller.passPlan.observe(s,player)
     return s
 end
 local function receiverReady(player,s,now,point)
@@ -1963,7 +2019,8 @@ local function lane(shot,d,direct)
     return math.min(interval(lo,math.min(hi,enter)),interval(math.max(lo,leave),hi))
 end
 local function risk(shot,receiver,defenders)
-    local margin,laneMargin=45,45; local t=shot.time
+    local margin,laneMargin,wideMargin,wideLane=45,45,45,45; local t=shot.time
+    local pingBudget=finite(shot.networkPing) and math.max(0,shot.networkPing) or 0
     local firstDB,directLane=math.huge,45
     shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
     for _,d in ipairs(defenders) do
@@ -1980,9 +2037,12 @@ local function risk(shot,receiver,defenders)
         end
         if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
         local pathClearance=lane(shot,d)
+        wideMargin=math.min(wideMargin,clearance-speed*pingBudget)
+        wideLane=math.min(wideLane,pathClearance-speed*pingBudget)
         if pathClearance<laneMargin then laneMargin=pathClearance;shot.laneDB=d.name;shot.laneActor=d end
     end
     shot.margin,shot.lane,shot.defenderETA=margin,laneMargin,firstDB
+    shot.wideMargin,shot.wideLane=wideMargin,wideLane
     shot.powerAllowed=touch.fullAllowed(shot)
     if shot.mode=='Fit' then shot.fitAllowed=false end
     if riskPolicy.mode~='SAFE' then
@@ -2064,8 +2124,10 @@ local function coverage(shot,s,defenders)
     shot.burnCandidate=forward and ahead and not shot.safetyOverTop or false
     shot.clearBurn=forward and ahead and not shot.safetyOverTop
         and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane or false
+    controller.passPlan.assess(shot,s)
 end
 local function throwable(shot)
+    if shot.planAllowed==false then return false end
     if shot.releaseBlocked then return false end
     if shot.powerAllowed==false then return false end
     if shot.mode=='Fit' and not shot.fitAllowed then return false end
@@ -2102,6 +2164,8 @@ local function better(a,b)
     -- A selectable but unreleasable endpoint cannot monopolize the decision.
     local ar,br=throwable(a),throwable(b)
     if ar~=br then return ar end
+    if ar and controller.passPlan.mode=='SHORT' and a.deepTarget~=b.deepTarget then return not a.deepTarget end
+    if ar and a.jumpPreferred~=b.jumpPreferred then return a.jumpPreferred==true end
     if ar and a.mode=='Bullet' and b.mode=='Bullet' and a.jumpBullet~=b.jumpBullet then return not a.jumpBullet end
     if ar and a.softBullet~=b.softBullet then return a.softBullet==true end
     if ar and a.softBullet and b.softBullet and a.power~=b.power then return a.power<b.power end
@@ -2113,6 +2177,7 @@ local function receiverBetter(a,b)
     if not b then return true end
     local ar,br=throwable(a.shot),throwable(b.shot)
     if ar~=br then return ar end
+    if ar and controller.passPlan.mode=='SHORT' and a.shot.deepTarget~=b.shot.deepTarget then return not a.shot.deepTarget end
     if a.shot.clearBurn~=b.shot.clearBurn then return a.shot.clearBurn==true end
     if ar and a.shot.passYards~=b.shot.passYards then return a.shot.passYards<b.shot.passYards end
     return better(a.shot,b.shot)
@@ -2268,7 +2333,7 @@ local function solve(player,mode)
         launchHead=launchHead,qbModel=qbModel,targetPosition=targetPosition,targetVelocity=targetVelocity,
         passYards=flat(arrival-origin).Magnitude/3,at=os.clock()}
 end
-local plannerModes={'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump'}
+local plannerModes=controller.passPlan.preferJump and {'Jump','SoftBullet','QuickBullet','Bullet','Fit','Dime'} or {'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump'}
 controller.jumpBullet.plannerModes=plannerModes
 if controller.jumpBullet.enabled then plannerModes[7]='JumpBullet' end
 function controller.fit.alternatives(player,s,defenders,now,fresh)
@@ -2348,7 +2413,7 @@ local function evaluate(receivers,indices,defenders,now)
         for _,shot in ipairs(valid) do
             local mode=shot.variant or shot.mode
             candidateEvidence[#candidateEvidence+1]=string.format('%s %s t=%.3f p=%.2f margin=%.2f lane=%.2f release=%s clearBurn=%s safetyOverTop=%s',r.player.Name,mode,shot.time,shot.power,shot.margin,shot.lane,tostring(throwable(shot)),tostring(shot.clearBurn),tostring(shot.safetyOverTop))..string.format(' directLane=%s race=%s wrETA=%s lateral=%s',tostring(shot.directLane),tostring(shot.raceAdvantage),tostring(shot.receiverETA),tostring(shot.routeLateral))
-                ..' fitReason='..tostring(shot.fitReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)..' powerReason='..tostring(shot.powerReason)..' minFlight='..tostring(shot.minimumFlight)
+                ..' fitReason='..tostring(shot.fitReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)..' powerReason='..tostring(shot.powerReason)..' minFlight='..tostring(shot.minimumFlight)..' plan='..tostring(shot.planReason)..' depthYards='..tostring(shot.catchDepthYards)..' comeback='..tostring(shot.deepComeback)..' wide='..tostring(shot.wideOpen)
             if better(shot,bestShot) then bestShot=shot end
         end
         if bestShot then
@@ -2367,7 +2432,8 @@ local function evaluate(receivers,indices,defenders,now)
     end
     if best and incumbent and best.player~=incumbent.player then
         local bReady,iReady=throwable(best.shot),throwable(incumbent.shot)
-        if iReady and not (best.shot.clearBurn and not incumbent.shot.clearBurn)
+        local shortUpgrade=controller.passPlan.mode=='SHORT' and bReady and not best.shot.deepTarget and incumbent.shot.deepTarget
+        if iReady and not shortUpgrade and not (best.shot.clearBurn and not incumbent.shot.clearBurn)
             and (not bReady or incumbent.shot.passYards-best.shot.passYards<CFG.ReceiverSwitchYards) then
             best=incumbent
         elseif not bReady and not iReady
@@ -2418,7 +2484,7 @@ forecastGuide=function(data,now)
         local arrival=shot.arrival+velocity*lead
         if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=.5)
             and (downfield(arrival)>=(lines.goalToGo and 0 or CFG.MinDownfieldYards*3)) then
-            local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,
+            local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,networkPing=shot.networkPing,
                 velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
             -- This is an estimated continuation, not an extra native solve.
             -- Reject estimates exceeding the source's maximum release power.
@@ -2426,7 +2492,7 @@ forecastGuide=function(data,now)
                 local defenders={}
                 for i,d in ipairs(data.defenders) do defenders[i]={p=predict(d,lead),v=d.v,turn=d.turn,
                     observedSpeed=d.observedSpeed,hum=d.hum,name=d.name} end
-                local receiver={p=predict(s,lead),v=s.v,turn=s.turn,routeTurn=s.routeTurn}
+                local receiver={p=predict(s,lead),v=s.v,turn=s.turn,routeTurn=s.routeTurn,depthEpoch=s.depthEpoch,depthGeneration=s.depthGeneration,depthPeakYards=s.depthPeakYards}
                 risk(future,receiver,defenders);coverage(future,receiver,defenders);assistance.guideChecks=assistance.guideChecks+1
                 if throwable(future) then
                     assistance.guide={player=r.player,model=s.model,qbModel=ball.model,epoch=possession.epoch,
@@ -3093,7 +3159,7 @@ local function releaseNow(ball,selected,defenders,now)
     end
     if sequence.fastBurn and not lines.goalToGo and not shot.burnCandidate then setGate('BURN_COVERAGE_CHANGED'); return end
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
-    if not throwable(shot) then setGate(shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
+    if not throwable(shot) then setGate(shot.planAllowed==false and shot.planReason or shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
     local _,receiverRoot=body(selected.player)
     if sequence.deep then
         local movement=receiverRoot and flat(receiverRoot.AssemblyLinearVelocity)
@@ -3360,7 +3426,7 @@ local function tick(now)
         risk(best.shot,best.sample,defenders); coverage(best.shot,best.sample,defenders)
         if best.shot.mode=='Fit' then controller.fit.assess(best.shot,controller.fit.alternatives(best.player,best.sample,defenders,now)) end
         if not throwable(best.shot) then
-            opportunities[best.player]=nil; holdManual(best,best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
+            opportunities[best.player]=nil; holdManual(best,best.shot.planAllowed==false and best.shot.planReason or best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
             assistance.guidePending={r=best,ball=ball,defenders=defenders};return
         end
         best.manualOnly=false
@@ -3406,6 +3472,11 @@ local built,buildError=pcall(function()
     controller.comeback.button=button(controller.comeback.enabled and 'CB ON' or 'CB OFF',-226,54,87)
     controller.comeback.button.Name='ComebackChat';controller.comeback.button.Visible=false
     connect(controller.comeback.button.Activated,function() controller.SetComebackChat(not controller.comeback.enabled) end)
+    controller.passPlan.button=button(controller.passPlan.mode,-286,54,112);controller.passPlan.button.Name='PassPlan';controller.passPlan.button.Visible=false
+    connect(controller.passPlan.button.Activated,function()
+        local mode=controller.passPlan.mode
+        controller.SetPassPlan(mode=='NORMAL' and 'DEEP' or mode=='DEEP' and 'SHORT' or 'NORMAL')
+    end)
     controller.jumpBullet.button=button(controller.jumpBullet.enabled and 'JB ON' or 'JB OFF',-226,54,112)
     controller.history.button=button('DATA',-226,54,137);controller.history.button.Name='History';controller.history.button.Visible=false
     controller.receiverEvidence.button=button('LEADS',-286,54,137);controller.receiverEvidence.button.Visible=false
@@ -3471,7 +3542,7 @@ local built,buildError=pcall(function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
         controller.comeback.button.Visible=expanded
-        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded
+        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded
         if not expanded then controller.receiverEvidence.panel.Visible=false end
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
