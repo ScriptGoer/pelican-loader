@@ -38,3 +38,5 @@ All **24 local suites / 1,319 mocked assertions** pass. The new 67-check friend 
 The live loader pins ff3-v26.10. Immutable ff3-v26.9 preserves the prior behavior; other game routes and standalone companion source are unchanged.
 
 V26.11 extends the team-chat owner with verified-friend `slant right`, `slant left` and `cut back` streak/prevent calls. The exact-cut-back-only description above records V26.10 behavior. [Current chat behavior](FF3_ROUTE_CALLS.md).
+
+V26.12 adds explicit TRUSTED state and opt-in raised-Dime trials. ANY may resolve a candidate friendship for either route advice or the mag trial; receiver eligibility remains ANY. FRIENDS still requires actual friendship for a Pelican lock/release: manual mag trust does not override that independent filter. [Current trust and trial controls](FF3_TRUSTED_MAG.md).

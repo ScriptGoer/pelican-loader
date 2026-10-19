@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.11): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.12): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -141,14 +141,14 @@ controller.receiverFilter=(function()
         local id=player.UserId
         return type(id)=='number' and id==id and id>0 and id<1e15 and id%1==0 and id or nil
     end
-    function f.friend(player)
+    function f.friend(player,request)
         local id=uid(player);if not id then return false,'FRIENDSHIP_UNVERIFIED' end
         local saved=f.cache[player]
         if saved and saved.uid==id and os.clock()<saved.untilAt then
             if saved.friend then return true end
             return false,saved.reason
         end
-        if not f.pending[player] and #f.queue<CFG.MaxRoster then f.pending[player]=true;f.queue[#f.queue+1]=player end
+        if request~=false and not f.pending[player] and #f.queue<CFG.MaxRoster then f.pending[player]=true;f.queue[#f.queue+1]=player end
         return false,'FRIENDSHIP_CHECK_PENDING'
     end
     function f.allowed(player)
@@ -171,7 +171,7 @@ controller.receiverFilter=(function()
     end
     function f.update(now)
         if stopped then return end
-        if f.mode=='ANY' and (not controller.comeback.enabled or not auto or not throwing) then f.cancel();return end
+        if f.mode=='ANY' and (not (controller.comeback.enabled or controller.mag.enabled) or not auto or not throwing) then f.cancel();return end
         if f.worker then
             if now-f.worker.at>15 then
                 local player=f.worker.player
@@ -211,6 +211,21 @@ controller.receiverFilter=(function()
     end
     function f.stop() return f.cancel() end
     return f
+end)()
+-- Added height is an explicit opt-in calibration trial, not a measured mag zone.
+controller.mag=(function()
+    local options=ff3Options.MagTrial or {}
+    assert(type(options)=='table','FF3.MagTrial must be a table')
+    assert(options.Enabled==nil or type(options.Enabled)=='boolean','MagTrial.Enabled must be boolean')
+    local trusted=env.PELICAN_FF3_WR_TRUSTED
+    if type(trusted)~='table' or getmetatable(trusted)~=nil then trusted={};env.PELICAN_FF3_WR_TRUSTED=trusted end
+    local m={manual=trusted,extraY=options.ExtraY or .25}
+    m.enabled=options.Enabled==true or options.Enabled==nil and env.PELICAN_FF3_MAG_TRIAL==true
+    assert(finite(m.extraY) and m.extraY>0 and m.extraY<=.5,'MagTrial.ExtraY must be >0 and <=0.5 native lead units')
+    env.PELICAN_FF3_MAG_TRIAL=m.enabled
+    m.status=m.enabled and 'WAIT_TRUSTED_TRAJECTORY' or 'OFF'
+    function m.Reject(reason) m.status=reason;return nil,reason end
+    return m
 end)()
 -- Explicit application risk policies, not calibrated game catch windows.
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
@@ -321,7 +336,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.11',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.12',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -335,7 +350,7 @@ controller.history=(function()
         if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
         local context=e.NativeContext()
         local control=touch.lastControl or {}
-        local values={controller.receiverFilter.mode,controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        local values={controller.receiverFilter.mode,tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
         for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
             local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
         end
@@ -343,7 +358,7 @@ controller.history=(function()
         if h.settingsSignature==signature then return end
         h.settingsSignature=signature
         data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
-            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',ReceiverFilter=controller.receiverFilter.mode,PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',ReceiverFilter=controller.receiverFilter.mode,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
         data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
@@ -373,7 +388,7 @@ controller.history=(function()
         for i,d in ipairs(defenders or {}) do if i>12 then break end;actors[#actors+1]=h.Actor(d.name,d) end
         local comparisons={}
         local cached=player and shotCache[player]
-        for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet'}) do
+        for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet','MagDime'}) do
             local other=cached and cached.shots and cached.shots[mode]
             if other then comparisons[#comparisons+1]={Mode=mode,Power=other.power,Time=other.time,Arrival=h.Vector(other.arrival),
                 Margin=other.margin,Lane=other.lane,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
@@ -391,6 +406,8 @@ controller.history=(function()
             LeadControls=controller.receiverEvidence and controller.receiverEvidence.Bindings(shot),
             NativeContext=controller.receiverEvidence and controller.receiverEvidence.NativeContext(),
             Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},ManualInput=shot.nativeInput,
+            MagTrial=shot.magTrial,MagExtraY=shot.magExtraY,MagTrustSource=shot.magTrustSource,
+            MagBaseLead=shot.magBaseLead and {shot.magBaseLead.X,shot.magBaseLead.Y},MagCatchCalibration=shot.magTrial and 'MISSING; ANGLE_REQUIRED_UNVERIFIED' or nil,
             InputKind=shot.nativeInputKind,Ping=shot.networkPing,DistanceYards=shot.passYards,
             FitReason=shot.fitReason,ComparedMode=shot.fitAlternativeVariant,ComparedTime=shot.fitAlternativeTime,
             ComparedDBETA=shot.fitAlternativeDB,OverTop=shot.safetyOverTop,ClearBurn=shot.clearBurn,
@@ -435,7 +452,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.11'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.12'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -810,11 +827,36 @@ function controller.SetBlacklisted(player,value)
     if stopped or not instance(player,'Player') or player==me then return false end
     local key=receiverKey(player)
     blacklist[key]=value==true and true or nil
+    if value then controller.mag.manual[key]=nil end
     log('BLACKLIST',player.Name..' '..tostring(value==true))
     opportunities[player]=nil; shotCache[player]=nil
     if value and choice and choice.player==player then releaseChoice() end
     if renderReceivers then renderReceivers() end
     return true
+end
+function controller.GetReceiverState(player)
+    if controller.IsBlacklisted(player) then return 'BLOCKED' end
+    return controller.mag.manual[receiverKey(player)]==true and 'TRUSTED' or 'NORMAL'
+end
+function controller.SetReceiverState(player,value)
+    if stopped or not instance(player,'Player') or player==me or not ({NORMAL=true,BLOCKED=true,TRUSTED=true})[value] then return false end
+    local key=receiverKey(player)
+    if value=='TRUSTED' and key:sub(1,4)~='UID:' then return false end
+    releaseChoice()
+    blacklist[key]=value=='BLOCKED' and true or nil
+    controller.mag.manual[key]=value=='TRUSTED' and true or nil
+    log('RECEIVER_STATE',value)
+    if renderReceivers then renderReceivers() end
+    return true
+end
+function controller.mag.Source(player,request)
+    if not teammate(player) then return end
+    if controller.mag.manual[receiverKey(player)]==true then return 'MANUAL' end
+    if controller.receiverFilter.friend(player,request) then return 'FRIEND' end
+end
+function controller.mag.Allowed(player)
+    if not controller.mag.enabled then return false end
+    return controller.mag.Source(player)~=nil
 end
 
 -- LOS geometry is preserved from the earlier FF3 reports: the observed ground
@@ -1265,7 +1307,10 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.11','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.12','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
+        'MAG_STATUS|'..controller.mag.status,
+        'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -1317,7 +1362,7 @@ function controller.GetReport()
             ..' manual='..clean(profile.q.ManualType)..' power='..clean(profile.q.Power)
             ..' locked='..tostring(profile.q.Locked)..' lockedName='..clean(profile.q.LockedOntoName)
     end
-    for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet'}) do rows[#rows+1]='MODE_EVALUATIONS|'..mode..' '..(modeChecks[mode] or 0) end
+    for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet','MagDime'}) do rows[#rows+1]='MODE_EVALUATIONS|'..mode..' '..(modeChecks[mode] or 0) end
     for _,row in ipairs(touch.traces) do rows[#rows+1]='BULLET_POWER_TRACE|'..row end
     for i,decision in ipairs(decisionHistory) do
         rows[#rows+1]='THROW_EVIDENCE|'..i..' '..decision.summary
@@ -1452,9 +1497,18 @@ end
 function controller.SetJumpBullet(value)
     if stopped or type(value)~='boolean' then return false end
     releaseChoice();controller.jumpBullet.enabled=value;env.PELICAN_FF3_JUMP_BULLET=value
-    if controller.jumpBullet.plannerModes then controller.jumpBullet.plannerModes[7]=value and 'JumpBullet' or nil end
+    if controller.mag.RefreshModes then controller.mag.RefreshModes() end
     if controller.jumpBullet.button then controller.jumpBullet.button.Text=value and 'JB ON' or 'JB OFF' end
     log('JUMP_BULLET',value and 'OPT_IN_UNCALIBRATED_FIT_HEIGHT_TRIAL' or 'OFF')
+    return true
+end
+function controller.SetMagTrial(value)
+    if stopped or type(value)~='boolean' then return false end
+    releaseChoice();controller.mag.enabled=value;env.PELICAN_FF3_MAG_TRIAL=value
+    controller.mag.status=value and 'WAIT_TRUSTED_TRAJECTORY' or 'OFF'
+    if controller.mag.RefreshModes then controller.mag.RefreshModes() end
+    if controller.mag.button then controller.mag.button.Text=value and 'MAG TEST' or 'MAG OFF' end
+    log('MAG_TRIAL',value and 'OPT_IN_UNCALIBRATED_RAISED_DIME' or 'OFF')
     return true
 end
 if context.RegisterCleanup then context.RegisterCleanup(function() return controller.Stop('LOADER_CLEANUP') end) end
@@ -2314,6 +2368,7 @@ local function throwable(shot)
     if shot.mode=='Fit' and not shot.fitAllowed then return false end
     local strict=shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane
         and (not shot.safetyOverTop or shot.mode=='Bullet')
+    if shot.magTrial then return strict and controller.mag.Allowed(shot.magPlayer) end
     if strict then return true end
     local p=riskPolicy.profiles[riskPolicy.mode]
     return riskPolicy.mode~='SAFE' and shot.mode~='Bullet' and not shot.softBullet and shot.burnCandidate==true and not shot.safetyOverTop
@@ -2345,6 +2400,7 @@ local function better(a,b)
     -- A selectable but unreleasable endpoint cannot monopolize the decision.
     local ar,br=throwable(a),throwable(b)
     if ar~=br then return ar end
+    if ar and a.magTrial~=b.magTrial then return not a.magTrial end
     if ar and controller.passPlan.mode=='SHORT' and a.deepTarget~=b.deepTarget then return not a.deepTarget end
     if ar and a.jumpPreferred~=b.jumpPreferred then return a.jumpPreferred==true end
     if ar and a.mode=='Bullet' and b.mode=='Bullet' and a.jumpBullet~=b.jumpBullet then return not a.jumpBullet end
@@ -2358,6 +2414,7 @@ local function receiverBetter(a,b)
     if not b then return true end
     local ar,br=throwable(a.shot),throwable(b.shot)
     if ar~=br then return ar end
+    if ar and a.shot.magTrial~=b.shot.magTrial then return not a.shot.magTrial end
     if ar and controller.passPlan.mode=='SHORT' and a.shot.deepTarget~=b.shot.deepTarget then return not a.shot.deepTarget end
     if a.shot.clearBurn~=b.shot.clearBurn then return a.shot.clearBurn==true end
     if ar and a.shot.passYards~=b.shot.passYards then return a.shot.passYards<b.shot.passYards end
@@ -2382,6 +2439,8 @@ end
 local function solve(player,mode)
     local soft=mode=='SoftBullet' or mode=='QuickBullet'
     local jump=mode=='JumpBullet'
+    local mag=mode=='MagDime'
+    if mag and not controller.mag.Allowed(player) then return controller.mag.Reject('MAG_TRUST_OR_TRIAL_UNAVAILABLE') end
     if jump and not controller.jumpBullet.enabled then return nil,'JUMP_BULLET_OFF' end
     if soft and touch.profile~=profile then touch.profile=profile;touch.method='POWER';touch.methodReason='NOT_PROBED';touch.methodReceipt=nil end
     local requestedPower=soft and closePower(player,mode=='QuickBullet') or nil
@@ -2391,7 +2450,11 @@ local function solve(player,mode)
         if not profile or not leadTable(profile.leads) or profile.leads.Fit.Y<=0 then return nil,'JUMP_BULLET_FIT_HEIGHT_UNAVAILABLE' end
         appliedLead=Vector2.new(profile.leads.Bullet.X,profile.leads.Fit.Y);requestedPower=95
     end
-    local nativeMode=jump and 'Jump' or soft and 'Dime' or mode
+    if mag then
+        if not profile or not leadTable(profile.leads) then return controller.mag.Reject('MAG_LEAD_UNAVAILABLE') end
+        appliedLead=Vector2.new(profile.leads.Dime.X,profile.leads.Dime.Y+controller.mag.extraY)
+    end
+    local nativeMode=jump and 'Jump' or (soft or mag) and 'Dime' or mode
     -- The source's selected manual value is power in Power mode and degrees
     -- in Angle mode. Do not keep passing the old Angle after selecting Power.
     local nativeInput=(soft or jump) and requestedPower or profile and (profile.q.ManualType=='Power' and profile.q.Power or profile.q.Angle)
@@ -2430,6 +2493,10 @@ local function solve(player,mode)
             modeTransaction.fields[#modeTransaction.fields+1]={object=q,key='Angle',before=rawget(q,'Angle'),written=nativeInput}
             rawset(q,'Angle',nativeInput)
         end
+    end
+    if mag then
+        modeTransaction.fields[#modeTransaction.fields+1]={object=profile.leads,key='Dime',before=rawget(profile.leads,'Dime'),written=appliedLead}
+        rawset(profile.leads,'Dime',appliedLead)
     end
     rawset(q.AutoThrowType,'Enabled',false); rawset(q,'SelectedType',nativeMode)
     nativeCalls=nativeCalls+1; frameCalls=frameCalls+1; maxFrameCalls=math.max(maxFrameCalls,frameCalls); modeChecks[mode]=(modeChecks[mode] or 0)+1
@@ -2481,6 +2548,11 @@ local function solve(player,mode)
         return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH'
     end
     if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
+    if mag then
+        if not controller.mag.Allowed(player) then return controller.mag.Reject('MAG_TRUST_REVOKED') end
+        if math.abs(arrival.Y-aimpoint.Y-appliedLead.Y)>endpointTolerance then return controller.mag.Reject('MAG_VERTICAL_LEAD_NOT_HONORED') end
+        controller.mag.status='NATIVE_OUTPUT_VERIFIED_CATCH_UNCALIBRATED'
+    end
     if soft or jump then
         local prefix=jump and 'JUMP_BULLET_' or 'CLOSE_BULLET_'
         local function reject(reason,switchMethod)
@@ -2506,8 +2578,10 @@ local function solve(player,mode)
         end
     end
     appliedLead=appliedLead or profile.leads[soft and 'Bullet' or mode]
-    return {origin=origin,velocity=velocity,power=power,time=time,mode=(soft or jump) and 'Bullet' or mode,arrival=arrival,
+    return {origin=origin,velocity=velocity,power=power,time=time,mode=mag and 'Dime' or (soft or jump) and 'Bullet' or mode,arrival=arrival,
         variant=mode,softBullet=soft,jumpBullet=jump,nativeMode=nativeMode,appliedLead=appliedLead,
+        magTrial=mag,magPlayer=mag and player or nil,magTrustSource=mag and controller.mag.Source(player,false) or nil,
+        magExtraY=mag and controller.mag.extraY or nil,magBaseLead=mag and profile.leads.Dime or nil,
         powerMethod=soft and touch.method or 'NATIVE',requestedPower=requestedPower,
         effectiveYLead=arrival.Y-aimpoint.Y,verticalLeadControlActive=math.abs((arrival.Y-aimpoint.Y)-appliedLead.Y)<=endpointTolerance,
         nativeInput=nativeInput,nativeInputKind=((soft or jump) and (not soft or touch.method=='POWER') or not soft and not jump and q.ManualType=='Power') and 'POWER' or 'ANGLE_DEGREES',
@@ -2516,7 +2590,12 @@ local function solve(player,mode)
 end
 local plannerModes=controller.passPlan.preferJump and {'Jump','SoftBullet','QuickBullet','Bullet','Fit','Dime'} or {'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump'}
 controller.jumpBullet.plannerModes=plannerModes
-if controller.jumpBullet.enabled then plannerModes[7]='JumpBullet' end
+function controller.mag.RefreshModes()
+    plannerModes[7]=nil;plannerModes[8]=nil
+    if controller.jumpBullet.enabled then plannerModes[#plannerModes+1]='JumpBullet' end
+    if controller.mag.enabled then plannerModes[#plannerModes+1]='MagDime' end
+end
+controller.mag.RefreshModes()
 function controller.fit.alternatives(player,s,defenders,now,fresh)
     local result={};local cache=shotCache[player]
     if not cache or cache.model~=s.model or cache.epoch~=possession.epoch or cache.generation~=lines.generation then return result end
@@ -2614,7 +2693,8 @@ local function evaluate(receivers,indices,defenders,now)
     if best and incumbent and best.player~=incumbent.player then
         local bReady,iReady=throwable(best.shot),throwable(incumbent.shot)
         local shortUpgrade=controller.passPlan.mode=='SHORT' and bReady and not best.shot.deepTarget and incumbent.shot.deepTarget
-        if iReady and not shortUpgrade and not (best.shot.clearBurn and not incumbent.shot.clearBurn)
+        local ordinaryUpgrade=bReady and incumbent.shot.magTrial and not best.shot.magTrial
+        if iReady and not shortUpgrade and not ordinaryUpgrade and not (best.shot.clearBurn and not incumbent.shot.clearBurn)
             and (not bReady or incumbent.shot.passYards-best.shot.passYards<CFG.ReceiverSwitchYards) then
             best=incumbent
         elseif not bReady and not iReady
@@ -2854,7 +2934,7 @@ controller.receiverEvidence=(function()
         local x=shot.mode;local y=shot.mode
         if shot.softBullet then x='Bullet';y='Bullet' end
         if shot.jumpBullet then x='Bullet';y='Fit' end
-        return {X=x..'.X',Y=y..'.Y'}
+        return {X=x..'.X',Y=y..'.Y',YOffset=shot.magTrial and 'MagTrial.ExtraY' or nil}
     end
     local function owner(part)
         local function ancestor(o)
@@ -3349,6 +3429,7 @@ local function releaseNow(ball,selected,defenders,now)
         end
     end
     if not throwing or not auto or not ownsLock() or not teammate(selected.player) or not controller.receiverFilter.allowed(selected.player) or receiverMenu and receiverMenu.Visible then return end
+    if shot.magTrial and not controller.mag.Allowed(selected.player) then setGate('MAG_TRUST_REVOKED');return end
     current,reason=ready()
     if not current or current.tool~=ball.tool or current.remote~=ball.remote then setGate(reason or 'POSSESSION_CHANGED'); return end
     if current.nativeThrow then setGate('NATIVE_MANUAL_THROW_IN_PROGRESS'); return end
@@ -3379,6 +3460,7 @@ local function releaseNow(ball,selected,defenders,now)
         ..' fitCompared='..tostring(shot.fitAlternativeVariant)..' comparedTime='..tostring(shot.fitAlternativeTime)..' comparedDBETA='..tostring(shot.fitAlternativeDB)..' dbETA='..tostring(shot.defenderETA)
         ..' powerMethod='..shot.powerMethod..' requestedPower='..tostring(shot.requestedPower)..' powerAllowed='..tostring(shot.powerAllowed)
         ..' manualInput='..tostring(shot.nativeInput)..' inputKind='..shot.nativeInputKind
+        ..' magTrial='..tostring(shot.magTrial)..' magExtraY='..tostring(shot.magExtraY)..' magTrustSource='..tostring(shot.magTrustSource)
     lastDecision.candidates={}
     for _,candidate in ipairs(candidateEvidence) do lastDecision.candidates[#lastDecision.candidates+1]=candidate end
     for i,d in ipairs(defenders) do lastDecision.actors[#lastDecision.actors+1]=actor('DB'..i..':'..clean(d.name),d) end
@@ -3658,6 +3740,8 @@ local built,buildError=pcall(function()
         controller.SetReceiverFilter(controller.receiverFilter.mode=='ANY' and 'FRIENDS' or 'ANY')
     end)
     controller.passPlan.button=button(controller.passPlan.mode,-286,54,112);controller.passPlan.button.Name='PassPlan';controller.passPlan.button.Visible=false
+    controller.mag.button=button(controller.mag.enabled and 'MAG TEST' or 'MAG OFF',-166,72,137);controller.mag.button.Name='MagTrial';controller.mag.button.Visible=false
+    connect(controller.mag.button.Activated,function() controller.SetMagTrial(not controller.mag.enabled) end)
     connect(controller.passPlan.button.Activated,function()
         local mode=controller.passPlan.mode
         controller.SetPassPlan(mode=='NORMAL' and 'DEEP' or mode=='DEEP' and 'SHORT' or 'NORMAL')
@@ -3688,12 +3772,18 @@ local built,buildError=pcall(function()
     receiverMenu=Instance.new('Frame'); receiverMenu.Name='ReceiverList'; receiverMenu.Size=UDim2.fromOffset(162,134)
     receiverMenu.Position=UDim2.new(1,-166,0,137); receiverMenu.BackgroundColor3=Color3.fromRGB(24,30,28); receiverMenu.Parent=gui
     local title=Instance.new('TextLabel'); title.Name='Title'; title.Size=UDim2.fromOffset(158,22); title.Position=UDim2.fromOffset(2,0)
-    title.Text='Tap receiver to block / allow'; title.TextSize=10; title.TextColor3=Color3.new(1,1,1); title.BackgroundTransparency=1; title.Parent=receiverMenu
+    title.Text='Tap: normal > block > trust'; title.TextSize=10; title.TextColor3=Color3.new(1,1,1); title.BackgroundTransparency=1; title.Parent=receiverMenu
     local rows,rowPlayers={},{}; local page=1; local lastRender=-math.huge
     for i=1,3 do
         local index=i; local row=button('',0,158,0); row.Name='Receiver'..i; row.Parent=receiverMenu
         row.Position=UDim2.fromOffset(2,22+(i-1)*28); row.Size=UDim2.fromOffset(158,28); rows[i]=row
-        connect(row.Activated,function() local p=rowPlayers[index]; if p then controller.SetBlacklisted(p,not controller.IsBlacklisted(p)) end end)
+        connect(row.Activated,function()
+            local p=rowPlayers[index]
+            if p then
+                local state=controller.GetReceiverState(p)
+                controller.SetReceiverState(p,state=='NORMAL' and 'BLOCKED' or state=='BLOCKED' and 'TRUSTED' or 'NORMAL')
+            end
+        end)
     end
     local prev,nextPage=button('<',0,28,0),button('>',0,28,0)
     prev.Name='Previous'; nextPage.Name='Next'; prev.Parent=receiverMenu; nextPage.Parent=receiverMenu
@@ -3711,7 +3801,11 @@ local built,buildError=pcall(function()
         local pages=math.max(1,math.ceil(#list/3)); page=clamp(page,1,pages)
         for i,row in ipairs(rows) do
             local p=list[(page-1)*3+i]; rowPlayers[i]=p; row.Visible=p~=nil
-            if p then row.Text=(controller.IsBlacklisted(p) and '[X] @' or '[ ] @')..p.Name end
+            if p then
+                local state=controller.GetReceiverState(p)
+                local mark=state=='BLOCKED' and '[X]' or state=='TRUSTED' and '[T]' or controller.mag.Source(p,false)=='FRIEND' and '[F]' or '[ ]'
+                row.Text=mark..' @'..p.Name
+            end
         end
         pageLabel.Text=#list==0 and 'No teammates' or tostring(page)..' / '..pages
         prev.Visible=pages>1; nextPage.Visible=pages>1
@@ -3727,7 +3821,7 @@ local built,buildError=pcall(function()
         expanded=not expanded; autoButton.Visible=expanded; throwButton.Visible=expanded; copyButton.Visible=expanded
         receiverButton.Visible=expanded;riskButton.Visible=expanded
         controller.comeback.button.Visible=expanded
-        controller.jumpBullet.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded;controller.receiverFilter.button.Visible=expanded
+        controller.jumpBullet.button.Visible=expanded;controller.mag.button.Visible=expanded;controller.history.button.Visible=expanded;controller.receiverEvidence.button.Visible=expanded;controller.passPlan.button.Visible=expanded;controller.receiverFilter.button.Visible=expanded
         if not expanded then controller.receiverEvidence.panel.Visible=false end
         if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end; receiverMenu.Visible=false end
     end)
