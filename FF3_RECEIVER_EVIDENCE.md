@@ -67,4 +67,4 @@ Reports add the current leads, observation status, movement/ownership summaries,
 
 All 21 current suites pass: **1,143 mocked assertions**. Source and rebuilt bundle load under Lua 5.4. No Roblox catches, chat, currency or live player actions were exercised. Actual ball replication identity, remote body/hand visibility, calibrated dive poses, catch envelopes, extra-reach techniques and iPhone overhead remain unverified. Reliable automatic fault attribution is not claimed. The next useful evidence is the richer current-session export from real throws; it can identify the specific missing calibration instead of repeating generic solver tests.
 
-The live loader pins `ff3-v26.6`; prior immutable `ff3-v26.5` and other game routes remain preserved.
+The V26.6 release pins `ff3-v26.6`; prior immutable `ff3-v26.5` and other game routes remain preserved. [V26.7](FF3_BULLET_COMFORT.md) subsequently corrects replication-noise jump signals and long-context retention, and adds current settings snapshots.

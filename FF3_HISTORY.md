@@ -40,7 +40,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 `Initialize=true` only authorizes the empty/marker case; it never authorizes overwriting unrelated data. After the first successful sync it can be removed. If you deliberately use a Master Key, replace the `AccessKey` field with `MasterKey`; do not set both. No real account/bin credentials or IDs are embedded in the public loader. Local configuration must be supplied again if the executor clears its environment.
 
-Sync needs HttpService JSON support, `task.defer`, `task.cancel`, and an executor HTTP request function (`request`, `http_request`, `syn.request`, or `http.request`). Missing capability is reported and does not cause a blocking network fallback. The adapter only addresses `https://api.jsonbin.io/v3/b/<24-hex-id>`, uses `X-Access-Key` or the explicitly selected `X-Master-Key`, identifies itself with `User-Agent: PelicanFF3History/26.6`, and verifies `metadata.private=true`. It does not probe alternate credential headers automatically.
+Sync needs HttpService JSON support, `task.defer`, `task.cancel`, and an executor HTTP request function (`request`, `http_request`, `syn.request`, or `http.request`). Missing capability is reported and does not cause a blocking network fallback. The adapter only addresses `https://api.jsonbin.io/v3/b/<24-hex-id>`, uses `X-Access-Key` or the explicitly selected `X-Master-Key`, identifies itself with `User-Agent: PelicanFF3History/26.7`, and verifies `metadata.private=true`. It does not probe alternate credential headers automatically.
 
 The first sync can start after ten seconds; later changed snapshots sync at most once per 120 seconds by default (configurable 60–3600). A changed snapshot uses **GET latest → PUT → GET latest** with structural echo/readback checks. Unchanged snapshots consume no periodic requests. PUT disables bin versioning; the rolling history is not an unlimited cloud archive. Account request limits still apply: a successful changed-snapshot sync usually uses three requests. Authenticated privacy/update requests and initialization readback were verified during V26.4.1 setup; the phone executor sync path remains unverified.
 
@@ -60,7 +60,7 @@ An assistant does not automatically gain access to a private bin by knowing its 
 
 Together with the existing current suites, **987 mocked assertions pass**. The generated bundle and runtime load under Lua 5.4. No Roblox session, phone, live chat or football request was tested. Actual JSONBin privacy/initialization readback was checked separately; mocked executor sync checks are not a phone runtime test. iPhone IO latency, current executor HTTP support, phone-side key use/quota, persistence and live catchability remain unverified. This is substantial progress in retained diagnostic evidence; it is not proof of improved passing outcomes.
 
-The loader pins `ff3-v26.6`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
+The loader pins `ff3-v26.7`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
 
 Protocol references: [JSONBin Read API](https://jsonbin.io/api-reference/bins/read/) and [Update API](https://jsonbin.io/api-reference/bins/update/).
 
@@ -68,4 +68,6 @@ V26.4.1 adds fifteen authentication checks for explicit MasterKey selection, exc
 
 V26.5 adds the optional [chat-triggered current-session uploader](FF3_CHAT_UPLOAD.md). Its manual configuration replaces periodic uploads, while ordinary device history remains automatic. Current validation totals 1,074 mocked assertions; phone-side chat/upload remains unverified.
 
-V26.6 attaches passive [receiver movement and ball evidence](FF3_RECEIVER_EVIDENCE.md) to the original throw IDs. Partial snapshots are supported and no extra request attempts are counted. Current validation totals 1,143 mocked assertions; actual game catch/dive pose calibration and causal attribution remain unverified.
+V26.6 attaches passive [receiver movement and ball evidence](FF3_RECEIVER_EVIDENCE.md) to the original throw IDs. Partial snapshots are supported and no extra request attempts are counted. V26.6 validation totaled 1,143 mocked assertions; actual game catch/dive pose calibration and causal attribution remain unverified.
+
+V26.7 adds `CurrentSettings`, tagged with session/run and observation time, for exact last-verified lead values, active comfort policy and bounded anonymous native power-control status. This captures qualified settings even before a throw. A current-session snapshot excludes prior-session settings; per-throw settings retain their historical values. It does not recover observations that were never recorded. [Comfort and evidence update](FF3_BULLET_COMFORT.md).

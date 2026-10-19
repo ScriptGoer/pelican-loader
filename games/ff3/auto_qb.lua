@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.6): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.7): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -135,8 +135,8 @@ if closeBullet==nil then closeBullet={} end
 if closeBullet==false then closeBullet={Enabled=false} end
 assert(type(closeBullet)=='table','FF3.CloseBullet must be a table or false')
 assert(closeBullet.Enabled==nil or type(closeBullet.Enabled)=='boolean','CloseBullet.Enabled must be boolean')
-local touch={enabled=closeBullet.Enabled~=false,min=closeBullet.MinPower or 40,full=closeBullet.FullPowerYards,
-    comfort=closeBullet.ComfortSeconds or .75,quick=closeBullet.WindowSeconds or .5,method='POWER',methodReason='NOT_PROBED',traces={}}
+local touch={enabled=closeBullet.Enabled~=false,min=closeBullet.MinPower or 20,full=closeBullet.FullPowerYards,
+    comfort=closeBullet.ComfortSeconds or .9,quick=closeBullet.WindowSeconds or .65,method='POWER',methodReason='NOT_PROBED',traces={},origins=setmetatable({}, {__mode='k'})}
 assert(finite(touch.min) and touch.min>=1 and touch.min<95 and (touch.full==nil or finite(touch.full) and touch.full>0 and touch.full<=100)
     and finite(touch.comfort) and touch.comfort>=.3 and touch.comfort<=1.5 and finite(touch.quick) and touch.quick>=.2 and touch.quick<touch.comfort,'Invalid CloseBullet comfort/power policy')
 -- BEGIN RETAINED HISTORY
@@ -211,6 +211,7 @@ controller.history=(function()
         while #data.Records>maxRecords do table.remove(data.Records,1);total('Evicted') end
     end
     local function encode()
+        if h.RefreshCurrentSettings then h.RefreshCurrentSettings() end
         if controller.receiverEvidence and controller.receiverEvidence.SnapshotActive then controller.receiverEvidence.SnapshotActive() end
         if not codec then return end
         trim()
@@ -226,12 +227,30 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.6',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.7',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
         elseif kind=='blocked' then total('Blocked') elseif kind=='run_end' and record.Payload.Error then total('Errors') end
         return record.Id
+    end
+    function h.RefreshCurrentSettings()
+        local e=controller.receiverEvidence
+        if not started or ended or not data or not e then return end
+        local settings=e.ReadSettings()
+        if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
+        local context=e.NativeContext()
+        local control=touch.lastControl or {}
+        local values={table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
+            local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
+        end
+        local signature=table.concat(values,':')
+        if h.settingsSignature==signature then return end
+        h.settingsSignature=signature
+        data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+        data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
     function h.SessionKey() return sessionId end
@@ -269,6 +288,7 @@ controller.history=(function()
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
+            MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
             Receiver=h.Actor(player and player.Name or 'AWAY',s),Comparisons=comparisons,Defenders=actors,DefenderCount=#(defenders or {}),
             Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,
             LeadSettings=controller.receiverEvidence and controller.receiverEvidence.ReadSettings(),
@@ -291,6 +311,7 @@ controller.history=(function()
         h.blocked[key]=os.clock()
         h.Append('blocked',{Epoch=possession.epoch,Reason=reason,Mode=shot.mode,Variant=shot.variant,
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
+            MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,BulletControl=touch.lastControl,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),
             Margin=shot.margin,Lane=shot.lane,Receiver=h.Actor(player.Name,s),
             MarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
@@ -319,7 +340,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.6'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.7'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -347,6 +368,7 @@ controller.history=(function()
             local records={}
             for _,record in ipairs(snapshot.Records) do if record.Session==sessionId then records[#records+1]=record end end
             snapshot.Records=records;snapshot.Scope='CURRENT_SESSION';snapshot.Session=sessionId
+            if snapshot.CurrentSettings and snapshot.CurrentSettings.Session~=sessionId then snapshot.CurrentSettings=nil end
             snapshot.TotalsScope='RETAINED_SESSION_RECORDS';snapshot.RetainedOnly=true
             while true do
                 local totals={}
@@ -461,6 +483,7 @@ controller.history=(function()
     end
     function h.Update(now)
         if not h.enabled or not started or ended then return end
+        if now>=(h.nextSettingsAt or 0) then h.nextSettingsAt=now+1;h.RefreshCurrentSettings() end
         if h.diskWorker and now-h.diskWorker.at>20 then
             local token=h.diskWorker
             if pcall(task.cancel,token.thread) then h.diskWorker=nil end
@@ -573,15 +596,20 @@ local function closePower(player,quick)
     local head=me.Character and me.Character:FindFirstChild('Head')
     if not target or not root or not head or not profile then return end
     local v=root.AssemblyLinearVelocity;local speed=math.sqrt(v.X*v.X+v.Z*v.Z)
+    local origin=head.Position
+    local known=touch.origins[player]
+    if known and known.profile==profile and known.epoch==possession.epoch and os.clock()-known.at<=CFG.CacheAge then
+        origin=known.origin+(head.Position-known.head)
+    end
     local lead=profile.leads.Bullet;local ping=me:GetNetworkPing()
     if not finite(ping) or ping<0 then return end
     local function estimate(time)
-        local x=target.Position.X+v.X*(time+ping)+(speed>0 and v.X/speed*lead.X or 0)-head.Position.X
-        local z=target.Position.Z+v.Z*(time+ping)+(speed>0 and v.Z/speed*lead.X or 0)-head.Position.Z
-        local y=target.Position.Y+lead.Y-head.Position.Y
+        local x=target.Position.X+v.X*(time+ping)+(speed>0 and v.X/speed*lead.X or 0)-origin.X
+        local z=target.Position.Z+v.Z*(time+ping)+(speed>0 and v.Z/speed*lead.X or 0)-origin.Z
+        local y=target.Position.Y+lead.Y-origin.Y
         -- Estimate a power request only. Native output supplies the actual
         -- flight, lead, origin and low-arc trajectory, then coverage grades it.
-        return math.floor(math.max(touch.min,math.min(94,math.sqrt((x*x+z*z)/(time*time)+(y/time+CFG.Gravity*time/2)^2)))+.5)
+        return math.floor(math.max(touch.min,math.min(94,math.sqrt((x*x+z*z)/(time*time)+(y/time+CFG.Gravity*time/2)^2))))
     end
     local gentle=estimate(touch.comfort)
     if quick then local power=estimate(touch.quick);if power<=gentle then return end;return power,touch.quick end
@@ -1019,13 +1047,20 @@ local function onField(point)
     return math.abs(p.X)<=80 and math.abs(p.Z)<=180
 end
 function touch.fullAllowed(shot)
+    if not touch.enabled then return true end
     local power=shot.power or shot.velocity and shot.velocity.Magnitude
-    if not touch.enabled or power and power<94.5 then return true end
-    -- Distance/flight policy only; never depends on LineTogo or down number.
+    local minimum=power and power>=94.5 and touch.comfort or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick
+    shot.minimumFlight=minimum
+    if not finite(shot.time) or shot.time<minimum then shot.powerReason='NATIVE_FLIGHT_TOO_FAST';return false end
+    if power and power<94.5 then shot.powerReason='NATIVE_FLIGHT_COMFORT_CHECKED';return true end
+    -- Distance/actual flight policy; a changed mode label cannot bypass it.
     local yards=shot.passYards or shot.arrival and shot.origin and flat(shot.arrival-shot.origin).Magnitude/3
-    return yards~=nil and yards>=(touch.full or 95*touch.quick/3) and shot.time>=touch.quick
+    local allowed=not touch.full or yards~=nil and yards>=touch.full
+    shot.powerReason=allowed and 'FULL_POWER_DISTANCE_AND_FLIGHT_CHECKED' or 'FULL_POWER_TOO_CLOSE'
+    return allowed
 end
 function touch.record(player,variant,requested,returned,reason)
+    touch.lastControl={Variant=variant,Method=touch.method,Requested= requested,Returned=returned,Reason=reason}
     local rows=touch.traces
     rows[#rows+1]=string.format('%s %s method=%s requested=%s returned=%s %s',player.Name,variant,touch.method,tostring(requested),tostring(returned),reason)
     if #rows>8 then table.remove(rows,1) end
@@ -1103,7 +1138,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.6','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.7','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
         'FIT_POLICY|ONLY_TIMING_RESCUE; NO_SAFE_NON_FIT; FASTER_THAN_LATE_ALTERNATIVE; ARRIVES_BEFORE_MODELED_DB; FRESH_COMPARISON_AT_RELEASE',
@@ -1117,7 +1152,7 @@ function controller.GetReport()
         'CLOSE_BULLET_POLICY|ADAPTIVE_GENTLE_AND_WINDOW_NATIVE_LOW_ARC; LOWEST_STRICT_SAFE_POWER; NO_YELLOW_DEPENDENCY',
         'BULLET_POWER_METHOD|'..touch.method,'BULLET_POWER_METHOD_REASON|'..touch.methodReason,'BULLET_POWER_CONTROL_FAILURE|'..(touch.methodReceipt or 'NONE'),
         'BULLET_REQUEST_MIN|'..touch.min,'BULLET_COMFORT_SECONDS|'..touch.comfort,'BULLET_WINDOW_SECONDS|'..touch.quick,
-        'FULL_POWER_MIN_YARDS|'..(touch.full or 95*touch.quick/3),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.quick,
+        'FULL_POWER_MIN_YARDS|'..(touch.full or 'ACTUAL_FLIGHT_ONLY'),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.comfort,
         'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
         'AUTO_JUMP_POLICY|NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT',
@@ -2218,7 +2253,11 @@ local function solve(player,mode)
         local distance=flat(arrival-origin).Magnitude
         local rise=math.atan2 and math.atan2(arrival.Y-origin.Y,distance) or math.atan((arrival.Y-origin.Y)/math.max(.001,distance))
         if math.atan(velocity.Y/math.max(.001,flat(velocity).Magnitude))>(math.pi/2+rise)/2+.0001 then return reject('HIGH_ARC_REJECTED',soft and touch.method=='POWER') end
-        if soft then touch.record(player,mode,requestedPower,power,'NATIVE_OUTPUT_ACCEPTED');if touch.method=='POWER' then touch.methodReason='DIRECT_POWER_CONFIRMED' end end
+        if soft then
+            touch.origins[player]={origin=origin,head=launchHead,at=os.clock(),epoch=possession.epoch,profile=profile}
+            touch.record(player,mode,requestedPower,power,'NATIVE_OUTPUT_ACCEPTED t='..string.format('%.3f',time))
+            if touch.method=='POWER' then touch.methodReason='DIRECT_POWER_CONFIRMED' end
+        end
     end
     appliedLead=appliedLead or profile.leads[soft and 'Bullet' or mode]
     return {origin=origin,velocity=velocity,power=power,time=time,mode=(soft or jump) and 'Bullet' or mode,arrival=arrival,
@@ -2309,7 +2348,7 @@ local function evaluate(receivers,indices,defenders,now)
         for _,shot in ipairs(valid) do
             local mode=shot.variant or shot.mode
             candidateEvidence[#candidateEvidence+1]=string.format('%s %s t=%.3f p=%.2f margin=%.2f lane=%.2f release=%s clearBurn=%s safetyOverTop=%s',r.player.Name,mode,shot.time,shot.power,shot.margin,shot.lane,tostring(throwable(shot)),tostring(shot.clearBurn),tostring(shot.safetyOverTop))..string.format(' directLane=%s race=%s wrETA=%s lateral=%s',tostring(shot.directLane),tostring(shot.raceAdvantage),tostring(shot.receiverETA),tostring(shot.routeLateral))
-                ..' fitReason='..tostring(shot.fitReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)
+                ..' fitReason='..tostring(shot.fitReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)..' powerReason='..tostring(shot.powerReason)..' minFlight='..tostring(shot.minimumFlight)
             if better(shot,bestShot) then bestShot=shot end
         end
         if bestShot then
@@ -2560,8 +2599,9 @@ controller.receiverEvidence=(function()
             if type(value)=='table' then for _,field in ipairs({'Enabled','FitOnly','MaxRange','XTolerance','ZTolerance'}) do add(value[field]) end else add(value) end
         end
         for i,value in ipairs(parts) do parts[i]=tostring(value) end
-        local signature=table.concat(parts,':')
-        return {Signature=signature,Complete=#signature<=100,Source='QUALIFIED_SHARED_NATIVE_SETTINGS'}
+        local signature=table.concat(parts,':');local chunks={}
+        for i=1,#signature,90 do chunks[#chunks+1]=signature:sub(i,i+89) end
+        return {Signature=signature,SignatureParts=chunks,Complete=#chunks<=8,Source='QUALIFIED_SHARED_NATIVE_SETTINGS'}
     end
     function e.Bindings(shot)
         local x=shot.mode;local y=shot.mode
@@ -2694,6 +2734,15 @@ controller.receiverEvidence=(function()
         return middle-radius,middle+radius
     end
     function e.Evaluate(records,current,session)
+        local function contextKey(context)
+            if type(context)~='table' or context.Complete==false then return end
+            if context.SignatureParts~=nil then
+                if type(context.SignatureParts)~='table' or #context.SignatureParts<1 or #context.SignatureParts>8 then return end
+                for _,part in ipairs(context.SignatureParts) do if type(part)~='string' or #part>90 then return end end
+                return table.concat(context.SignatureParts)
+            end
+            if type(context.Signature)=='string' then return context.Signature end
+        end
         local groups={};local rejected={};local badSettings={}
         local function settingKey(session,x,y,context) return table.concat({session or '',x,y,context or ''},':') end
         for _,record in ipairs(records or {}) do
@@ -2702,7 +2751,7 @@ controller.receiverEvidence=(function()
             if type(p)=='table' and p.Source=='AUTO_QB' and p.Mode=='Fit' and type(o)=='table'
                 and o.Association=='EXACT_HELD_PART' and o.ObservedOutcome=='OPPONENT_POSSESSION_OBSERVED'
                 and type(p.Lead)=='table' and finite(p.Lead[1]) and finite(p.Lead[2]) and type(p.NativeContext)=='table' then
-                badSettings[settingKey(record.Session,p.Lead[1],p.Lead[2],p.NativeContext.Signature)]=true
+                badSettings[settingKey(record.Session,p.Lead[1],p.Lead[2],contextKey(p.NativeContext))]=true
             end
         end
         local function reject(reason) rejected[reason]=(rejected[reason] or 0)+1 end
@@ -2719,17 +2768,17 @@ controller.receiverEvidence=(function()
                 elseif type(record.Session)~='string' or type(o.ReceiverToken)~='string' then reject('RECEIVER_CONTEXT_MISSING')
                 elseif type(p.Lead)~='table' or not finite(p.Lead[1]) or not finite(p.Lead[2])
                     or type(p.LeadSettings)~='table' or type(p.LeadSettings.Fit)~='table'
-                    or type(p.NativeContext)~='table' or type(p.NativeContext.Signature)~='string' or p.NativeContext.Complete==false
+                    or not contextKey(p.NativeContext)
                     or not finite(p.Power) or not finite(p.Time) or not finite(p.DistanceYards)
                     or type(o.Movement)~='table' then reject('SETTINGS_OR_MOVEMENT_CONTEXT_MISSING')
                 else
                     -- These are matching/QC policies, never FF3 catch acceptance radii.
                     local matchKey=table.concat({record.Session,o.ReceiverToken,record.Release or '',p.Variant or p.Mode,p.PowerMethod or '',
-                        string.format('%.3f',p.Power),math.floor(p.DistanceYards/10),math.floor(p.Time/.25),tostring(p.Jump),tostring(p.VerticalLeadControlActive),p.NativeContext.Signature},':')
+                        string.format('%.3f',p.Power),math.floor(p.DistanceYards/10),math.floor(p.Time/.25),tostring(p.Jump),tostring(p.VerticalLeadControlActive),contextKey(p.NativeContext)},':')
                     local key=table.concat({matchKey,p.Lead[1],p.Lead[2]},':')
                     local g=groups[key]
                     if not g then g={matchKey=matchKey,X=p.Lead[1],Y=p.Lead[2],mode=p.Mode,variant=p.Variant,power=p.Power,distance=p.DistanceYards,
-                        yActive=p.VerticalLeadControlActive,context=p.NativeContext.Signature,session=record.Session,receiver=o.ReceiverToken,release=record.Release,n=0,desired=0,ids={}};groups[key]=g end
+                        yActive=p.VerticalLeadControlActive,context=contextKey(p.NativeContext),session=record.Session,receiver=o.ReceiverToken,release=record.Release,n=0,desired=0,ids={}};groups[key]=g end
                     g.n=g.n+1
                     if o.Movement.JumpAtPossession==true and o.Movement.DiveSignalObserved==false and o.Movement.ContinuedRoute==true
                         and not o.Movement.ExcessHeightSignal then g.desired=g.desired+1 end
@@ -2869,8 +2918,14 @@ controller.receiverEvidence=(function()
         end
         local rise=p.p.Y-f.initial.p.Y
         if rise>f.maxRise then f.maxRise=rise;f.apexAt={At=elapsed,Position=vec(p.p),VerticalVelocity=p.v.Y} end
-        local newJump=(f.wasGrounded and not p.grounded and p.v.Y>0) or p.state=='Jumping' and f.lastState~='Jumping'
+        -- Tiny positive replicated velocity is not an ascent. PlatformStanding
+        -- with ~0 vertical motion previously produced a false jump signal.
+        if f.wasGrounded and not p.grounded then f.pendingAscent=elapsed end
+        if p.grounded then f.pendingAscent=nil end
+        local newJump=p.v.Y>1 and (p.state=='Jumping' and f.lastState~='Jumping'
+            or f.pendingAscent and elapsed-f.pendingAscent<=.3)
         if newJump then
+            f.pendingAscent=nil
             f.jumped=true;f.jumpCount=f.jumpCount+1;f.jumpAt=elapsed
             if #f.jumpEvents<4 then f.jumpEvents[#f.jumpEvents+1]={At=elapsed,State=p.state,VerticalVelocity=p.v.Y} end
         end
@@ -3038,7 +3093,7 @@ local function releaseNow(ball,selected,defenders,now)
     end
     if sequence.fastBurn and not lines.goalToGo and not shot.burnCandidate then setGate('BURN_COVERAGE_CHANGED'); return end
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
-    if not throwable(shot) then setGate('DEFENDER_INTERCEPTION_RISK'); return end
+    if not throwable(shot) then setGate(shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
     local _,receiverRoot=body(selected.player)
     if sequence.deep then
         local movement=receiverRoot and flat(receiverRoot.AssemblyLinearVelocity)
@@ -3305,7 +3360,7 @@ local function tick(now)
         risk(best.shot,best.sample,defenders); coverage(best.shot,best.sample,defenders)
         if best.shot.mode=='Fit' then controller.fit.assess(best.shot,controller.fit.alternatives(best.player,best.sample,defenders,now)) end
         if not throwable(best.shot) then
-            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_COVERED')
+            opportunities[best.player]=nil; holdManual(best,best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
             assistance.guidePending={r=best,ball=ball,defenders=defenders};return
         end
         best.manualOnly=false
