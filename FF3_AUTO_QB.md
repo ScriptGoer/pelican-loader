@@ -4,6 +4,8 @@ The prior short-power policy used a 60 floor and could fall back directly to 95.
 
 ## Current automatic behavior
 
+V26.15 replaces the legacy custom high Bullet with conditional native Jump using its own lead; safe ordinary Bullets still win for open receivers. [Native Jump, competitive profile and screen rules](FF3_LEAGUE.md). A deliberately selected league screen is the only new stationary/behind-LOS receiver exception and explicitly permits a prepared short Bullet below the ordinary comfort floor.
+
 The planner compares two ordinary Bullet-lead candidates: `SoftBullet` requests a gentler flight and `QuickBullet` requests a quicker coverage window. Defaults estimate power for approximately 0.90 and 0.65 seconds respectively, with a request floor of 20 and a cap of 94. These are tunable comfort policies, **not measured human reaction times or verified FF3 catch mechanics**. The initial request uses current QB/WR positions, receiver velocity, ping, the active Bullet lead and the source-model gravity. It is no longer a flat 60 short-range band or a distance-only ramp.
 
 The estimate chooses a power input; it does not supply the ball's final trajectory. Each candidate is separately solved by the qualified native helper and receives its own projected path, flight time, receiver-reach, lane, endpoint and coverage checks. If both qualify, the lower actual native power wins. If the gentler path gives a defender too much time, a safe intermediate-power QuickBullet can win. Every Bullet variant stays strict in SAFE, MOD and TRUST. A safe ordinary Bullet remains preferred over an unnecessary experimental jump Bullet.
@@ -42,7 +44,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 
 1,074 current mocked assertions pass, including 87 chat/session-upload checks and 138 retained-history/authentication checks, 56 adaptive-power checks and 33 native power/rollback checks. The new suite reproduces the archived short-95 fallback, checks intermediate power under closing coverage, unchanged open release readiness, marker independence, unsupported-control refusal, Angle recovery and transactional cleanup. Legacy non-power fixtures explicitly opt out while dedicated current power suites enable defaults. Source/bundle validation uses Lua 5.4.
 
-No live throws/chats were run. Native build compatibility, actual server speed conversion, catch comfort and iPhone performance remain unverified. The exact prior live failure cause is not established. The loader pins `ff3-v26.14` and retains `PELICAN_FF3_V26`.
+No live throws/chats were run. Native build compatibility, actual server speed conversion, catch comfort and iPhone performance remain unverified. The exact prior live failure cause is not established. The loader pins `ff3-v26.15` and retains `PELICAN_FF3_V26`.
 
 ## Preserved V26.2 and earlier behavior
 
@@ -86,7 +88,7 @@ Defender ETA uses the inherited speed-bounded pursuit/reach model (distance minu
 
 793 current mocked assertions pass, including 55 mode-policy checks. They cover the reproduced prior Bullet regression, timing-only Fit and fresh comparison, two-receiver call budget, lateral height retention, native speed/branch verification, rollback/conflicts/stop, unsupported output and the opt-in UI. Generic jump/frame tests now use Dime where an isolated Fit no longer qualifies; preserved historical regression cases remain.
 
-Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.14` and requires `PELICAN_FF3_V26`.
+Lua 5.4 source/bundle tests do not establish live server catches or iPhone performance. No live game or chat test was performed. Native Fit height may still lie in an unreliable/dead-zone region: the JB trial starts off until deliberately enabled. The original paid attachment is unavailable in this workspace; the retained audit and current solver capability checks underpin this change. The timing/reach model remains approximate. The loader pins `ff3-v26.15` and requires `PELICAN_FF3_V26`.
 
 ## Preserved V26.1 comeback and V26 behavior
 
@@ -187,7 +189,7 @@ The V26 baseline comprised 635 mocked assertions: risk modes 60, visual release 
 
 New scenes distinguish a MOD burn from SAFE and a tighter TRUST burn from MOD, retain prevent/direct-path and eligibility gates, exercise the mobile cycle and a mid-solve mode change, retain SAFE packet/timing behavior and accept a jumping WR without mistaking vertical velocity for a route cut. A synthetic animation-driven head shift changes V25's packet but not V26's packet relative to the no-animation baseline. Post-send visual errors and stop-during-load resource cleanup are covered. The preparation-stage regression hooks now explicitly run during track loading rather than during post-send visual playback.
 
-Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.14` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
+Sources and bundle parse/run in Lua 5.4; local mocks do not establish Roblox catches, actual server launch behavior, configured risk quality or iPhone performance. No live/currency/real-exit tests were run. The exact cause of the user's intermittent live overthrow remains unproven. V26 removes a demonstrated coupling and implements requested risk policies; further physics/lead changes should depend on actual throw evidence. The loader pins `ff3-v26.15` and requires `PELICAN_FF3_V26`. Other game source bytes/routes remain unchanged. AWAY stays visible; stats and Yuna startup automation remain removed.
 
 ## V26.4 retained history
 
@@ -234,3 +236,11 @@ Folded ARC AUTO / ARC OLD starts AUTO and derives Dime/Jump requests from receiv
 OpenComfort defaults ON: automatic native Jump is no longer planned, and safe ordinary Bullet variants take priority. Existing native flight-time/power checks choose a gentler safe pass; a threatened flat lane can still use another safe native mode. Custom JB remains opt-in and requires a fresh normal-Bullet chest-threat counterfactual before release; ordinary safe Bullets veto it. No configured lead values change. SHORT retains its preference among known viable shallow/deep opportunities.
 
 The former HUD RUN icon is now three noninteractive PlayerGui segments projected to the verified field top. At most six bounded forecasts compare receiver-parallel, left, right and backward room after release work; no Workspace objects, movement writes, new native calls or release delays are added. Rendering is capped at 30 Hz, stale/offscreen projections hide, and the overlay has no depth occlusion. [Full policy and live limits](FF3_OPEN_COMFORT.md). All 30 suites / 1,785 mocked assertions pass; actual catches, iPhone alignment and frame cost remain unverified.
+
+## V26.15 competitive profile and native covered Jump
+
+The separate competitive.lua entry forces a compact LEAGUE profile through the same main loader. Collapsed controls are status, SCREEN and reload; expanded controls retain AUTO/THR, COPY, risk and a profile override. Friends-only, mag/trust, chat and data panels are hidden; runtime eligibility is ANY, mag and route chat are off, and casual choices restore when switching back. Main defaults AUTO and treats visible top-HUD VIP SERVER text as a latched private-server hint, with an explicit CASUAL override; it does not prove league identity.
+
+SCREEN opens teammate selection for this possession only. The selected stationary teammate must be just behind verified LOS, with a native arrival behind LOS and strict trajectory coverage. It prefers supported ordinary lower power, allows an explicitly prepared faster screen, and never requires the stationary player to run a deep burn. No unselected AFK exemption exists. It disarms after an attempted pass, changed possession/character/team/LOS, pause, blacklist or shutdown.
+
+The default covered Jump uses native Jump's own configured lead and actual native controls, with no forced 95 or Fit.Y substitution. Safe ordinary Bullets veto it and a fresh chest-path threat is required at release. League Fit also accepts a strict coverage window when actual Bullet and Dime paths are threatened and no known safe alternative wins; both are freshly recomputed before the actual Fit solve. Opponent pursuit includes reported ping. [Full research, policy and calibration limits](FF3_LEAGUE.md). All 34 suites / 1,987 mocked assertions pass; actual FF3 catch windows, server agreement, VIP layout and mobile overhead remain unverified.

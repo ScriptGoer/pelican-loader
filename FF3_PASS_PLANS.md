@@ -1,6 +1,8 @@
 # FF3 V26.9: NORMAL / DEEP / SHORT and wide-open native Jump
 
-**Current V26.14 default:** OpenComfort=true supersedes the historical native Jump preference below. It removes native Jump from automatic planning and favors safe ordinary Bullets; the depth controls remain. WideOpenJump alone does not override comfort. Explicit OpenComfort=false restores the legacy policy described here. [Current comfort and guide behavior](FF3_OPEN_COMFORT.md).
+**V26.15 update:** safe ordinary Bullets still take priority, but the new conditional covered Jump uses native Jump’s own lead and strict fresh chest-threat checks. It replaces the default custom Bullet-X/Fit-Y trial and the older wide-open Jump preference. The compact competitive profile adds explicit one-possession screens and a league Fit coverage-window case. [Current behavior and limits](FF3_LEAGUE.md).
+
+**Historical V26.14 default:** OpenComfort=true supersedes the historical native Jump preference below. It removes native Jump from automatic planning and favors safe ordinary Bullets; the depth controls remain. WideOpenJump alone does not override comfort. Explicit OpenComfort=false restores the legacy policy described here. [Current comfort and guide behavior](FF3_OPEN_COMFORT.md).
 
 Expand the existing status pill and tap **NORMAL**, to the left of JB, to cycle **NORMAL → DEEP → SHORT → NORMAL**. The control starts folded and adds no permanent HUD. It is independent of SAFE / MOD / TRUST. New sessions default NORMAL; the chosen plan survives ordinary QB/X reloads in executor session memory. Explicit loader configuration wins over that session choice.
 

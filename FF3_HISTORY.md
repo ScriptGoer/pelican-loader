@@ -60,7 +60,7 @@ An assistant does not automatically gain access to a private bin by knowing its 
 
 Together with the existing current suites, **987 mocked assertions pass**. The generated bundle and runtime load under Lua 5.4. No Roblox session, phone, live chat or football request was tested. Actual JSONBin privacy/initialization readback was checked separately; mocked executor sync checks are not a phone runtime test. iPhone IO latency, current executor HTTP support, phone-side key use/quota, persistence and live catchability remain unverified. This is substantial progress in retained diagnostic evidence; it is not proof of improved passing outcomes.
 
-The loader pins `ff3-v26.14`, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
+The loader pins `ff3-v26.15, preserving the V26 controller contract. The exact prior controller is archived privately in `archive/ff3-v26.3`; immutable public `ff3-v26.3` remains available. Other game routes are unchanged.
 
 Protocol references: [JSONBin Read API](https://jsonbin.io/api-reference/bins/read/) and [Update API](https://jsonbin.io/api-reference/bins/update/).
 
@@ -83,3 +83,5 @@ V26.12 retains MagTrial Enabled/ExtraY/calibration policy in current settings, a
 V26.13 retains AdaptiveAngle in current settings, and ActualAngleDegrees, AngleRequest, NativeAngleAdjustment, AdaptiveAngle and EndzoneTarget in throw records. AngleRequest stores the requested angle, estimated flight, native power cap, projected blocker count and policy reason; the actual native trajectory remains authoritative. [Adaptive angles and goal changes](FF3_ADAPTIVE_ANGLE.md).
 
 V26.14 retains OpenComfort in settings and throws, plus JumpBulletReason / JumpBulletChest when a custom trial qualifies. The counterfactual stores native normal-Bullet time and modeled endpoint/lane clearance; it does not establish an actual catch outcome. Reports identify guide render/status/draw count. The existing upload companion is unchanged. [Policy and evidence limits](FF3_OPEN_COMFORT.md).
+
+V26.15 retains actual profile/source, explicit screen flag, native covered-Jump identity, geometric coverage layer counts and Fit counterfactual reason/modes. The legacy JumpBulletReason/JumpBulletChest container also describes native Jump's chest comparison; actual Mode/NativeMode identify Jump. These are model observations, not verified league assignments, catch awards or calibrated reach. The companion is unchanged. [Competitive policy and limits](FF3_LEAGUE.md).

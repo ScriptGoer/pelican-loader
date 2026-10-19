@@ -1,5 +1,7 @@
 # FF3 V26.13.1: coverage-derived angles and end-zone eligibility
 
+**V26.15 update:** safe ordinary Bullets still take priority, but the new conditional covered Jump uses native Jump’s own lead and strict fresh chest-threat checks. It replaces the default custom Bullet-X/Fit-Y trial and the older wide-open Jump preference. The compact competitive profile adds explicit one-possession screens and a league Fit coverage-window case. [Current behavior and limits](FF3_LEAGUE.md).
+
 **ARC AUTO** starts enabled in a fresh environment. Expand the existing HUD to toggle **ARC AUTO / ARC OLD**. Ordinary X reloads retain a deliberate setting; explicit `FF3.AdaptiveAngle=true/false` wins. ARC OLD preserves the original configured Dime/Jump angle/power behavior. No camera jitter, player-name presets or random angle changes are added.
 
 ## Native angle behavior
