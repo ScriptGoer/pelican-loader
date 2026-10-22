@@ -1,5 +1,7 @@
 # FF3 V26.15: native covered Jump and compact competitive profile
 
+V26.17 fixes route-dependent MOD/TRUST/Fit eligibility, regrades other eligible receivers’ fresh cached paths and favors shorter ready completions. Strict Bullet limits, final native validation and the 75-ms takeoff target remain. [Current selection policy](FF3_OPPORTUNITIES.md).
+
 **V26.16 update:** automatic release targets 75 ms after observed local takeoff, with fresh final calculations and frame-bound timing. Strict layered Fit windows and defender ping grading now also run in casual/public matches; league-only UI/SCREEN eligibility stays separate. [Current timing and shared coverage](FF3_JUMP_TIMING.md).
 
 Use the competitive entry for the observed FF3 live place:

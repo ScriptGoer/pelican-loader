@@ -1,5 +1,7 @@
 # FF3 V26.8: Moderate requires a clear conservative passing lane
 
+V26.17 fixes route-dependent MOD/TRUST/Fit eligibility, regrades other eligible receivers’ fresh cached paths and favors shorter ready completions. Strict Bullet limits, final native validation and the 75-ms takeoff target remain. [Current selection policy](FF3_OPPORTUNITIES.md).
+
 Moderate previously allowed a conservative lane margin down to -1 while accepting a smaller receiver-favored endpoint/race margin. A direct observed-motion path check also ran, but that straight-line projection was insufficient protection against a defender turning toward a long-flight arrival window. A positive arrival-race estimate alone did not make a near-zero lane clearance comfortable.
 
 V26.8 reuses the existing strict lane requirement (`CFG.ThrowLane`, currently 4 source-model studs) for Moderate. Its endpoint margin 2, race advantage 0.08 seconds, route-stability checks and other eligibility rules remain. SAFE retains its original checks. TRUST retains its deliberate tight-contest lane allowance; it is not a safe-completion guarantee. All Bullet variants remain strict in every risk mode.

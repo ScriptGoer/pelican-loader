@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.16): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.17): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -354,7 +354,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.16',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.17',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -368,7 +368,7 @@ controller.history=(function()
         if not next(settings) then return end -- preserve last verified snapshot; never substitute defaults
         local context=e.NativeContext()
         local control=touch.lastControl or {}
-        local values={tostring(controller.coverageWindows.enabled),tostring(controller.jumpTiming.delay),controller.league.mode,tostring(controller.nativeJump.enabled),tostring(controller.passPlan.openComfort),controller.receiverFilter.mode,tostring(controller.angle.enabled),tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
+        local values={riskPolicy.mode,tostring(controller.coverageWindows.enabled),tostring(controller.jumpTiming.delay),controller.league.mode,tostring(controller.nativeJump.enabled),tostring(controller.passPlan.openComfort),controller.receiverFilter.mode,tostring(controller.angle.enabled),tostring(controller.mag.enabled),tostring(controller.mag.extraY),controller.passPlan.mode,tostring(controller.passPlan.deepYards),tostring(controller.passPlan.preferJump),table.concat(context.SignatureParts or {context.Signature or ''}),touch.method,touch.methodReason,tostring(control.Variant),tostring(control.Requested),tostring(control.Returned),tostring(control.Reason)}
         for _,mode in ipairs({'Bullet','Fit','Jump','Dive','Dime'}) do
             local value=settings[mode];values[#values+1]=value and string.format('%.17g,%.17g',value.X,value.Y) or 'UNAVAILABLE'
         end
@@ -376,7 +376,7 @@ controller.history=(function()
         if h.settingsSignature==signature then return end
         h.settingsSignature=signature
         data.CurrentSettings=safe({Session=sessionId,Run=runId,ObservedAt=os.time(),Leads=settings,NativeContext=context,
-            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',JumpDelaySeconds=controller.jumpTiming.delay,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,NativeJump=controller.nativeJump.enabled,OpenComfort=controller.passPlan.openComfort,ReceiverFilter=controller.receiverFilter.mode,AdaptiveAngle=controller.angle.enabled,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
+            Source='QUALIFIED_SHARED_NATIVE_SETTINGS',RiskMode=riskPolicy.mode,JumpDelaySeconds=controller.jumpTiming.delay,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,NativeJump=controller.nativeJump.enabled,OpenComfort=controller.passPlan.openComfort,ReceiverFilter=controller.receiverFilter.mode,AdaptiveAngle=controller.angle.enabled,MagTrial={Enabled=controller.mag.enabled,ExtraY=controller.mag.extraY,Calibration='MISSING'},PassPlan=controller.passPlan.mode,DeepYards=controller.passPlan.deepYards,WideOpenJump=controller.passPlan.preferJump,BulletControl=touch.lastControl,BulletMethod=touch.method,BulletMethodReason=touch.methodReason,CloseBullet={Enabled=touch.enabled,MinPower=touch.min,ComfortSeconds=touch.comfort,WindowSeconds=touch.quick}},0,{n=0})
         data.Revision=data.Revision+1;h.dirty=true
     end
     function h.Records() return data and data.Records or {} end
@@ -445,6 +445,11 @@ controller.history=(function()
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,BulletControl=touch.lastControl,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),
             Margin=shot.margin,Lane=shot.lane,Receiver=h.Actor(player.Name,s),
+            Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,
+            DefenderETA=shot.defenderETA,ReceiverETA=shot.receiverETA,RaceAdvantage=shot.raceAdvantage,
+            RouteLateral=shot.routeLateral,ReceiverTurn=shot.receiverTurn,OverTop=shot.safetyOverTop,BurnCandidate=shot.burnCandidate,
+            FitReason=shot.fitReason,FitComparison=shot.fitAlternativeVariant,FitSecondComparison=shot.fitSecondVariant,
+            PlanReason=shot.planReason,ReleaseBlocked=shot.releaseBlocked,
             MarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
     end
     function h.Flush()
@@ -471,7 +476,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.16'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.17'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1379,7 +1384,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.16','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.17','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1388,7 +1393,8 @@ function controller.GetReport()
         'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
-        'FIT_POLICY|TIMING_RESCUE_OR_ENABLED_STRICT_LAYER_WINDOW; NO_SAFE_NON_FIT; ARRIVES_BEFORE_MODELED_DB; FRESH_COUNTERFACTUALS_AT_RELEASE',
+        'OPPORTUNITY_POLICY|MOD_TRUST_ROUTE_INDEPENDENT; FRESH_CACHED_RECEIVERS_REGRADED; SHORTER_READY_COMPLETIONS_PREFERRED',
+        'FIT_POLICY|TIMING_RESCUE_OR_ENABLED_POLICY_GRADED_LAYER_WINDOW; NO_SAFE_NON_FIT; ARRIVES_BEFORE_MODELED_DB; FRESH_COUNTERFACTUALS_AT_RELEASE',
         'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
@@ -2596,7 +2602,10 @@ local function throwable(shot)
     if shot.magTrial then return strict and controller.mag.Allowed(shot.magPlayer) end
     if strict then return true end
     local p=riskPolicy.profiles[riskPolicy.mode]
-    return riskPolicy.mode~='SAFE' and shot.mode~='Bullet' and not shot.softBullet and shot.burnCandidate==true and not shot.safetyOverTop
+    -- Risk modes govern a qualified catch window, including a crosser or a
+    -- comeback. Forward-route classification must not veto an otherwise valid
+    -- window. Bullet/covered Jump/Mag retain the strict branches above.
+    return riskPolicy.mode~='SAFE' and shot.mode~='Bullet' and not shot.softBullet and not shot.safetyOverTop
         and shot.margin>=p.margin and shot.lane>=p.lane and (shot.directLane or -math.huge)>0
         and (shot.raceAdvantage or -math.huge)>=p.race and (shot.receiverETA or math.huge)<=shot.time+p.arrivalSlack
         and (shot.routeLateral or math.huge)<=p.lateral and (shot.receiverTurn or 1)<=p.turn
@@ -2634,7 +2643,7 @@ function controller.fit.assess(shot,alternatives,requiredVariant)
                 and shot.time<other.time and (not late or other.time<late.time) then late=other end
         end
     end
-    if not late and (controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane and not shot.safetyOverTop then
+    if not late and (controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and not shot.safetyOverTop then
         local chest,loft
         for _,other in ipairs(alternatives) do
             if other.margin<CFG.ThrowMargin or other.lane<CFG.ThrowLane or other.safetyOverTop then
@@ -2680,7 +2689,7 @@ local function receiverBetter(a,b)
         if ac~=bc then return ac end
     end
     if ar and a.shot.magTrial~=b.shot.magTrial then return not a.shot.magTrial end
-    if a.shot.clearBurn~=b.shot.clearBurn then return a.shot.clearBurn==true end
+    if not ar and a.shot.clearBurn~=b.shot.clearBurn then return a.shot.clearBurn==true end
     if ar and a.shot.passYards~=b.shot.passYards then return a.shot.passYards<b.shot.passYards end
     return better(a.shot,b.shot)
 end
@@ -3014,6 +3023,24 @@ local function evaluate(receivers,indices,defenders,now)
     end
     if limited then planDeferred=planDeferred+1 end
     maxPlanCalls=math.max(maxPlanCalls,calls)
+    -- Native work stays limited to the scheduled pair. Regrade other current
+    -- receivers' still-fresh tuples too: rotating out of the solve pair must
+    -- not hide a window that just opened. Cache age/identity checks bound the
+    -- live tuples; every winning candidate is solved again before release.
+    local scheduled={}
+    for _,g in ipairs(groups) do scheduled[g.r.player]=true end
+    for _,r in ipairs(receivers) do
+        local cache=shotCache[r.player]
+        if not scheduled[r.player] and cache and cache.model==r.sample.model
+            and cache.epoch==possession.epoch and cache.generation==lines.generation then
+            local fresh=false
+            for _,mode in ipairs(plannerModes) do
+                local shot=cache.shots[mode]
+                if shot and now-shot.at<=CFG.CacheAge then fresh=true;break end
+            end
+            if fresh then groups[#groups+1]={r=r,cache=cache} end
+        end
+    end
     local best,incumbent
     candidateEvidence={}
     for _,g in ipairs(groups) do

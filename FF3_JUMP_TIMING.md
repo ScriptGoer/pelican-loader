@@ -1,5 +1,7 @@
 # FF3 V26.16: short post-jump release and shared public-match coverage
 
+V26.17 fixes route-dependent MOD/TRUST/Fit eligibility, regrades other eligible receivers’ fresh cached paths and favors shorter ready completions. Strict Bullet limits, final native validation and the 75-ms takeoff target remain. [Current selection policy](FF3_OPPORTUNITIES.md).
+
 Both existing entry points receive this update through the same Auto QB module:
 
 ```lua
