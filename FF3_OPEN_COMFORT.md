@@ -1,5 +1,7 @@
 # FF3 V26.14: ordinary open passes and a UI ground guide
 
+V26.19 adds holding-high Bullet-only selection, floating-safety Auto Arc and a contested-slant native low-arc Power Jump path. [Current rules and calibration limits](FF3_SAFETY_READ.md).
+
 V26.18 cancels stale predictions without banning the receiver for the possession, restricts Jump to useful covered windows, and shares bounded reactive cache checks plus coverage-math reuse with competitive. [Current behavior and limits](FF3_REACTIVE_REPLAN.md).
 
 **V26.16 update:** automatic release targets 75 ms after observed local takeoff, with fresh final calculations and frame-bound timing. Strict layered Fit windows and defender ping grading now also run in casual/public matches; league-only UI/SCREEN eligibility stays separate. [Current timing and shared coverage](FF3_JUMP_TIMING.md).

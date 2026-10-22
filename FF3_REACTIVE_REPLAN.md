@@ -1,5 +1,7 @@
 # FF3 V26.18: reconsider lost burns, conditional Jump and shared coverage work
 
+V26.19 adds holding-high Bullet-only selection, floating-safety Auto Arc and a contested-slant native low-arc Power Jump path. [Current rules and calibration limits](FF3_SAFETY_READ.md).
+
 The ordinary loader and `competitive.lua` both delegate to the same pinned `games/ff3/auto_qb.lua`. X reloads main and obtains `ff3-v26.18`. Competitive is a profile of the shared controller, not a separate stale QB implementation. V26.17 remains available at its immutable public tag. Other games, companion scripts and the competitive entry itself retain their source bytes.
 
 ## Cancel a prediction, then reconsider the receiver
