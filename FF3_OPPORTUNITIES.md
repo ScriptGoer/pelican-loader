@@ -1,5 +1,7 @@
 # FF3 V26.17: evaluate qualified opportunities across routes
 
+V26.18 cancels stale predictions without banning the receiver for the possession, restricts Jump to useful covered windows, and shares bounded reactive cache checks plus coverage-math reuse with competitive. [Current behavior and limits](FF3_REACTIVE_REPLAN.md).
+
 The default and competitive loaders share this change. X reloads main, which pins `ff3-v26.17`. There are no new HUD controls, native hooks, lead edits, catch-height assumptions, remote formats or other-game changes. The previous implementation remains available at immutable tag `ff3-v26.16`.
 
 ## Findings and changes

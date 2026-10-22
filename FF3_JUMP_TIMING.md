@@ -1,5 +1,7 @@
 # FF3 V26.16: short post-jump release and shared public-match coverage
 
+V26.18 cancels stale predictions without banning the receiver for the possession, restricts Jump to useful covered windows, and shares bounded reactive cache checks plus coverage-math reuse with competitive. [Current behavior and limits](FF3_REACTIVE_REPLAN.md).
+
 V26.17 fixes route-dependent MOD/TRUST/Fit eligibility, regrades other eligible receivers’ fresh cached paths and favors shorter ready completions. Strict Bullet limits, final native validation and the 75-ms takeoff target remain. [Current selection policy](FF3_OPPORTUNITIES.md).
 
 Both existing entry points receive this update through the same Auto QB module:
