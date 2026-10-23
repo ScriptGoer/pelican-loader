@@ -1,5 +1,7 @@
 # FF3 V26.15: native covered Jump and compact competitive profile
 
+V26.21 fixes stale final-rejection metrics and retains bounded per-receiver mode-attempt diagnostics. Passing rules remain unchanged. [Current evidence behavior](FF3_FINAL_EVIDENCE.md).
+
 V26.20 improves challenger scheduling within the existing native budgets and adds local target identity mapping. [Current planning behavior and limits](FF3_FRAME_REVIEW.md).
 
 V26.19 adds holding-high Bullet-only selection, floating-safety Auto Arc and a contested-slant native low-arc Power Jump path. [Current rules and calibration limits](FF3_SAFETY_READ.md).

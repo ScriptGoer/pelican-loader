@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.20): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.21): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -45,7 +45,7 @@ local lastTick, nextDiscovery, nextSave = -math.huge, 0, 0
 local gate, copyResult, fileResult = 'WAIT_YUNA', 'NOT_REQUESTED', 'NOT_REQUESTED'
 local fatalError, stopReason = 'NONE', 'NONE'
 local attempts, sent, ambiguous, relinquishments, nativeCalls = 0, 0, 0, 0, 0
-local receiverRejects={}
+local receiverRejects,receiverRejectAt={},0
 local arrivalRejects,arrivalResiduals={},{}
 local blockedDecisions={}
 local lastBlockedAt,lastBlockedKey=-math.huge,''
@@ -86,8 +86,9 @@ local function setGate(value)
     if gate~=value then gate=value; log('GATE',value) end
     if status then status.Text=(choice and choice.player.Name..' ' or '')..value:gsub('_',' '):sub(1,24) end
 end
-local function rememberBlocked(player,shot,reason)
-    if not shot then return end
+local function rememberBlocked(player,shot,reason,evidence)
+    if not shot and not evidence then return end
+    shot=shot or {mode=evidence.mode,variant=evidence.variant}
     local now=os.clock()
     local key=tostring(possession.epoch)..':'..player.Name..':'..tostring(shot.mode)..':'..tostring(reason)
     if key==lastBlockedKey and now-lastBlockedAt<1 then return end
@@ -104,7 +105,8 @@ local function rememberBlocked(player,shot,reason)
     end
     actor('MARGIN_DB',shot.marginActor);actor('LANE_DB',shot.laneActor)
     local sample=samples[player];actor('WR',sample)
-    if controller.history then controller.history.Block(player,shot,reason,sample) end
+    if evidence then rows[#rows+1]='EVIDENCE_STAGE '..evidence.stage end
+    if controller.history then controller.history.Block(player,shot,reason,sample,evidence) end
     blockedDecisions[#blockedDecisions+1]=table.concat(rows,' | ')
     if #blockedDecisions>8 then table.remove(blockedDecisions,1) end
 end
@@ -360,7 +362,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.20',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.21',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -439,14 +441,31 @@ controller.history=(function()
             LOS=lines.status,LOSDirection=h.Vector(lines.forward),LOSPosition=h.Vector(lines.los),
             Jump=assistance.jumpStatus,Animation=animationStatus})
     end
-    function h.Block(player,shot,reason,s)
+    function h.Block(player,shot,reason,s,evidence)
         if not h.enabled or not started then return end
-        local key=tostring(shot.variant or shot.mode)..':'..tostring(reason)
+        local stage=evidence and evidence.stage or 'PLANNER_CANDIDATE'
+        local key=tostring(shot.variant or shot.mode)..':'..tostring(reason)..':'..stage
         if h.blocked[key] and os.clock()-h.blocked[key]<10 then return end
         -- Fixed-size throttle map, independent of roster/usernames.
         local n=0;for _ in pairs(h.blocked) do n=n+1 end;if n>=64 and not h.blocked[key] then h.blocked={} end
         h.blocked[key]=os.clock()
+        local trials={};local cache=shotCache[player]
+        if cache and (cache.model~=player.Character or cache.epoch~=possession.epoch or cache.generation~=lines.generation) then cache=nil end
+        for _,variant in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet','CoverageJump','MagDime'}) do
+            local previous=cache and cache.shots[variant]
+            local rejected=receiverRejects[player.Name..'/'..variant]
+            if previous or rejected then
+                trials[#trials+1]={Variant=variant,LastPlanningFailure=rejected,
+                    FailureAge=rejected and math.max(0,os.clock()-receiverRejectAt),
+                    ReturnedAtAge=previous and math.max(0,os.clock()-previous.at),
+                    Time=previous and previous.time,Power=previous and previous.power}
+            end
+        end
         h.Append('blocked',{Epoch=possession.epoch,Reason=reason,Mode=shot.mode,Variant=shot.variant,
+            EvidenceStage=stage,TrajectoryAge=shot.at and math.max(0,os.clock()-shot.at),
+            SolverFailure=evidence and evidence.failure,ModeTrials=trials,
+            ModeTrialsScope='LAST_NATIVE_RETURNS_AND_LAST_PLANNING_FAILURES; NOT_CURRENT_COVERAGE',
+            BulletControlScope='LAST_GLOBAL_CONTROL_TRACE; NOT_RECEIVER_PROOF',
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,BulletControl=touch.lastControl,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),
@@ -482,7 +501,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.20'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.21'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1393,7 +1412,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.20','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.21','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -2995,7 +3014,8 @@ local function solve(player,mode)
     if endpointError>endpointTolerance then
         arrivalRejects[mode]={target=player.Name,origin=origin,velocity=velocity,time=time,arrival=arrival,aim=target,
             error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch}
-        return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH'
+        return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH',{Error=endpointError,Tolerance=endpointTolerance,Time=time,Power=power,
+            Arrival={arrival.X,arrival.Y,arrival.Z},Aim={target.X,target.Y,target.Z}}
     end
     if endpointError>.01 then arrivalResiduals[mode]={error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch} end
     local actualAngle=math.deg(math.atan(velocity.Y/math.max(.0001,flat(velocity).Magnitude)))
@@ -3426,8 +3446,12 @@ end
 controller.groundGuide.Forecast=forecastGuide
 controller.groundGuide.Draw=drawGuide
 
-local function holdManual(r,reason)
-    if r then rememberBlocked(r.player,r.shot,reason or 'MANUAL_LOCK_COVERED') end
+local function holdManual(r,reason,evidence)
+    if r then
+        local recorded=r.shot
+        if evidence then recorded=evidence.shot end
+        rememberBlocked(r.player,recorded,reason or 'MANUAL_LOCK_COVERED',evidence)
+    end
     if sequence and sequence.deep and r and sequence.player==r.player and reason=='MANUAL_LOCK_COVERED' then
         log('BURN_CANCEL',r.player.Name..' BURN_COVERAGE_CLOSED; REPLAN_ALLOWED')
         cancelSequence('BURN_COVERAGE_CLOSED')
@@ -3982,6 +4006,8 @@ end)()
 
 local function releaseNow(ball,selected,defenders,now)
     if not sequence or sequence.player~=selected.player or sequence.epoch~=possession.epoch then return end
+    local receipt={stage='FINAL_CONTEXT_CHECK',mode=selected.shot.mode,variant=selected.shot.variant}
+    sequence.blockEvidence=receipt
     if usedTools[ball.tool]==possession.epoch then setGate('REQUEST_ALREADY_ATTEMPTED'); return end
     if receiverMenu and receiverMenu.Visible then setGate('RECEIVER_MENU_OPEN'); return end
     local current,reason=ready()
@@ -4008,7 +4034,9 @@ local function releaseNow(ball,selected,defenders,now)
     end
     -- Solve the actual throw last so the native preview/captures and pose
     -- reference describe the released candidate, not its counterfactual.
-    local shot;shot,why=solve(selected.player,selected.shot.variant or selected.shot.mode)
+    receipt.stage='FINAL_NATIVE_SOLVE'
+    local shot;shot,why,receipt.failure=solve(selected.player,selected.shot.variant or selected.shot.mode)
+    if shot then receipt.shot=shot;receipt.stage='FINAL_TUPLE_NOT_GRADED' end
     if stopped or sequence~=activeSequence then return end
     if not shot then setGate(why); return end
     if os.clock()-now>.28 then setGate('DECISION_STALE_AFTER_NATIVE_SOLVER'); return end
@@ -4022,6 +4050,7 @@ local function releaseNow(ball,selected,defenders,now)
     eligible,rejection=receivePossible(shot,selected.sample)
     if not eligible then releaseChoice(); setGate(rejection); return end
     risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)
+    receipt.stage='FINAL_CURRENT_COVERAGE'
     if shot.mode=='Fit' then
         if not receiverReady(selected.player,receiver,os.clock(),fitComparison.arrival) or not receivePossible(fitComparison,receiver)
             or (current.head.Position-fitComparison.launchHead).Magnitude>.5 then setGate('FIT_COMPARISON_CHANGED');return end
@@ -4152,7 +4181,8 @@ local function driveSequence(now)
     if stopped or sequence~=seq then return end
     if usedTools[ball.tool]==possession.epoch then sequence=nil;lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
     else
-        rememberBlocked(seq.player,seq.selected.shot,gate)
+        local evidence=seq.blockEvidence
+        rememberBlocked(seq.player,evidence and evidence.shot,gate,evidence)
         cancelSequence('FINAL_RELEASE_CHECK_BLOCKED');cancelJump('RELEASE_CANCELLED')
         opportunities[seq.player]=nil;shotCache[seq.player]=nil
     end
@@ -4294,7 +4324,7 @@ local function tick(now,cachedOnly)
         local roster=Players:GetPlayers()
         if #roster>CFG.MaxRoster then releaseChoice(); setGate('ROSTER_LIMIT'); return end
         local receivers,defenders,seenRoster={},{},{}
-        receiverRejects={}
+        receiverRejects={};receiverRejectAt=now
         local observationMissing=false
         for _,player in ipairs(roster) do
             seenRoster[player]=true
@@ -4363,15 +4393,17 @@ local function tick(now,cachedOnly)
         choice=best
         -- The last candidate may differ from the winner; settle the actual shared
         -- native lock and final preview on the winner before any release.
-        local final,failed
+        local final,failed,failure
         if best.shot.mode=='Fit' or (best.shot.jumpBullet or best.shot.nativeCoverageJump) and (controller.passPlan.openComfort or controller.safety.enabled) then
             -- Reserve final calls for the candidate and fresh counterfactuals
             -- (three for a league layer-window Fit). Avoid a redundant preview.
             if lock(best.player) then final=best.shot else failed='NATIVE_LOCK_BUSY' end
-        else final,failed=solve(best.player,best.shot.variant or best.shot.mode) end
+        else final,failed,failure=solve(best.player,best.shot.variant or best.shot.mode) end
         if not final then
             if shotCache[best.player] then shotCache[best.player].shots[best.shot.variant or best.shot.mode]=nil end
-            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..failed); return end
+            receiverRejects[best.player.Name..'/'..(best.shot.variant or best.shot.mode)]=failed
+            opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..failed,
+                {stage='WINNER_SOLVE_FAILED',mode=best.shot.mode,variant=best.shot.variant,failure=failure}); return end
         best.shot=final;final.releaseBlocked=false
         if shotCache[best.player] then shotCache[best.player].shots[final.variant or final.mode]=best.shot end
         local eligible,rejection=receiverReady(best.player,best.sample,now,final.arrival)

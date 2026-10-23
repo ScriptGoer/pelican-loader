@@ -1,5 +1,7 @@
 # FF3 V26.20: receiver planning
 
+V26.21 fixes stale final-rejection metrics and retains bounded per-receiver mode-attempt diagnostics. Passing rules remain unchanged. [Current evidence behavior](FF3_FINAL_EVIDENCE.md).
+
 Both the ordinary and competitive loaders use the same updated Auto QB module, pinned to `ff3-v26.20`. X reloads the usual loader. V26.19 remains at its immutable tag.
 
 The previous scheduler refreshed the incumbent and repeatedly favored the highest-ranked challenger. Other eligible receivers shared fewer slots. The challenger slot now goes to the least recently planned eligible current character. Ranked order breaks initial ties, and the incumbent continues to be checked. Visit times update after actual planner attempts; character, possession and field identity prevent reuse across invalid contexts.
