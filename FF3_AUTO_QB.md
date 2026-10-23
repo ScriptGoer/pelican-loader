@@ -1,5 +1,7 @@
 # FF3 Auto QB: adaptive Bullet power and retained history
 
+V26.20 improves challenger scheduling within the existing native budgets and adds local target identity mapping. [Current planning behavior and limits](FF3_FRAME_REVIEW.md).
+
 V26.19 adds holding-high Bullet-only selection, floating-safety Auto Arc and a contested-slant native low-arc Power Jump path. [Current rules and calibration limits](FF3_SAFETY_READ.md).
 
 V26.18 cancels stale predictions without banning the receiver for the possession, restricts Jump to useful covered windows, and shares bounded reactive cache checks plus coverage-math reuse with competitive. [Current behavior and limits](FF3_REACTIVE_REPLAN.md).

@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.19): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.20): retained decision history; optional private JSONBin sync.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -41,7 +41,7 @@ local receiverButton, receiverMenu, renderReceivers, awayButton, riskButton
 local blacklist=env.PELICAN_FF3_WR_BLACKLIST
 if type(blacklist)~='table' or getmetatable(blacklist)~=nil then blacklist={}; env.PELICAN_FF3_WR_BLACKLIST=blacklist end
 local stopped, cleanupComplete, inTick, auto, throwing, expanded = false, false, false, true, true, false
-local lastTick, nextDiscovery, nextSave, cursor = -math.huge, 0, 0, 1
+local lastTick, nextDiscovery, nextSave = -math.huge, 0, 0
 local gate, copyResult, fileResult = 'WAIT_YUNA', 'NOT_REQUESTED', 'NOT_REQUESTED'
 local fatalError, stopReason = 'NONE', 'NONE'
 local attempts, sent, ambiguous, relinquishments, nativeCalls = 0, 0, 0, 0, 0
@@ -360,7 +360,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.19',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='ff3-v26.20',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -482,7 +482,7 @@ controller.history=(function()
     end
     local function response(method,body)
         local options={Url='https://api.jsonbin.io/v3/b/'..binId..(method=='GET' and '/latest' or ''),
-            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.19'},Timeout=15}
+            Method=method,Headers={[keyHeader]=accessKey,['X-Bin-Meta']='true',['User-Agent']='PelicanFF3History/26.20'},Timeout=15}
         if body then options.Headers['Content-Type']='application/json';options.Headers['X-Bin-Versioning']='false';options.Body=body end
         h.netIO=method
         local ok,result=pcall(requestFn,options)
@@ -1361,6 +1361,9 @@ function controller.GetReport()
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
         'LOCK_ONLY|'..tostring(choice~=nil and choice.manualOnly==true),
         'TARGET|'..(choice and choice.player.Name or 'NONE'),'MODE|'..(choice and choice.shot.mode or 'NONE'),
+        'TARGET_DISPLAY_NAME|'..(choice and clean(choice.player.DisplayName) or 'NONE'),
+        'TARGET_USER_ID|'..(choice and tostring(choice.player.UserId) or 'NONE'),
+        'TARGET_IDENTITY_POLICY|TARGET_IS_USERNAME; DISPLAY_NAME_MAY_DIFFER; NATIVE_PREVIEW_IS_NOT_A_RELEASE_RECEIPT',
         'ATTEMPTS|'..attempts,'REQUEST_SENT|'..sent,'AMBIGUOUS_REQUESTS|'..ambiguous,
         'NATIVE_SOLVER_CALLS|'..nativeCalls,'EXTERNAL_LOCK_EDITS|'..relinquishments,'MAX_TICK_SECONDS|'..string.format('%.6f',maxTick),
         'COPY_RESULT|'..copyResult,'FILE_RESULT|'..fileResult,
@@ -1390,7 +1393,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.19','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.20','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1440,6 +1443,7 @@ function controller.GetReport()
         'THROW_ANIMATION_PLAYING|'..tostring(ownedAnimation~=nil and ownedAnimation.track.IsPlaying==true),
         'THROW_ANIMATION_ASSET|'..(ownedAnimation and clean(ownedAnimation.asset) or 'NONE'),
         'WINDOW|'..(choice and choice.shot.window or 'NONE'),'PLANNER_MAX_CALLS|'..maxPlanCalls,'PLANNER_DEFERRED|'..planDeferred,
+        'PLANNER_RECEIVER_POLICY|INCUMBENT_PLUS_LEAST_RECENTLY_PLANNED_CHALLENGER; EXISTING_CALL_AND_TIME_BOUNDS',
         'MIN_PLAY_SECONDS|'..CFG.MinPlayAge,'MIN_DOWNFIELD_YARDS|'..CFG.MinDownfieldYards,
         'POSSESSION_AGE_SECONDS|'..(possession.epoch>0 and string.format('%.2f',math.max(0,os.clock()-possession.since)) or 'NONE'),
         'TARGET_DEPTH_YARDS|'..(choice and lines.los and string.format('%.2f',downfield(choice.sample.p)/3) or 'NONE'),
@@ -3107,6 +3111,7 @@ local function evaluate(receivers,indices,defenders,now)
             end
             g.tried[mode]=true
             local shot,why=solve(g.r.player,mode); calls=calls+1
+            g.cache.plannedAt=now
             if stopped then return end
             if shot then g.cache.shots[mode]=shot
             else
@@ -4333,11 +4338,19 @@ local function tick(now,cachedOnly)
             if choice then for i,r in ipairs(receivers) do if r.player==choice.player then incumbent=i; break end end end
             indices={incumbent or 1}
             if #receivers>1 then
-                local challengers={}
-                for i=1,#receivers do if i~=indices[1] then challengers[#challengers+1]=i end end
-                cursor=1+(cursor-1)%#challengers
-                if planRound%2==0 then indices[2]=challengers[1]
-                else indices[2]=challengers[cursor]; cursor=cursor+1 end
+                -- Keep refreshing the lock, but do not spend every other
+                -- challenger slot on the rank leader. Revisit the least
+                -- recently planned eligible character; native mode rotation
+                -- still advances only when evaluate actually attempts it.
+                local oldest=-1
+                for i,r in ipairs(receivers) do
+                    if i~=indices[1] then
+                        local cache=shotCache[r.player]
+                        local at=cache and cache.model==r.sample.model and cache.epoch==possession.epoch
+                            and cache.generation==lines.generation and cache.plannedAt or -math.huge
+                        if not indices[2] or at<oldest then indices[2]=i;oldest=at end
+                    end
+                end
             end
         end
         local best=evaluate(receivers,indices,defenders,now)
