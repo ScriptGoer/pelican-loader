@@ -8,7 +8,7 @@ return {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "ff3-v26.21",
+            Name = "FF3 live", Game = "FF3", Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57",
             Path = "games/ff3/auto_qb.lua", Version = "PELICAN_FF3_V26",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
