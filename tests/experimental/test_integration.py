@@ -8,7 +8,7 @@ assert block(b,'local function solve(player,mode)','function controller.mag.Refr
 checks=1
 for token in ['local KEY = "PELICAN_LOADER_SESSION"','/fix/auto-qb-regressions-20261024/experimental/loader.lua','Path = "experimental/auto_qb.lua"']:
  assert token in loader,token;checks+=1
-for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","controller.unified.generation","os.clock()-gradingStarted<.003","DecisionAge=","Unified=shot.unified","local function deepThrow() return false end"]:
+for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","controller.unified.generation","os.clock()-gradingStarted<.003","DecisionAge=","Unified=shot.unified","local function deepThrow(shot,hum)"]:
  assert token in e,token;checks+=1
 assert 'local fitVariant=selected.shot.fitAlternativeVariant' not in e;checks+=1
 assert 'Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"' in (R/'loader.lua').read_text();checks+=1
