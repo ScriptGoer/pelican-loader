@@ -156,6 +156,135 @@ for _, name in ipairs({'PELICAN_FF3_LIVE','PELICAN_YUNA_RETURN_TRACE','PELICAN_Y
 end
 local controller = {Version=VERSION, IsStopped=false}
 controller.unified=Unified.new((context.FF3Options or {}).Unified)
+controller.bad=(function()
+-- Bounded anonymous evidence. No JSON, disk or network work in Grade().
+local B={}
+local function vector(v)return v and {v.X,v.Y,v.Z} or nil end
+local function copy(v,depth)
+    if type(v)~='table' then if type(v)=='number' then return v==v and math.abs(v)<math.huge and v or nil end;if type(v)=='string' or type(v)=='boolean' then return v end;return nil end
+    if (depth or 0)>20 then return nil end
+    local out={};for k,x in pairs(v)do if type(k)=='string' or type(k)=='number' then out[k]=copy(x,(depth or 0)+1)end end;return out
+end
+-- Explicit primitive copying avoids accidentally exporting engine instances/secrets.
+function B.new(code,engine)
+    return setmetatable({CodeId=code,EngineId=engine,ring={},aliases={},aliasCount=0,serial=0,profile={Frames=0,OverBudget=0,Graded=0,Skipped=0,MaxGrade=0,MaxFrame=0}}, {__index=B})
+end
+function B:token(name)
+    name=tostring(name or 'UNKNOWN');if not self.aliases[name]then if self.aliasCount>=256 then self.profile.IdentityOverflow=true;return 'OTHER' end;self.aliasCount=self.aliasCount+1;self.aliases[name]='P'..self.aliasCount end
+    return self.aliases[name]
+end
+function B:actor(a)
+    if not a then return end
+    return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),observedSpeed=a.observedSpeed,
+        WalkSpeed=a.hum and a.hum.WalkSpeed,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.routeTurn or a.turn}
+end
+function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then break end;out[#out+1]=self:actor(a)end;return out end
+function B:pos(epoch,now)
+    if self.current and self.current.Epoch==epoch then return self.current end
+    if self.current then self.lastClosed=self.current end
+    self.serial=self.serial+1
+    local p={Id=self.serial,Epoch=epoch,Started=now,Frames={},Outcome={Status='UNKNOWN',RequiredMovement='UNKNOWN',Fault='UNRESOLVED'},DroppedFrames=0}
+    self.ring[#self.ring+1]=p;if #self.ring>3 then table.remove(self.ring,1)end;self.current=p;return p
+end
+function B:begin(epoch,now,receivers,modes,defenders,config,mode,plan)
+    local p=self:pos(epoch,now);p.LastAt=now
+    local f={At=now,Config=copy(config),Mode=mode,Plan=plan,Rows={},Defenders=self:actors(defenders),DroppedRows=0,Order=0}
+    p.Frames[#p.Frames+1]=f;if #p.Frames>2 then table.remove(p.Frames,1);p.DroppedFrames=p.DroppedFrames+1 end
+    self.frame=f;self.open=true;self.finalActive=false
+    for _,r in ipairs(receivers)do for _,variant in ipairs(modes)do self:row(r.player.Name,variant)end end
+end
+function B:row(name,variant)
+    local f=self.frame;if not f then return end
+    local key=self:token(name)..'/'..tostring(variant)
+    if not f.Rows[key]then
+        if f.RowCount and f.RowCount>=128 then f.DroppedRows=f.DroppedRows+1;return end
+        f.RowCount=(f.RowCount or 0)+1
+        f.Rows[key]={Key=key,Receiver=self:token(name),Variant=variant,NativeStatus='NOT_SCHEDULED',Status='NOT_EVALUATED',Reason='NOT_SCHEDULED'}
+    end
+    return f.Rows[key]
+end
+function B:status(name,variant,status,reason)
+    local row=self:row(name,variant);if row then row.Status=status;row.Reason=reason;self.profile[reason or status]=(self.profile[reason or status] or 0)+1;self.profile.Skipped=self.profile.Skipped+1 end
+end
+function B:schedule(name,modes)for _,v in ipairs(modes)do local r=self:row(name,v);if r then r.NativeStatus='SCHEDULED_NOT_ATTEMPTED' end end end
+function B:native(name,variant,shot,why)
+    local row=self:row(name,variant);if row then row.NativeStatus=shot and 'SOLVED' or 'SOLVER_REJECTED';row.NativeReason=why end
+end
+function B:trajectory(shot)
+    return {origin=vector(shot.origin),velocity=vector(shot.velocity),arrival=vector(shot.arrival),time=shot.time,
+        power=shot.power,variant=shot.variant,mode=shot.mode,networkPing=shot.networkPing,NativeAt=shot.at,
+        Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},NativeInput=shot.nativeInput,NativeInputKind=shot.nativeInputKind,PowerMethod=shot.powerMethod,
+        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle}
+end
+function B:input(shot,wr,defenders,context,config)
+    return {Shot=self:trajectory(shot),Receiver=self:actor(wr),Defenders=self.open and self.frame.Defenders or self:actors(defenders),Context=copy(context),Config=copy(config)}
+end
+function B:grade(shot,wr,defenders,context,config,seconds)
+    local captureStart=os.clock()
+    local input=self:input(shot,wr,defenders,context,config)
+    local result=copy(shot.unified)
+    for _,t in ipairs(result.Threats or {})do t.Defender=self:token(t.Defender)end
+    self.profile.Graded=self.profile.Graded+1;self.profile.MaxGrade=math.max(self.profile.MaxGrade,seconds)
+    if seconds>.003 then self.profile.OverBudget=self.profile.OverBudget+1 end
+    if self.open then
+        local row=self:row(wr.name,shot.variant or shot.mode)
+        if row then self.frame.Order=self.frame.Order+1;row.Order=self.frame.Order;if row.NativeStatus~='SOLVED' then row.NativeStatus='CACHE_REUSED' end;row.Input=input;row.Result=result;row.Status='EVALUATED';row.EvaluatorSeconds=seconds end
+    elseif self.finalActive and self.current then self.current.Final=self.current.Final or {};self.current.Final.Input=input;self.current.Final.Result=result;self.current.Final.At=os.clock() end
+    self.profile.MaxCapture=math.max(self.profile.MaxCapture or 0,os.clock()-captureStart)
+end
+function B:finish(best,seconds)
+    local f=self.frame;if not f then return end
+    f.Selected=best and self:token(best.player.Name)..'/'..tostring(best.shot.variant or best.shot.mode) or nil
+    for key,row in pairs(f.Rows)do
+        if row.Status=='EVALUATED' then
+            row.Reason=row.Result.HardReason or row.PlanAllowed==false and 'EXPLICIT_DEPTH_PLAN'
+                or not row.Result.Allowed and 'RISK_TOLERANCE' or key==f.Selected and 'WINNER' or 'LOWER_OPPORTUNITY_SCORE'
+        elseif row.Status=='NOT_EVALUATED' and row.NativeStatus=='SCHEDULED_NOT_ATTEMPTED' and row.Reason~='GRADING_BUDGET' then row.Reason=f.NativeLimited and 'PLANNING_BUDGET' or 'MODE_ROTATION'
+        elseif row.NativeStatus=='SOLVER_REJECTED' then row.Reason='NATIVE_SOLVER_REJECTED' end
+    end
+    f.Duration=seconds;self.profile.MaxFrame=math.max(self.profile.MaxFrame,seconds);self.profile.Frames=self.profile.Frames+1
+    self.open=false
+end
+function B:final(epoch,now,qb,settings)
+    local p=self:pos(epoch,now);self.open=false;self.finalActive=true
+    p.Final={AttemptAt=now,QB=self:actor(qb),Settings=copy(settings),Status='RECALCULATING'}
+end
+function B:gate(reason)
+    if self.finalActive and self.current and self.current.Final then self.current.Final.Gate=reason end
+end
+function B:sent(id,api,now)
+    if not self.current then return end
+    self.current.ThrowId=id or ('local:'..self.current.Id);self.current.SentAt=now;self.current.Final.Status=api
+    self.lastSent=self.current;self.finalActive=false
+end
+function B:observe(id,value)
+    for _,p in pairs({last=self.lastSent,closed=self.lastClosed})do if p.ThrowId==id then p.Observation=copy(value);p.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end end
+    for _,p in ipairs(self.ring)do if p.ThrowId==id then p.Observation=copy(value);p.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end end
+    if self.pinned and self.pinned.Possession.ThrowId==id then self.pinned.Possession.Observation=copy(value);self.pinned.Possession.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end
+end
+function B:flag(now,current)
+    local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
+    if current then p=self.current end
+    if not p then return false,'NO_POSSESSION_EVIDENCE' end
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+        Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
+        Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
+    return true,p.Id
+end
+function B:heartbeat(now,elapsed,nativeCalls)
+    local p=self.profile
+    if self.lastBeat then
+        local ms=(now-self.lastBeat)*1000;local bucket=ms<=8 and 'LE8' or ms<=16.67 and 'LE16_67' or ms<=33.33 and 'LE33_33' or 'GT33_33'
+        p.FrameIntervals=p.FrameIntervals or {};p.FrameIntervals[bucket]=(p.FrameIntervals[bucket] or 0)+1
+        p.MaxFrameInterval=math.max(p.MaxFrameInterval or 0,ms)
+    end
+    self.lastBeat=now;p.MaxCallbackSeconds=math.max(p.MaxCallbackSeconds or 0,elapsed);p.MaxNativeCalls=math.max(p.MaxNativeCalls or 0,nativeCalls)
+end
+function B:report()return self.pinned end
+return B
+
+end)().new('612c8134763c8f5c6410f58531ac32425ce724b63cfdfde957d085ac80f6de26','28743e9edad14669e9d664ae3f42ace86e219209493d03d72cbfcb593cac90aa')
+controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 local connections, events, counts, samples = {}, {}, {}, {}
 local profile, lease, choice, pending, gui, status, autoButton, throwButton, copyButton
 local receiverButton, receiverMenu, renderReceivers, awayButton, riskButton
@@ -202,6 +331,7 @@ local function log(kind, value)
     events[#events+1]=kind..'|'..clean(value)
 end
 local function setGate(value)
+    controller.bad:gate(value)
     if stopped then return end
     counts[value]=(counts[value] or 0)+1
     if gate~=value then gate=value; log('GATE',value) end
@@ -485,7 +615,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='ff3-v26.21',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release=controller.bad.CodeId,Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -513,6 +643,7 @@ controller.history=(function()
     function h.Records() return data and data.Records or {} end
     function h.SessionKey() return sessionId end
     function h.AttachObservation(id,value)
+        controller.bad:observe(id,value)
         if not started or ended then return false end
         for _,record in ipairs(data.Records) do if record.Id==id and record.Kind=='throw' then
             record.Payload.Observation=safe(value,0,{n=0});data.Revision=data.Revision+1;h.dirty=true;return true
@@ -540,7 +671,7 @@ controller.history=(function()
         for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet','CoverageJump','MagDime'}) do
             local other=cached and cached.shots and cached.shots[mode]
             if other then comparisons[#comparisons+1]={Mode=mode,Power=other.power,Time=other.time,Arrival=h.Vector(other.arrival),
-                Margin=other.margin,Lane=other.lane,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
+                LegacyCoverageUnavailable=true,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
         end
         return h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
@@ -549,7 +680,7 @@ controller.history=(function()
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
             Receiver=h.Actor(player and player.Name or 'AWAY',s),Comparisons=comparisons,Defenders=actors,DefenderCount=#(defenders or {}),
-            Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,TrustBurn=shot.trustBurn,
+            LegacyCoverageUnavailable=true,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,TrustBurn=shot.trustBurn,
             LeadSettings=controller.receiverEvidence and controller.receiverEvidence.ReadSettings(),
             EffectiveYLead=shot.effectiveYLead,VerticalLeadControlActive=shot.verticalLeadControlActive,
             LeadControls=controller.receiverEvidence and controller.receiverEvidence.Bindings(shot),
@@ -592,13 +723,13 @@ controller.history=(function()
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,BulletControl=touch.lastControl,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),
-            Margin=shot.margin,Lane=shot.lane,Receiver=h.Actor(player.Name,s),
+            LegacyCoverageUnavailable=true,Receiver=h.Actor(player.Name,s),
             Unified=shot.unified,Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,
             DefenderETA=shot.defenderETA,ReceiverETA=shot.receiverETA,RaceAdvantage=shot.raceAdvantage,
             RouteLateral=shot.routeLateral,ReceiverTurn=shot.receiverTurn,OverTop=shot.safetyOverTop,BurnCandidate=shot.burnCandidate,TrustBurn=shot.trustBurn,
             FitReason=shot.fitReason,FitComparison=shot.fitAlternativeVariant,FitSecondComparison=shot.fitSecondVariant,
             PlanReason=shot.planReason,ReleaseBlocked=shot.releaseBlocked,SafetyRead=shot.safetyRead,ContestedChestThreat=shot.contestedChestThreat,
-            MarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
+            LegacyMarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
     end
     function h.Flush()
         if not h.enabled or not started or not h.dirty or h.flushing then return end
@@ -1535,17 +1666,17 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b1','UNIFIED_MAX_SECONDS|'..controller.unified.maxSeconds,'UNIFIED_CHECKS|'..controller.unified.checks,'UNIFIED_CONFIG|'..game:GetService('HttpService'):JSONEncode(controller.unified.config),'MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b2','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'UNIFIED_MAX_SECONDS|'..controller.unified.maxSeconds,'UNIFIED_CHECKS|'..controller.unified.checks,'UNIFIED_CONFIG|'..game:GetService('HttpService'):JSONEncode(controller.unified.config),'MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
         'ADAPTIVE_ANGLE_ESTIMATES|'..controller.angle.requests,
         'ANGLE_POLICY|COVERAGE_DERIVED_NATIVE_DIME_JUMP; FOUR_BOUNDED_ESTIMATES; NO_EXTRA_NATIVE_SOLVES; FIT_BULLET_LOW_BRANCH_UNCHANGED; NATIVE_OUTPUT_AND_SAFETY_RECHECK_REQUIRED',
-        'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
+        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
-        'TRUST_BURN_POLICY|ORDINARY_BULLET_DIME; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR; FINAL_CONTEST_ALLOWED',
-        'TRUST_BURN_CONTEST_FRACTION|'..riskPolicy.burn.contestFraction,'TRUST_BURN_MAX_CONTEST_SECONDS|'..riskPolicy.burn.contestSeconds,
+        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
+        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
         'REACTIVE_WINDOWS|'..tostring(controller.reactivity.enabled),'REACTIVE_CACHED_PASSES|'..controller.reactivity.cachedPasses,
@@ -1558,15 +1689,15 @@ function controller.GetReport()
         'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
-        'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
+        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
-        'RISK_LIMITS|margin='..selectedRisk.margin..' lane='..selectedRisk.lane..' race='..tostring(selectedRisk.race)..' lateral='..tostring(selectedRisk.lateral)..' turn='..tostring(selectedRisk.turn),
+        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
         'CLOSE_BULLET_POLICY|ADAPTIVE_GENTLE_AND_WINDOW_NATIVE_LOW_ARC; LOWEST_STRICT_SAFE_POWER; NO_YELLOW_DEPENDENCY',
         'BULLET_POWER_METHOD|'..touch.method,'BULLET_POWER_METHOD_REASON|'..touch.methodReason,'BULLET_POWER_CONTROL_FAILURE|'..(touch.methodReceipt or 'NONE'),
         'BULLET_REQUEST_MIN|'..touch.min,'BULLET_COMFORT_SECONDS|'..touch.comfort,'BULLET_WINDOW_SECONDS|'..touch.quick,
         'FULL_POWER_MIN_YARDS|'..(touch.full or 'ACTUAL_FLIGHT_ONLY'),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.comfort,
-        'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
+        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
         'AUTO_JUMP_POLICY|'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
         'JUMP_DELAY_TARGET_SECONDS|'..controller.jumpTiming.delay,'JUMP_TIMING_STATUS|'..controller.jumpTiming.status,
@@ -2696,8 +2827,10 @@ function riskPolicy.BurnFinish(shot)
     b.Route=nil -- retain scalar diagnostics only
 end
 local function risk(shot,receiver,defenders)
-    controller.unified:evaluate(shot,receiver,defenders,{gravity=CFG.Gravity,mode=riskPolicy.mode,
-        gain=math.max(0,downfield(shot.arrival)/3),endzone=controller.field.InEndzone(shot.arrival)})
+    local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),endzone=controller.field.InEndzone(shot.arrival)}
+    local begun=os.clock()
+    controller.unified:evaluate(shot,receiver,defenders,inputs)
+    controller.bad:grade(shot,receiver,defenders,inputs,controller.unified.config,os.clock()-begun)
     shot.unified.Generation=controller.unified.generation
     shot.margin,shot.lane=0,0;shot.defenderETA=math.huge
     shot.wideMargin,shot.wideLane=0,0;shot.safetyOverTop=false;shot.safetyRead=nil
@@ -2769,6 +2902,7 @@ local function coverage(shot,s,defenders)
     shot.planAllowed=controller.passPlan.mode=='NORMAL' or controller.passPlan.mode=='DEEP' and (shot.deepTarget or shot.endzoneTarget)
         or controller.passPlan.mode=='SHORT' and not shot.deepTarget
     shot.planReason=shot.planAllowed and 'PASS_PLAN_ALLOWED' or 'EXPLICIT_DEPTH_PLAN'
+    if controller.bad.open then local row=controller.bad:row(s.name,shot.variant or shot.mode);if row then row.PlanAllowed=shot.planAllowed;row.ReleaseBlocked=shot.releaseBlocked end elseif controller.bad.finalActive and controller.bad.current.Final then controller.bad.current.Final.PlanAllowed=shot.planAllowed end
     shot.clearBurn=false;shot.wideOpen=shot.unified.RiskScore<=controller.unified.config.SafeRisk
 end
 local function throwable(shot)
@@ -3082,6 +3216,7 @@ function controller.fit.alternatives(player,s,defenders,now,fresh,fresh2,include
 end
 local function evaluate(receivers,indices,defenders,now)
     controller.unified.generation=(controller.unified.generation or 0)+1
+    controller.bad:begin(possession.epoch,now,receivers,plannerModes,defenders,controller.unified.config,riskPolicy.mode,controller.passPlan.mode)
     controller.angle.scene={at=now,epoch=possession.epoch,generation=lines.generation,team=me.Team,defenders=defenders}
     local groups={}
     for _,index in ipairs(indices) do
@@ -3093,6 +3228,7 @@ local function evaluate(receivers,indices,defenders,now)
         end
         groups[#groups+1]={r=r,cache=cache,tried={}}
     end
+    for _,g in ipairs(groups)do controller.bad:schedule(g.r.player.Name,plannerModes)end
     local calls,started,limited=0,os.clock(),false
     local callLimit=(controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and math.min(5,CFG.PlanCalls) or CFG.PlanCalls
     -- Interleave receivers before trying a second/third mode. A slow native
@@ -3112,6 +3248,7 @@ local function evaluate(receivers,indices,defenders,now)
             end
             g.tried[mode]=true
             local shot,why=solve(g.r.player,mode); calls=calls+1
+            controller.bad:native(g.r.player.Name,mode,shot,why)
             g.cache.plannedAt=now
             if stopped then return end
             if shot then g.cache.shots[mode]=shot
@@ -3126,6 +3263,7 @@ local function evaluate(receivers,indices,defenders,now)
             break
         end
     end
+    controller.bad.frame.NativeLimited=limited
     if limited then planDeferred=planDeferred+1 end
     maxPlanCalls=math.max(maxPlanCalls,calls)
     -- Native work stays limited to the scheduled pair. Regrade other current
@@ -3167,7 +3305,10 @@ local function evaluate(receivers,indices,defenders,now)
                     g.cache.gradedAt=now;g.cache.gradeRotation=(offset+gradeRotation)%#plannerModes
                     risk(shot,r.sample,defenders); coverage(shot,r.sample,defenders)
                     valid[#valid+1]=shot
-                else receiverRejects[r.player.Name..'/'..mode]=rejection end
+                else
+                    controller.bad:status(r.player.Name,mode,eligible and 'NOT_EVALUATED' or 'READINESS_REJECTED',eligible and 'GRADING_BUDGET' or rejection)
+                    receiverRejects[r.player.Name..'/'..mode]=rejection end
+            else controller.bad:status(r.player.Name,mode,'NOT_EVALUATED',shot and 'STALE_NATIVE_TUPLE' or 'NO_NATIVE_TUPLE')
             end
         end
         for _,shot in ipairs(valid) do if shot.jumpBullet or shot.nativeCoverageJump then shot.jumpBulletAllowed=false end end
@@ -3175,8 +3316,6 @@ local function evaluate(receivers,indices,defenders,now)
         for _,shot in ipairs(valid) do if shot.jumpBullet or shot.nativeCoverageJump then controller.jumpBullet.assess(shot,valid) end end
         for _,shot in ipairs(valid) do
             local mode=shot.variant or shot.mode
-            candidateEvidence[#candidateEvidence+1]=string.format('%s %s t=%.3f p=%.2f margin=%.2f lane=%.2f release=%s clearBurn=%s safetyOverTop=%s',r.player.Name,mode,shot.time,shot.power,shot.margin,shot.lane,tostring(throwable(shot)),tostring(shot.clearBurn),tostring(shot.safetyOverTop))..string.format(' directLane=%s race=%s wrETA=%s lateral=%s',tostring(shot.directLane),tostring(shot.raceAdvantage),tostring(shot.receiverETA),tostring(shot.routeLateral))
-                ..' safetyRead='..tostring(shot.safetyRead and shot.safetyRead.State)..' fitReason='..tostring(shot.fitReason)..' fitSecond='..tostring(shot.fitSecondVariant)..' jumpReason='..tostring(shot.jumpBulletReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)..' powerReason='..tostring(shot.powerReason)..' minFlight='..tostring(shot.minimumFlight)..' plan='..tostring(shot.planReason)..' depthYards='..tostring(shot.catchDepthYards)..' comeback='..tostring(shot.deepComeback)..' wide='..tostring(shot.wideOpen)
             if better(shot,bestShot) then bestShot=shot end
         end
         if bestShot then
@@ -3204,6 +3343,7 @@ local function evaluate(receivers,indices,defenders,now)
                     or best and best.shot==shot and 'WINNER' or 'LOWER_OPPORTUNITY_SCORE'}
         end
     end end
+    controller.bad:finish(best,os.clock()-started)
     return best
 end
 -- Advisory only: forecasts run after release work, reuse the native tuple,
@@ -3982,6 +4122,9 @@ end)()
 
 local function releaseNow(ball,selected,defenders,now)
     if not sequence or sequence.player~=selected.player or sequence.epoch~=possession.epoch then return end
+    local _,qbRoot,qbHead=body(me)
+    controller.bad:final(possession.epoch,now,qbRoot and {name='QB',p=qbRoot.Position,v=qbRoot.AssemblyLinearVelocity,head=qbHead},
+        {Leads=controller.receiverEvidence.ReadSettings(),NativeContext=controller.receiverEvidence.NativeContext(),Plan=controller.passPlan.mode,Profile=controller.league.mode,Field={LOS=controller.history.Vector(lines.los),Forward=controller.history.Vector(lines.forward)}})
     local receipt={stage='FINAL_CONTEXT_CHECK',mode=selected.shot.mode,variant=selected.shot.variant}
     sequence.blockEvidence=receipt
     if usedTools[ball.tool]==possession.epoch then setGate('REQUEST_ALREADY_ATTEMPTED'); return end
@@ -3999,9 +4142,9 @@ local function releaseNow(ball,selected,defenders,now)
     -- reference describe the released candidate, not its counterfactual.
     receipt.stage='FINAL_NATIVE_SOLVE'
     local shot;shot,why,receipt.failure=solve(selected.player,selected.shot.variant or selected.shot.mode)
-    if shot then receipt.shot=shot;receipt.stage='FINAL_TUPLE_NOT_GRADED' end
+    if shot then receipt.shot=shot;receipt.stage='FINAL_TUPLE_NOT_GRADED';controller.bad.current.Final.Native=controller.bad:trajectory(shot) end
     if stopped or sequence~=activeSequence then return end
-    if not shot then setGate(why); return end
+    if not shot then controller.bad.current.Final.NativeFailure=why;setGate(why); return end
     if os.clock()-now>.28 then setGate('DECISION_STALE_AFTER_NATIVE_SOLVER'); return end
     if not readLines(os.clock()) then releaseChoice(); setGate(lines.status); return end
     local receiver,freshDefenders,changed=currentDefenders(selected.player,os.clock())
@@ -4070,6 +4213,8 @@ local function releaseNow(ball,selected,defenders,now)
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
     end)
     local throwId=controller.history.Shot(shot,selected.player,selected.sample,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','AUTO_QB',defenders)
+    if not throwId then throwId='bad:'..controller.bad.current.Id end
+    controller.bad:sent(throwId,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY',os.clock())
     if ok then
         local observed,why=pcall(controller.receiverEvidence.Begin,ball,selected.player,shot,throwId)
         if not observed then controller.receiverEvidence.Disable('CAPTURE_START_ERROR_DISABLED');log('RECEIVER_OBSERVER_ERROR',why) end
@@ -4392,6 +4537,17 @@ local function button(text,x,width,y)
     if Enum.TextTruncate then b.TextTruncate=Enum.TextTruncate.AtEnd end
     b.Parent=gui; return b
 end
+function controller.ExportBadPlay()
+    local report=controller.bad:report()
+    if not report then return false,'FLAG_A_PLAY_FIRST' end
+    local encoded=game:GetService('HttpService'):JSONEncode(report)
+    if #encoded>1500000 then return false,'REPORT_SIZE_LIMIT; EVIDENCE_RETAINED_IN_MEMORY' end
+    env.PELICAN_FF3_BAD_PLAY_REPORT=report
+    local copy=type(setclipboard)=='function' and setclipboard or type(toclipboard)=='function' and toclipboard
+    local copied=copy and pcall(copy,encoded) or false
+    local saved=type(writefile)=='function' and pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) or false
+    return copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API'
+end
 local built,buildError=pcall(function()
     gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V26'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('WAIT YUNA',-166,138)
@@ -4404,6 +4560,12 @@ local built,buildError=pcall(function()
         segment.BorderSizePixel=0;segment.BackgroundColor3=Color3.fromRGB(125,230,190);segment.BackgroundTransparency=.15
         segment.Active=false;segment.Parent=assistance.guideUI;assistance.guideSegments[#assistance.guideSegments+1]=segment
     end
+    controller.badButton=button('BAD PLAY',-366,106,62);controller.badButton.Size=UDim2.fromOffset(106,34)
+    connect(controller.badButton.Activated,function()
+        local ok,id=controller.bad:flag(os.clock())
+        controller.badButton.Text=ok and ('FLAGGED '..tostring(id)) or 'NO PLAY'
+        if ok then controller.ExportBadPlay() end
+    end)
     local kill=button('X',-26,22); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
     receiverButton=button('WR LIST',-166,106,112); receiverButton.Name='Receivers'
@@ -4438,7 +4600,7 @@ local built,buildError=pcall(function()
         controller.receiverEvidence.RefreshAdvice(true);controller.receiverEvidence.nextPaintAt=0;controller.receiverEvidence.Paint()
     end)
     connect(controller.history.button.Activated,function()
-        local ok,result=controller.history.Export();controller.history.button.Text=ok and 'COPIED' or 'FAIL';log('HISTORY_COPY',result)
+        local ok,result;if controller.bad:report() then ok,result=controller.ExportBadPlay() else ok,result=controller.history.Export() end;controller.history.button.Text=ok and 'COPIED' or 'FAIL';log('HISTORY_COPY',result)
     end)
     controller.jumpBullet.button.Name='JumpBullet';controller.jumpBullet.button.Visible=false
     if controller.nativeJump.supported then
@@ -4541,7 +4703,7 @@ local built,buildError=pcall(function()
     controller.SetProfile(controller.league.requested,'INITIAL_PROFILE')
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
     connect(throwButton.Activated,function() controller.SetThrow(not throwing) end)
-    connect(copyButton.Activated,function() preserve(true); copyButton.Text=copyResult=='API_ACCEPTED' and 'SENT' or 'FAIL' end)
+    connect(copyButton.Activated,function() if controller.bad:report() then controller.ExportBadPlay();copyButton.Text='BAD COPY';return end;preserve(true); copyButton.Text=copyResult=='API_ACCEPTED' and 'SENT' or 'FAIL' end)
     kill.Name='Reload'
     connect(kill.Activated,function()
         if type(context.RequestReload)=='function' then context.RequestReload()
@@ -4582,6 +4744,7 @@ local built,buildError=pcall(function()
         controller.receiverEvidence.maxSeconds=math.max(controller.receiverEvidence.maxSeconds,os.clock()-captureAt)
         if not observed then controller.receiverEvidence.Disable('CAPTURE_ERROR_DISABLED');log('RECEIVER_OBSERVER_ERROR',observeError) end
         controller.history.Update(os.clock())
+        controller.bad:heartbeat(now,os.clock()-now,frameCalls)
         maxHeartbeat=math.max(maxHeartbeat,os.clock()-now)
     end)
 end)

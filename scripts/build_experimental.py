@@ -87,6 +87,8 @@ s=s.replace("        local valid={}\n        for _,mode in ipairs(plannerModes) 
 s=s.replace("                    g.cache.gradedAt=now", "                    g.cache.gradedAt=now;g.cache.gradeRotation=(offset+gradeRotation)%#plannerModes")
 s=s.replace("Evaluation=u,Selected=", "DecisionAge=math.max(0,now-shot.at),Evaluation=u,Selected=")
 s=s.replace("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=", "Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
+from instrument_bad_play import instrument
+s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
 # Private loader copy has same ownership namespace; its X reload stays experimental.
 loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-qb"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')

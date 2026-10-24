@@ -161,3 +161,54 @@ wrapper does not provide one. Expanded catch locations/arrival times should use
 this same evaluator and be compared against Build B with identical observations.
 ML and remote processing remain out of scope. Validate model calibration before
 expanding the search: more candidates cannot repair wrong catch mechanics.
+
+## B2 BAD PLAY evidence
+
+Press **BAD PLAY** after a bad throw. It pins the latest attempted possession
+within 45 seconds, even after the planner advances. Otherwise it selects the
+recent closed/current possession. The label shows the pinned ID. To deliberately
+flag the current withheld possession, use `getgenv().PELICAN_FF3_AUTO_QB.bad:flag(os.clock(),true)`.
+BAD PLAY attempts clipboard/file export immediately. After the play settles,
+press COPY or DATA to re-export the SAME pinned play with late observations.
+The latest export is saved as `PELICAN_FF3_BAD_PLAY.json` when writefile is available.
+Clipboard API acceptance cannot establish that iOS clipboard readback worked.
+No automatic upload is introduced. The pinned report also survives an ordinary
+reload in executor session memory. Full app exits require the exported file.
+
+Reports carry anonymous per-session actor tokens, exact evaluator inputs/results,
+current model parameters and a SHA-256 source-input fingerprint (CodeId), plus
+EngineId. Native tuples include origin, velocity, arrival, time, power, lead and
+control metadata. Planner snapshots and final-release recalculation are separate;
+QB/field/settings are retained at release. Non-evaluated candidates carry explicit
+budget/cache/scheduling reasons. Native solve status is separate from grading.
+Observations retain their original evidence/unknown labels; no fault or required
+catch technique is inferred. Obsolete numeric coverage placeholders are marked
+inactive and omitted from structured per-shot fields.
+
+Memory retains three recent possessions, two planner snapshots each, at most 128
+candidate rows per snapshot, and one pinned report. Dropped-frame/row counters
+identify incomplete evidence. Actor identities are capped at 256 tokens. Export
+has a 1.5 MB bound; an oversized report is retained in memory and reports a size
+error instead of claiming a complete export. Credentials are never collected.
+
+Replay locally with `python3 scripts/replay_bad_play.py PELICAN_FF3_BAD_PLAY.json`.
+Replay validates EngineId and recomputes recorded evaluator inputs and candidate
+selection order. Missing final inputs, malformed snapshots, score mismatches and
+version mismatches return nonzero status. It does not rerun the native solver,
+recreate unobserved candidates or reproduce authoritative server catches.
+A saved report's CodeId identifies the baseline, generator, engine and recorder
+source inputs; it is not falsely presented as a Git commit SHA.
+
+The 3-ms grading budget is a cooperative limit; one synchronous grade can exceed
+it. Counters record skipped work, grades above budget, capture overhead and native
+calls. Heartbeat intervals and callback-duration maxima distinguish the whole
+observed frame interval from this callback's elapsed work. These are live telemetry,
+not proof that this script caused every frame spike. JSON encoding/disk/clipboard
+work occurs on user export, never per candidate. Snapshot copying has a measurable
+cost and participates in the current budget; inspect skip rates on the device.
+
+Run `python3 tests/experimental/test_bad_play.py` for delayed flagging, immutable
+snapshots, final/planner separation, late observation attachment, ring eviction,
+anonymous export, JSON CLI round-trip and missing/corrupt/version evidence tests.
+The production entry and V26.22 module remain unchanged. No parameter adaptation
+or deep-throw behavior changes are included in this diagnostics update.
