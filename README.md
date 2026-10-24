@@ -17,7 +17,9 @@ Unknown places load nothing. Threshold universe ID is unverified and is not assu
 
 **Threshold:** tiny feature list for farm, NAV / ESP / fullbright, fast rolls, and separate UI rolls. Nothing starts spending on join. Each roller requires its own START and visible budget. Red kill cancels queued continuation and opens the final report/copy view. [Usage, provenance, and limits](THRESHOLD.md).
 
-**FF3:** V26.21 fixes final-rejection diagnostics borrowing an earlier candidate’s clearances and retains bounded per-receiver native mode attempts. It preserves passing behavior. [Evidence stages and validation](FF3_FINAL_EVIDENCE.md).
+**FF3:** V26.22 lets TRUST take an ordinary Bullet/Dime trailing-corner burn with at least four studs of current and projected route separation and no over-top safety. A terminal catch contest is allowed; earlier interceptions and other coverage still veto it. SAFE/MOD keep their rules. [Burn policy and validation limits](FF3_TRUST_BURNS.md).
+
+V26.21 fixes final-rejection diagnostics borrowing an earlier candidate’s clearances and retains bounded per-receiver native mode attempts. [Evidence stages and validation](FF3_FINAL_EVIDENCE.md).
 
 V26.20 revisits the least recently planned eligible receiver instead of repeatedly favoring one challenger. The reproduced six-receiver maximum revisit gap falls from 1.30 to 0.65 seconds without raising the native budget. Reports map usernames to display names; the UI stays unchanged. [Planning changes and evidence limits](FF3_FRAME_REVIEW.md).
 

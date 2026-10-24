@@ -1,5 +1,13 @@
 # FF3 Auto QB: adaptive Bullet power and retained history
 
+V26.22 adds a TRUST-only ordinary Bullet/Dime exception for a trailing corner
+with at least four studs of current and projected separation and no over-top
+safety. It admits a terminal catch contest while preserving earlier path checks,
+other defenders, native release/receiver gates and SAFE/MOD policy. The older
+statements below that Bullet is strict in every risk mode describe prior
+releases; this targeted exception supersedes them. [Current burn rules and live
+limits](FF3_TRUST_BURNS.md).
+
 V26.21 fixes stale final-rejection metrics and retains bounded per-receiver mode-attempt diagnostics. Passing rules remain unchanged. [Current evidence behavior](FF3_FINAL_EVIDENCE.md).
 
 V26.20 improves challenger scheduling within the existing native budgets and adds local target identity mapping. [Current planning behavior and limits](FF3_FRAME_REVIEW.md).

@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.21): retained decision history; optional private JSONBin sync.
+-- PELICAN_FF3_V26 (ff3-v26.22): TRUST trailing-corner burn windows.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -257,6 +257,8 @@ env.PELICAN_FF3_ADAPTIVE_ANGLE=controller.angle.enabled
 local riskPolicy={profiles={SAFE={margin=6,lane=4},
     MOD={margin=2,lane=CFG.ThrowLane,race=.08,lateral=3,turn=.25,arrivalSlack=.05},
     TRUST={margin=-2,lane=-4,race=-.02,lateral=6,turn=.5,arrivalSlack=.1}}}
+-- Deliberate contest policy, not a measured FF3 catch radius/probability.
+riskPolicy.burn={gap=4,contestFraction=.25,contestSeconds=.25}
 function riskPolicy.normalize(value)
     if type(value)~='string' then return end
     value=value:upper();if value=='MODERATE' then value='MOD' end
@@ -426,7 +428,7 @@ controller.history=(function()
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
             Receiver=h.Actor(player and player.Name or 'AWAY',s),Comparisons=comparisons,Defenders=actors,DefenderCount=#(defenders or {}),
-            Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,
+            Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,TrustBurn=shot.trustBurn,
             LeadSettings=controller.receiverEvidence and controller.receiverEvidence.ReadSettings(),
             EffectiveYLead=shot.effectiveYLead,VerticalLeadControlActive=shot.verticalLeadControlActive,
             LeadControls=controller.receiverEvidence and controller.receiverEvidence.Bindings(shot),
@@ -472,7 +474,7 @@ controller.history=(function()
             Margin=shot.margin,Lane=shot.lane,Receiver=h.Actor(player.Name,s),
             Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,
             DefenderETA=shot.defenderETA,ReceiverETA=shot.receiverETA,RaceAdvantage=shot.raceAdvantage,
-            RouteLateral=shot.routeLateral,ReceiverTurn=shot.receiverTurn,OverTop=shot.safetyOverTop,BurnCandidate=shot.burnCandidate,
+            RouteLateral=shot.routeLateral,ReceiverTurn=shot.receiverTurn,OverTop=shot.safetyOverTop,BurnCandidate=shot.burnCandidate,TrustBurn=shot.trustBurn,
             FitReason=shot.fitReason,FitComparison=shot.fitAlternativeVariant,FitSecondComparison=shot.fitSecondVariant,
             PlanReason=shot.planReason,ReleaseBlocked=shot.releaseBlocked,SafetyRead=shot.safetyRead,ContestedChestThreat=shot.contestedChestThreat,
             MarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
@@ -1412,7 +1414,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|ff3-v26.21','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|ff3-v26.22','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1420,7 +1422,9 @@ function controller.GetReport()
         'ANGLE_POLICY|COVERAGE_DERIVED_NATIVE_DIME_JUMP; FOUR_BOUNDED_ESTIMATES; NO_EXTRA_NATIVE_SOLVES; FIT_BULLET_LOW_BRANCH_UNCHANGED; NATIVE_OUTPUT_AND_SAFETY_RECHECK_REQUIRED',
         'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
-        'BULLET_RISK_POLICY|STRICT_IN_ALL_RISK_MODES_INCLUDING_CUSTOM_VARIANTS',
+        'BULLET_RISK_POLICY|SAFE_MOD_STRICT; TRUST_ORDINARY_TRAILING_CORNER_BURN_EXCEPTION; CUSTOM_JUMP_STRICT',
+        'TRUST_BURN_POLICY|ORDINARY_BULLET_DIME; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR; FINAL_CONTEST_ALLOWED',
+        'TRUST_BURN_CONTEST_FRACTION|'..riskPolicy.burn.contestFraction,'TRUST_BURN_MAX_CONTEST_SECONDS|'..riskPolicy.burn.contestSeconds,
         'SAFETY_READS|'..tostring(controller.safety.enabled),'SAFETY_POLICY|HIGH_HOLDING_BULLET_ONLY; FLOATING_AUTO_ARC; DROPPING_SLANT_CHEST_THREAT_CONDITIONAL_JUMP; FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED',
         'OPPORTUNITY_POLICY|MOD_TRUST_ROUTE_INDEPENDENT; FRESH_CACHED_RECEIVERS_REGRADED; SHORTER_READY_COMPLETIONS_PREFERRED; CANCEL_PENDING_NOT_RECEIVER',
         'REACTIVE_WINDOWS|'..tostring(controller.reactivity.enabled),'REACTIVE_CACHED_PASSES|'..controller.reactivity.cachedPasses,
@@ -1434,7 +1438,7 @@ function controller.GetReport()
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
-        'RISK_POLICY|SAFE=STRICT; MOD=COMFORTABLE_NON_BULLET_BURN_RACE; TRUST=TIGHTER_NON_BULLET_BURN_RACE; DIRECT_PATH_AND_PREVENT_STILL_BLOCKED',
+        'RISK_POLICY|SAFE=STRICT; MOD=COMFORTABLE_NON_BULLET_BURN_RACE; TRUST=TIGHTER_RACE_OR_TRAILING_CORNER_BURN; EARLY_DIRECT_PATH_AND_PREVENT_BLOCKED',
         'RISK_LIMITS|margin='..selectedRisk.margin..' lane='..selectedRisk.lane..' race='..tostring(selectedRisk.race)..' lateral='..tostring(selectedRisk.lateral)..' turn='..tostring(selectedRisk.turn),
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
         'CLOSE_BULLET_POLICY|ADAPTIVE_GENTLE_AND_WINDOW_NATIVE_LOW_ARC; LOWEST_STRICT_SAFE_POWER; NO_YELLOW_DEPENDENCY',
@@ -2487,32 +2491,88 @@ local function runSpeed(s)
     if s.hum and finite(s.hum.WalkSpeed) then speed=math.max(speed,s.hum.WalkSpeed) end
     return speed
 end
-local function lane(shot,d,direct,both)
+local function lane(shot,d,direct,both,earlyUntil)
     controller.coverageMath.verticalBands=controller.coverageMath.verticalBands+1
     local o,v,t=shot.origin,shot.velocity,shot.time
     local reach=12.2
     if d.hum and finite(d.hum.JumpPower) then reach=clamp(d.hum.JumpPower^2/(2*workspace.Gravity)+5,12.2,24) end
     local bottom,top=d.p.Y-2,d.p.Y+reach
     local disc=v.Y*v.Y-2*CFG.Gravity*(bottom-o.Y)
-    if disc<0 then return 45,both and 45 or nil end
+    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil end
     local r=math.sqrt(disc); local lo,hi=math.max(0,(v.Y-r)/CFG.Gravity),math.min(t,(v.Y+r)/CFG.Gravity)
-    if hi<lo then return 45,both and 45 or nil end
+    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil end
     local bodyRadius=4.5+d.turn*3
     local function interval(a,b)
-        if b<a then return 45,both and 45 or nil end
+        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil end
         local vx,vz=v.X,v.Z
         if direct then vx,vz=vx-d.v.X,vz-d.v.Z end
         local first=linearMinimum(o.X-d.p.X,o.Z-d.p.Z,vx,vz,a,b,direct and 0 or runSpeed(d))-bodyRadius
-        if both then return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius end
+        if both then
+            local early=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,math.min(b,earlyUntil),0)-bodyRadius or 45)
+            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early
+        end
         return first
     end
     local high=v.Y*v.Y-2*CFG.Gravity*(top-o.Y)
     if high<=0 then return interval(lo,hi) end
     r=math.sqrt(high)
     local enter,leave=(v.Y-r)/CFG.Gravity,(v.Y+r)/CFG.Gravity
-    local early,earlyDirect=interval(lo,math.min(hi,enter))
-    local late,lateDirect=interval(math.max(lo,leave),hi)
-    return math.min(early,late),both and math.min(earlyDirect,lateDirect) or nil
+    local early,earlyDirect,earlyContest=interval(lo,math.min(hi,enter))
+    local late,lateDirect,lateContest=interval(math.max(lo,leave),hi)
+    return math.min(early,late),both and math.min(earlyDirect,lateDirect) or nil,
+        earlyUntil and math.min(earlyContest,lateContest) or nil
+end
+function riskPolicy.BurnStart(shot,receiver)
+    shot.trustBurn=nil
+    if riskPolicy.mode~='TRUST' or (shot.mode~='Bullet' and shot.mode~='Dime')
+        or shot.jumpBullet or shot.nativeCoverageJump or shot.magTrial or shot.screen then return end
+    local motion=flat(receiver.v)
+    if not lines.forward or motion.Magnitude<CFG.MinMoveSpeed or motion.Unit:Dot(lines.forward)<.5
+        or flat(shot.arrival-receiver.p):Dot(motion)<=0 then return end
+    shot.trustBurn={Allowed=false,Reason='NO_TRAILING_THREAT',Threats=0,Route=motion.Unit,
+        Horizon=shot.time+math.max(0,shot.networkPing or 0),
+        EarlyUntil=shot.time-math.min(shot.time*riskPolicy.burn.contestFraction,riskPolicy.burn.contestSeconds)}
+end
+function riskPolicy.BurnEarlyUntil(shot,receiver,d)
+    local b=shot.trustBurn
+    if not b then return end
+    local gap=math.min(flat(receiver.p-d.p):Dot(b.Route),
+        flat(predict(receiver,b.Horizon)-predict(d,b.Horizon)):Dot(b.Route))
+    local closing=math.max(1,flat(shot.velocity-d.v):Dot(b.Route))
+    -- More separation makes the ball pass the trailing corner earlier. Move
+    -- the same contest boundary back so a bigger burn cannot grade worse.
+    return math.max(0,b.EarlyUntil-math.max(0,gap-riskPolicy.burn.gap)/closing)
+end
+function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect)
+    local b=shot.trustBurn
+    if not b or clearance>=CFG.ThrowMargin and path>=CFG.ThrowLane then return end
+    b.Threats=b.Threats+1
+    local relative=flat(receiver.p-d.p)
+    local future=flat(predict(receiver,b.Horizon)-predict(d,b.Horizon))
+    local gap,futureGap=relative:Dot(b.Route),future:Dot(b.Route)
+    local side=(relative-b.Route*gap).Magnitude
+    b.Gap=math.min(b.Gap or math.huge,gap)
+    b.ProjectedGap=math.min(b.ProjectedGap or math.huge,futureGap)
+    b.EarlyLane=math.min(b.EarlyLane or math.huge,earlyDirect or -math.huge)
+    -- Only trailing corners get the contest allowance. Other lane/endpoint
+    -- threats still veto it. Permit the final catch contest, not an earlier
+    -- direct interception. Reuse lane()'s actual reachable-height intervals.
+    if gap<riskPolicy.burn.gap-1e-6 or relative:Dot(lines.forward)<=0
+        or side>riskPolicy.profiles.TRUST.lateral then b.Blocked='DEFENDER_NOT_TRAILING'
+    elseif futureGap<riskPolicy.burn.gap-1e-6 then b.Blocked='BURN_CLOSING'
+    elseif not earlyDirect or earlyDirect<=0 then b.Blocked='EARLY_INTERCEPTION_PATH' end
+end
+function riskPolicy.BurnFinish(shot)
+    local b=shot.trustBurn
+    if not b then return end
+    local p=riskPolicy.profiles.TRUST
+    b.Reason=b.Blocked or (shot.safetyOverTop or shot.safetyRead and shot.safetyRead.High) and 'SAFETY_OVER_TOP'
+        or (shot.routeLateral or math.huge)>p.lateral and 'ROUTE_CORRECTION'
+        or (shot.receiverTurn or 1)>p.turn and 'ROUTE_UNSTABLE'
+        or (shot.receiverETA or math.huge)>shot.time+p.arrivalSlack and 'RECEIVER_LATE'
+        or b.Threats==0 and 'NO_TRAILING_THREAT' or 'TRAILING_CORNER_ADVANTAGE'
+    b.Allowed=b.Reason=='TRAILING_CORNER_ADVANTAGE'
+    b.Route=nil -- retain scalar diagnostics only
 end
 local function risk(shot,receiver,defenders)
     controller.coverageMath.grades=controller.coverageMath.grades+1
@@ -2540,6 +2600,7 @@ local function risk(shot,receiver,defenders)
     route=route.Magnitude>0 and lines.forward and route:Dot(lines.forward)>0 and route.Unit or nil
     shot.safetyOverTop,shot.safetyName=false,nil
     shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
+    riskPolicy.BurnStart(shot,receiver)
     for _,d in ipairs(defenders) do
         -- Instant turning at observed/normal run speed is optimistic for the DB.
         -- A trailing defender must cover the actual distance before arrival;
@@ -2550,10 +2611,11 @@ local function risk(shot,receiver,defenders)
         local clearance=baseClearance-(enhanced and speed*pingBudget or 0)
         local eta=speed>0 and math.max(0,distance-(4.5+d.turn*3))/speed or (distance<=4.5+d.turn*3 and 0 or math.huge)
         firstDB=math.min(firstDB,eta)
-        local basePath,directPath=lane(shot,d,false,riskPolicy.mode~='SAFE')
+        local basePath,directPath,earlyDirect=lane(shot,d,false,riskPolicy.mode~='SAFE',riskPolicy.BurnEarlyUntil(shot,receiver,d))
         if directPath then directLane=math.min(directLane,directPath-(enhanced and speed*pingBudget or 0)) end
         if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
         local pathClearance=basePath-(enhanced and speed*pingBudget or 0)
+        riskPolicy.BurnGrade(shot,receiver,d,clearance,pathClearance,earlyDirect)
         if read then
             local relative=flat(d.p-receiver.p);local depth=relative:Dot(lines.forward)
             local later=relative+flat(d.v-receiver.v)*(read.Horizon+pingBudget)
@@ -2612,6 +2674,7 @@ local function risk(shot,receiver,defenders)
         shot.routeLateral=movement.Magnitude>0 and (residual-movement.Unit*residual:Dot(movement.Unit)).Magnitude or math.huge
         shot.receiverTurn=receiver.routeTurn or receiver.turn
     end
+    riskPolicy.BurnFinish(shot)
     -- Once both clearances have a useful safety surplus, extra empty space
     -- must not make a slow floating arc beat an already-safe direct throw.
     shot.score=math.min(margin,CFG.ThrowMargin*2)*1.8+math.min(laneMargin,CFG.ThrowLane*2)*1.5-t*3-receiver.turn*12-(shot.receiverResidual or 0)*.25
@@ -2697,6 +2760,7 @@ local function throwable(shot)
     if shot.nativeCoverageJump then return strict end
     if shot.magTrial then return strict and controller.mag.Allowed(shot.magPlayer) end
     if strict then return true end
+    if riskPolicy.mode=='TRUST' and shot.trustBurn and shot.trustBurn.Allowed then return true end
     local p=riskPolicy.profiles[riskPolicy.mode]
     -- Risk modes govern a qualified catch window, including a crosser or a
     -- comeback. Forward-route classification must not veto an otherwise valid
