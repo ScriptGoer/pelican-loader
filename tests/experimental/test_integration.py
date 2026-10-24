@@ -33,3 +33,7 @@ assert "WAIT_DIAGONAL_ROUTE_DEVELOPMENT" in repaired
 assert "RELEASE_VERSION|repair-b2-20261024" in repaired
 assert "fix/auto-qb-regressions-20261024" in loader
 print("PASS 3 route-timing/version/loader repair contracts")
+
+assert "controller.unified.lastRelease.Alternatives={}" in repaired
+assert "controller.unified.lastRelease.HistoryThrowId=throwId" in repaired
+print("PASS 2 actual-release diagnostic contracts")

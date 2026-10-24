@@ -4095,6 +4095,24 @@ local function releaseNow(ball,selected,defenders,now)
     for i,d in ipairs(defenders)do if i>16 then break end
         controller.unified.lastRelease.Defenders[#controller.unified.lastRelease.Defenders+1]={
             Name=d.name,Position={d.p.X,d.p.Y,d.p.Z},Velocity={d.v.X,d.v.Y,d.v.Z}} end
+    -- Costly richer counterfactual snapshots are collected only on an actual
+    -- release, not during each grading heartbeat.
+    controller.unified.lastRelease.Alternatives={}
+    for candidate,cache in pairs(shotCache)do
+        if cache.epoch==possession.epoch then
+            for mode,other in pairs(cache.shots)do
+                if other.unified and other.at and os.clock()-other.at<=CFG.CacheAge
+                    and #controller.unified.lastRelease.Alternatives<48 then
+                    controller.unified.lastRelease.Alternatives[#controller.unified.lastRelease.Alternatives+1]={
+                        Receiver=candidate.Name,Variant=mode,Time=other.time,Power=other.power,
+                        Origin=other.origin and {other.origin.X,other.origin.Y,other.origin.Z},
+                        Velocity=other.velocity and {other.velocity.X,other.velocity.Y,other.velocity.Z},
+                        Arrival=other.arrival and {other.arrival.X,other.arrival.Y,other.arrival.Z},
+                        Grading=other.unified,Age=os.clock()-other.at}
+                end
+            end
+        end
+    end
     local lastDecision={summary=evidence,actors={},release=string.format('risk=%s distanceYards=%.2f clearBurn=%s safetyOverTop=%s qbY=%.3f qbVy=%.3f jump=%s animation=%s; VISUAL_AFTER_REQUEST',riskPolicy.mode,shot.passYards,tostring(shot.clearBurn),tostring(shot.safetyOverTop),current.root.Position.Y,current.root.AssemblyLinearVelocity.Y,assistance.jumpStatus,animationStatus)}
     local function actor(name,s)
         return string.format('%s p=%.2f,%.2f,%.2f v=%.2f,%.2f,%.2f runSpeed=%.2f',
@@ -4124,6 +4142,7 @@ local function releaseNow(ball,selected,defenders,now)
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
     end)
     local throwId=controller.history.Shot(shot,selected.player,selected.sample,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','AUTO_QB',defenders)
+    if controller.unified.lastRelease then controller.unified.lastRelease.HistoryThrowId=throwId end
     if controller.unified.lastRelease then controller.unified.lastRelease.ReleaseStatus=
         ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY' end
     if ok then
