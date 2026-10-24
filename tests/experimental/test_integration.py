@@ -16,3 +16,15 @@ before=hashlib.sha256(e.encode()).digest()
 subprocess.run([sys.executable,str(R/'scripts/build_experimental.py')],check=True)
 assert hashlib.sha256((R/'experimental/auto_qb.lua').read_bytes()).digest()==before;checks+=1
 print(f'PASS {checks} integration/source contracts, including byte-identical native solve and deterministic regeneration')
+
+# Repair regression contracts (live gameplay remains unverified).
+repaired=(R/'experimental/auto_qb.lua').read_text()
+assert 'local function deepThrow(shot,hum)' in repaired
+assert 'shot.powerAllowed=touch.fullAllowed(shot)' in repaired
+assert 'and shot.powerAllowed~=false' in repaired
+assert 'return Unified.better(a,b,riskPolicy.mode)' in repaired
+assert "'BAD_PLAY_DIAGNOSTIC|'" in repaired
+assert "'GRADE_BUDGET_NOT_EVALUATED'" in repaired
+assert "'NATIVE_PLANNING_BUDGET_NOT_EVALUATED'" in repaired
+assert "badPlayButton=button('BAD PLAY'" in repaired
+print('PASS 8 repair contracts; runtime performance and behavior need in-game tests')

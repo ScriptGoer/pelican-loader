@@ -2,7 +2,7 @@
 local E={}
 E.defaults={Acceleration=36,ReactionSeconds=.12,HorizontalReach=4.5,VerticalReach=12.2,
     PositionUncertainty=.35,VelocityUncertainty=.5,Samples=16,ContestRelief=.75,DistanceScale=1.5,
-    SafeRisk=.16,ModRisk=.32,TrustRisk=.58,RiskWeight=70,ComfortWeight=8,TouchdownValue=45}
+    SafeRisk=.16,ModRisk=.32,TrustRisk=.58,RiskWeight=70,ComfortWeight=14,TouchdownValue=45}
 local function clamp(x,a,b)return math.max(a,math.min(b,x))end
 local function flat(v)return v*Vector3.new(1,0,1)end
 local function sigmoid(x)return 1/(1+math.exp(-clamp(x,-30,30)))end
@@ -49,7 +49,7 @@ function E:evaluate(shot,wr,defenders,context)
         result.HardReason='RECEIVER_MOVEMENT_INFEASIBLE'
     end
     result.CatchDifficulty=relativeSpeed/60+adjustment/(c.HorizontalReach+speed(wr)*t*.25)
-        +math.max(0,height-1)/3+math.max(0,-height-2)/3+math.max(0,t-1.4)^2
+        +math.max(0,height-1)/3+math.max(0,-height-2)/3+math.max(0,t-1.4)^2+math.max(0,.95-t)^2*5
     result.ArrivalRelativeSpeed=relativeSpeed;result.HeightAboveHead=height;result.Adjustment=adjustment
     local bestAdvantage=100
     for index,d in ipairs(defenders)do
@@ -97,7 +97,7 @@ function E:evaluate(shot,wr,defenders,context)
     result.CatchDifficulty=result.CatchDifficulty+(result.SupportAdjustment or 0)/(2*c.HorizontalReach)
     result.ReceiverAdvantage=bestAdvantage
     result.ScoringValue=math.max(0,context.gain or 0)+(context.endzone and c.TouchdownValue or 0)
-    result.Score=result.ScoringValue-c.RiskWeight*result.RiskScore-c.ComfortWeight*result.CatchDifficulty
+    result.Score=result.ScoringValue-c.RiskWeight*({SAFE=1.1,MOD=1,TRUST=.85})[context.mode]*result.RiskScore-(context.comfortWeight or c.ComfortWeight)*result.CatchDifficulty
     result.RiskCaps={SAFE=c.SafeRisk,MOD=c.ModRisk,TRUST=c.TrustRisk}
     result.Allowed=not result.HardReason and result.RiskScore<=result.RiskCaps[context.mode]
     result.Reason=result.HardReason or (result.Allowed and 'VIABLE_OPPORTUNITY' or 'RISK_TOLERANCE')

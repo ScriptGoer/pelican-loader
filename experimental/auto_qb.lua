@@ -1486,7 +1486,9 @@ local function onLineAdded(o)
 end
 function controller.GetReport()
     local selectedRisk=riskPolicy.profiles[riskPolicy.mode]
-    local rows={VERSION,'UNIFIED_DECISIONS|'..game:GetService('HttpService'):JSONEncode(controller.unified.last or {}),'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
+    local rows={VERSION,'UNIFIED_DECISIONS|'..game:GetService('HttpService'):JSONEncode(controller.unified.last or {}),
+        'UNIFIED_SKIPPED|'..game:GetService('HttpService'):JSONEncode(controller.unified.skipped or {}),
+        'BAD_PLAY_DIAGNOSTIC|'..game:GetService('HttpService'):JSONEncode(controller.unified.bad or {}),'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
         'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'RISK_MODE|'..riskPolicy.mode,'PASS_PLAN|'..controller.passPlan.mode,
         'RECEIVER_FILTER|'..controller.receiverFilter.mode,'FRIEND_LOOKUP_STATUS|'..controller.receiverFilter.status,'FRIEND_LOOKUP_METHOD|'..(controller.receiverFilter.method or 'NOT_USED'),'FRIEND_LOOKUP_CALLS|'..controller.receiverFilter.checks,
         'PLAY_PROFILE|'..controller.league.mode,'PLAY_PROFILE_REQUEST|'..controller.league.requested,'PLAY_PROFILE_SOURCE|'..controller.league.source,
@@ -1497,7 +1499,7 @@ function controller.GetReport()
         'NATIVE_COVERAGE_JUMP|'..tostring(controller.nativeJump.enabled),'NATIVE_JUMP_POLICY|OWN_JUMP_LEAD_AND_NATIVE_CONTROLS; FRESH_CHEST_THREAT_REQUIRED; SAFE_ORDINARY_BULLET_VETO; CATCH_WINDOW_UNCALIBRATED',
         'LEAGUE_COVERAGE_POLICY|WHOLE_NATIVE_PATH_AND_ARRIVAL; DEFENDER_PING_BUDGET; GEOMETRIC_LAYERS_NOT_ASSIGNED_ROLES; FIT_WINDOW_REQUIRES_FRESH_BULLET_AND_DIME',
         'SHARED_COVERAGE_WINDOWS|'..tostring(controller.coverageWindows.enabled),'SHARED_COVERAGE_SCOPE|CASUAL_AND_LEAGUE; ORIGINAL_CASUAL_UI_AND_RECEIVER_FILTERS_RETAINED',
-        'OPEN_COMFORT|'..tostring(controller.passPlan.openComfort),'OPEN_COMFORT_POLICY|SAFE_ORDINARY_BULLET_FIRST; NATIVE_JUMP_NOT_PLANNED; CUSTOM_JB_REQUIRES_FRESH_CHEST_THREAT',
+        'OPEN_COMFORT|'..tostring(controller.passPlan.openComfort),'OPEN_COMFORT_POLICY|UNIFIED_CATCH_COST_WEIGHT_1_3X; NATIVE_SUPPORTED_MODES; NATIVE_JUMP_NOT_PLANNED',
         'PASS_PLAN_DEEP_YARDS|'..controller.passPlan.deepYards,'WIDE_OPEN_JUMP|'..tostring(controller.passPlan.preferJump),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
         'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
@@ -1544,7 +1546,7 @@ function controller.GetReport()
         'MAG_POLICY|OPT_IN_RAISED_DIME; VERIFIED_FRIEND_OR_MANUAL_TRUST; BLOCK_OVERRIDES_TRUST; STRICT_COVERAGE; ORDINARY_SAFE_THROWS_PREFERRED; ANGLE_REQUIRED_HEIGHT_UNCALIBRATED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
-        'TRUST_BURN_POLICY|ORDINARY_BULLET_DIME; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR; FINAL_CONTEST_ALLOWED',
+        'TRUST_BURN_POLICY|SUPERSEDED_IN_EXPERIMENT_BY_UNIFIED_RISK_CAPS',
         'TRUST_BURN_CONTEST_FRACTION|'..riskPolicy.burn.contestFraction,'TRUST_BURN_MAX_CONTEST_SECONDS|'..riskPolicy.burn.contestSeconds,
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
         'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
@@ -1572,7 +1574,7 @@ function controller.GetReport()
         'JUMP_DELAY_TARGET_SECONDS|'..controller.jumpTiming.delay,'JUMP_TIMING_STATUS|'..controller.jumpTiming.status,
         'JUMP_OBSERVATIONS|'..controller.jumpTiming.observations,'JUMP_TIMING_CANCELLED|'..controller.jumpTiming.cancelled,
         'LAST_JUMP_RELEASE_DELAY_SECONDS|'..tostring(controller.jumpTiming.lastReleaseDelay),
-        'DEEP_POLICY|FLIGHT_EXCEEDS_CURRENT_NORMAL_JUMP_AIRTIME; NO_YARD_CUTOFF',
+        'DEEP_POLICY|RESTORED_NORMAL_QB_JUMP_FOR_LONG_NATIVE_FLIGHT; NO_YARD_CUTOFF',
         'BURN_CUT_CANCEL_DEGREES|45',
         'GUIDE_MODEL|ADVISORY_NATIVE_CONTINUATION; MAX_SIX_ESTIMATES_ONE_MS_BUDGET; PARALLEL_LEFT_RIGHT_BACK; NO_AUTO_MOVEMENT; NEVER_RELEASE_AUTHORITY',
         'GUIDE_RENDER|PLAYERGUI_SEGMENTS_PROJECTED_TO_VERIFIED_GROUND; NO_WORKSPACE_OBJECTS; MAX_30_HZ; NO_DEPTH_OCCLUSION',
@@ -2697,11 +2699,12 @@ function riskPolicy.BurnFinish(shot)
 end
 local function risk(shot,receiver,defenders)
     controller.unified:evaluate(shot,receiver,defenders,{gravity=CFG.Gravity,mode=riskPolicy.mode,
-        gain=math.max(0,downfield(shot.arrival)/3),endzone=controller.field.InEndzone(shot.arrival)})
+        gain=math.max(0,downfield(shot.arrival)/3),endzone=controller.field.InEndzone(shot.arrival),
+        comfortWeight=controller.unified.config.ComfortWeight*(controller.passPlan.openComfort and 1.3 or .5)})
     shot.unified.Generation=controller.unified.generation
     shot.margin,shot.lane=0,0;shot.defenderETA=math.huge
     shot.wideMargin,shot.wideLane=0,0;shot.safetyOverTop=false;shot.safetyRead=nil
-    shot.score=shot.unified.Score;shot.powerAllowed=true
+    shot.score=shot.unified.Score;shot.powerAllowed=touch.fullAllowed(shot)
     return shot
 end
 local lastNativeInputs
@@ -2769,16 +2772,25 @@ local function coverage(shot,s,defenders)
     shot.planAllowed=controller.passPlan.mode=='NORMAL' or controller.passPlan.mode=='DEEP' and (shot.deepTarget or shot.endzoneTarget)
         or controller.passPlan.mode=='SHORT' and not shot.deepTarget
     shot.planReason=shot.planAllowed and 'PASS_PLAN_ALLOWED' or 'EXPLICIT_DEPTH_PLAN'
-    shot.clearBurn=false;shot.wideOpen=shot.unified.RiskScore<=controller.unified.config.SafeRisk
+    shot.wideOpen=shot.unified.RiskScore<=controller.unified.config.SafeRisk
+    shot.clearBurn=lines.forward~=nil and flat(s.v):Dot(lines.forward)>CFG.MinMoveSpeed
+        and flat(shot.arrival-s.p):Dot(flat(s.v))>0
+        and shot.unified.RiskScore<=controller.unified.config.ModRisk or false
 end
 local function throwable(shot)
-    return shot.planAllowed~=false and not shot.releaseBlocked and (not shot.magTrial or controller.mag.Allowed(shot.magPlayer))
+    return shot.planAllowed~=false and not shot.releaseBlocked and shot.powerAllowed~=false
+        and (not shot.magTrial or controller.mag.Allowed(shot.magPlayer))
         and Unified.allowed(shot,riskPolicy.mode)
 end
 controller.fit={}
 function controller.jumpBullet.assess(shot) shot.jumpBulletAllowed=true;return throwable(shot) end
 function controller.fit.assess(shot) shot.fitAllowed=true;return throwable(shot) end
-local function better(a,b) return Unified.better(a,b,riskPolicy.mode) end
+local function better(a,b)
+    if not b then return true end
+    local ar,br=throwable(a),throwable(b)
+    if ar~=br then return ar end
+    return Unified.better(a,b,riskPolicy.mode)
+end
 local function receiverBetter(a,b) return not b or better(a.shot,b.shot) end
 local function classify(shot,s,defenders)
     local speed=flat(s.v).Magnitude
@@ -3082,6 +3094,7 @@ function controller.fit.alternatives(player,s,defenders,now,fresh,fresh2,include
 end
 local function evaluate(receivers,indices,defenders,now)
     controller.unified.generation=(controller.unified.generation or 0)+1
+    controller.unified.skipped={}
     controller.angle.scene={at=now,epoch=possession.epoch,generation=lines.generation,team=me.Team,defenders=defenders}
     local groups={}
     for _,index in ipairs(indices) do
@@ -3126,7 +3139,15 @@ local function evaluate(receivers,indices,defenders,now)
             break
         end
     end
-    if limited then planDeferred=planDeferred+1 end
+    if limited then
+        planDeferred=planDeferred+1
+        for _,g in ipairs(groups)do for _,mode in ipairs(plannerModes)do
+            if not g.tried[mode] and #controller.unified.skipped<48 then
+                controller.unified.skipped[#controller.unified.skipped+1]={
+                    Receiver=g.r.player.Name,Variant=mode,Reason='NATIVE_PLANNING_BUDGET_NOT_EVALUATED'}
+            end
+        end end
+    end
     maxPlanCalls=math.max(maxPlanCalls,calls)
     -- Native work stays limited to the scheduled pair. Regrade other current
     -- receivers' still-fresh tuples too: rotating out of the solve pair must
@@ -3167,7 +3188,12 @@ local function evaluate(receivers,indices,defenders,now)
                     g.cache.gradedAt=now;g.cache.gradeRotation=(offset+gradeRotation)%#plannerModes
                     risk(shot,r.sample,defenders); coverage(shot,r.sample,defenders)
                     valid[#valid+1]=shot
-                else receiverRejects[r.player.Name..'/'..mode]=rejection end
+                else
+                    local reason=not eligible and (rejection or 'RECEIVER_INELIGIBLE') or 'GRADE_BUDGET_NOT_EVALUATED'
+                    receiverRejects[r.player.Name..'/'..mode]=reason
+                    if #controller.unified.skipped<48 then controller.unified.skipped[#controller.unified.skipped+1]={
+                        Receiver=r.player.Name,Variant=mode,Reason=reason,GradingSeconds=os.clock()-gradingStarted} end
+                end
             end
         end
         for _,shot in ipairs(valid) do if shot.jumpBullet or shot.nativeCoverageJump then shot.jumpBulletAllowed=false end end
@@ -3204,6 +3230,12 @@ local function evaluate(receivers,indices,defenders,now)
                     or best and best.shot==shot and 'WINNER' or 'LOWER_OPPORTUNITY_SCORE'}
         end
     end end
+    controller.unified.recentPlan={
+        Epoch=possession.epoch,At=os.clock(),Mode=riskPolicy.mode,PassPlan=controller.passPlan.mode,
+        Winner=best and {Receiver=best.player.Name,Variant=best.shot.variant or best.shot.mode,
+            Score=best.shot.unified and best.shot.unified.Score} or nil,
+        Candidates=controller.unified.last,Skipped=controller.unified.skipped,
+        Config=controller.unified.config,NativeSolverCalls=nativeCalls}
     return best
 end
 -- Advisory only: forecasts run after release work, reuse the native tuple,
@@ -3334,7 +3366,15 @@ do
         timing.status='NO_NEW_JUMP_IMMEDIATE';return true
     end
 end
-local function deepThrow() return false end
+local function deepThrow(shot,hum)
+    if shot.softBullet or shot.screen then return false end -- softened close pass or deliberate stationary screen
+    local ascent=ascentTime(hum)
+    -- A timing policy relative to this character's normal jump, not an
+    -- invented official FF3 yardage/catch threshold. Missing jump parameters
+    -- still classify elevated native modes for a normal jump. The short takeoff
+    -- offset is handled separately; no yard cutoff or peak gate is introduced.
+    return ascent and shot.time>ascent*2 or not ascent and shot.mode~='Bullet'
+end
 -- Request the ordinary jump only. The optional short offset starts at observed
 -- local takeoff, never at the apex or animation windup.
 requestJump=function(ball,now)
@@ -4041,6 +4081,19 @@ local function releaseNow(ball,selected,defenders,now)
     local evidence=string.format('%s %s %s t=%.3f power=%.2f arrival=%.2f,%.2f,%.2f margin=%.2f lane=%.2f residual=%.2f',
         selected.player.Name,(shot.variant or shot.mode),shot.window,shot.time,shot.power,shot.arrival.X,shot.arrival.Y,shot.arrival.Z,
         shot.margin,shot.lane,shot.receiverResidual)
+    controller.unified.lastRelease={Epoch=possession.epoch,At=os.clock(),ReleaseStatus='REQUEST_PREPARED_UNCONFIRMED',
+        Planner=controller.unified.recentPlan,Mode=riskPolicy.mode,PassPlan=controller.passPlan.mode,
+        Receiver=selected.player.Name,Variant=shot.variant or shot.mode,Power=shot.power,Flight=shot.time,
+        Origin={shot.origin.X,shot.origin.Y,shot.origin.Z},Velocity={shot.velocity.X,shot.velocity.Y,shot.velocity.Z},
+        Arrival={shot.arrival.X,shot.arrival.Y,shot.arrival.Z},Gravity=CFG.Gravity,
+        Unified=shot.unified,NetworkPing=shot.networkPing,NativeSolveAge=os.clock()-shot.at,
+        QB={current.root.Position.X,current.root.Position.Y,current.root.Position.Z},
+        ReceiverState={Position={selected.sample.p.X,selected.sample.p.Y,selected.sample.p.Z},
+            Velocity={selected.sample.v.X,selected.sample.v.Y,selected.sample.v.Z}},
+        Defenders={},Config=controller.unified.config}
+    for i,d in ipairs(defenders)do if i>16 then break end
+        controller.unified.lastRelease.Defenders[#controller.unified.lastRelease.Defenders+1]={
+            Name=d.name,Position={d.p.X,d.p.Y,d.p.Z},Velocity={d.v.X,d.v.Y,d.v.Z}} end
     local lastDecision={summary=evidence,actors={},release=string.format('risk=%s distanceYards=%.2f clearBurn=%s safetyOverTop=%s qbY=%.3f qbVy=%.3f jump=%s animation=%s; VISUAL_AFTER_REQUEST',riskPolicy.mode,shot.passYards,tostring(shot.clearBurn),tostring(shot.safetyOverTop),current.root.Position.Y,current.root.AssemblyLinearVelocity.Y,assistance.jumpStatus,animationStatus)}
     local function actor(name,s)
         return string.format('%s p=%.2f,%.2f,%.2f v=%.2f,%.2f,%.2f runSpeed=%.2f',
@@ -4070,6 +4123,8 @@ local function releaseNow(ball,selected,defenders,now)
         ball.remote:FireServer('Clicked',shot.origin-unit*5+V(70000000,0,0),shot.origin+unit*10000,shot.power,1)
     end)
     local throwId=controller.history.Shot(shot,selected.player,selected.sample,ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY','AUTO_QB',defenders)
+    if controller.unified.lastRelease then controller.unified.lastRelease.ReleaseStatus=
+        ok and 'API_ACCEPTED_UNCONFIRMED' or 'AMBIGUOUS_NO_RETRY' end
     if ok then
         local observed,why=pcall(controller.receiverEvidence.Begin,ball,selected.player,shot,throwId)
         if not observed then controller.receiverEvidence.Disable('CAPTURE_START_ERROR_DISABLED');log('RECEIVER_OBSERVER_ERROR',why) end
@@ -4406,6 +4461,15 @@ local built,buildError=pcall(function()
     end
     local kill=button('X',-26,22); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
+    local badPlayButton=button('BAD PLAY',-144,100,302);badPlayButton.Name='BadPlay'
+    connect(badPlayButton.Activated,function()
+        local released=controller.unified.lastRelease
+        local plan=controller.unified.recentPlan
+        local newest=released and (not plan or released.Epoch==plan.Epoch or os.clock()-released.At<8) and released or plan
+        controller.unified.bad=newest
+        badPlayButton.Text=newest and 'FLAGGED' or 'NO PLAY'
+        if newest then preserve(true) end
+    end)
     receiverButton=button('WR LIST',-166,106,112); receiverButton.Name='Receivers'
     riskButton=button(riskPolicy.mode,-58,54,112);riskButton.Name='RiskMode'
     controller.comeback.button=button(controller.comeback.enabled and 'CB ON' or 'CB OFF',-226,54,87)
@@ -4516,9 +4580,11 @@ local built,buildError=pcall(function()
         if receiverMenu.Visible then renderReceivers() end
     end)
     autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false;riskButton.Visible=false; receiverMenu.Visible=false
+    badPlayButton.Visible=false
     controller.league.Paint=function()
         local league=controller.league.mode=='LEAGUE'
         autoButton.Visible=expanded;throwButton.Visible=expanded;copyButton.Visible=expanded;riskButton.Visible=expanded
+        badPlayButton.Visible=expanded and not league
         receiverButton.Visible=expanded and not league;awayButton.Visible=not league
         controller.league.screenButton.Visible=league;controller.league.profileButton.Visible=expanded
         controller.league.profileButton.Text=controller.league.requested=='AUTO' and 'AUTO' or controller.league.mode

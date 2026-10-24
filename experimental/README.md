@@ -161,3 +161,9 @@ wrapper does not provide one. Expanded catch locations/arrival times should use
 this same evaluator and be compared against Build B with identical observations.
 ML and remote processing remain out of scope. Validate model calibration before
 expanding the search: more candidates cannot repair wrong catch mechanics.
+
+## Independent repair branch (2026-10-24)
+
+The isolated `fix/auto-qb-regressions-20261024` branch restores source-baseline deep throw jump classification, native Bullet flight/power admission and eligibility-first ranking. OpenComfort now changes evaluator catch-cost weight. Reinstated a conservative clear-burn classification without enabling the legacy four-stud admission rules. The source evaluator also includes a modest fast-flight discomfort cost; costs are uncalibrated. The regular production and original experimental branches were not changed.
+
+Expanded HUD: **BAD PLAY** flags the last released possession (or last planner decision) and exports the current report through COPY/file including `BAD_PLAY_DIAGNOSTIC`, final native trajectory, world vectors, alternatives and `UNIFIED_SKIPPED` budget records. The flag itself is bounded in memory and must be exported before the script is unloaded. The old report still contains legacy field labels that are not authoritative for unified grading. No completion/interception inference is made from remote request success. This is not yet a deterministic full-playback recorder or authoritative FF3 live validation.
