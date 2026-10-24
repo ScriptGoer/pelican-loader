@@ -6,7 +6,7 @@ b=(R/'games/ff3/auto_qb.lua').read_text();e=(R/'experimental/auto_qb.lua').read_
 def block(s,a,z):return s[s.index(a):s.index(z,s.index(a))]
 assert block(b,'local function solve(player,mode)','function controller.mag.RefreshModes()')==block(e,'local function solve(player,mode)','function controller.mag.RefreshModes()')
 checks=1
-for token in ['local KEY = "PELICAN_LOADER_SESSION"','/experimental-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"']:
+for token in ['local KEY = "PELICAN_LOADER_SESSION"','/fix/auto-qb-regressions-20261024/experimental/loader.lua','Path = "experimental/auto_qb.lua"']:
  assert token in loader,token;checks+=1
 for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","controller.unified.generation","os.clock()-gradingStarted<.003","DecisionAge=","Unified=shot.unified","local function deepThrow() return false end"]:
  assert token in e,token;checks+=1
@@ -28,3 +28,8 @@ assert "'GRADE_BUDGET_NOT_EVALUATED'" in repaired
 assert "'NATIVE_PLANNING_BUDGET_NOT_EVALUATED'" in repaired
 assert "badPlayButton=button('BAD PLAY'" in repaired
 print('PASS 8 repair contracts; runtime performance and behavior need in-game tests')
+
+assert "WAIT_DIAGONAL_ROUTE_DEVELOPMENT" in repaired
+assert "RELEASE_VERSION|repair-b2-20261024" in repaired
+assert "fix/auto-qb-regressions-20261024" in loader
+print("PASS 3 route-timing/version/loader repair contracts")

@@ -1488,7 +1488,8 @@ function controller.GetReport()
     local selectedRisk=riskPolicy.profiles[riskPolicy.mode]
     local rows={VERSION,'UNIFIED_DECISIONS|'..game:GetService('HttpService'):JSONEncode(controller.unified.last or {}),
         'UNIFIED_SKIPPED|'..game:GetService('HttpService'):JSONEncode(controller.unified.skipped or {}),
-        'BAD_PLAY_DIAGNOSTIC|'..game:GetService('HttpService'):JSONEncode(controller.unified.bad or {}),'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
+        'BAD_PLAY_DIAGNOSTIC|'..game:GetService('HttpService'):JSONEncode(controller.unified.bad or {}),
+        'ROUTE_TIMING_LAST_HOLD|'..game:GetService('HttpService'):JSONEncode(controller.unified.lastRouteHold or {}),'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
         'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'RISK_MODE|'..riskPolicy.mode,'PASS_PLAN|'..controller.passPlan.mode,
         'RECEIVER_FILTER|'..controller.receiverFilter.mode,'FRIEND_LOOKUP_STATUS|'..controller.receiverFilter.status,'FRIEND_LOOKUP_METHOD|'..(controller.receiverFilter.method or 'NOT_USED'),'FRIEND_LOOKUP_CALLS|'..controller.receiverFilter.checks,
         'PLAY_PROFILE|'..controller.league.mode,'PLAY_PROFILE_REQUEST|'..controller.league.requested,'PLAY_PROFILE_SOURCE|'..controller.league.source,
@@ -1537,7 +1538,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b1','UNIFIED_MAX_SECONDS|'..controller.unified.maxSeconds,'UNIFIED_CHECKS|'..controller.unified.checks,'UNIFIED_CONFIG|'..game:GetService('HttpService'):JSONEncode(controller.unified.config),'MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|repair-b2-20261024','UNIFIED_MAX_SECONDS|'..controller.unified.maxSeconds,'UNIFIED_CHECKS|'..controller.unified.checks,'UNIFIED_CONFIG|'..game:GetService('HttpService'):JSONEncode(controller.unified.config),'MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -4185,7 +4186,41 @@ local function driveSequence(now)
         opportunities[seq.player]=nil;shotCache[seq.player]=nil
     end
 end
+-- Short, conditional observation window for a receiver entering the legal route
+-- area on an unsettled diagonal. The QB never predicts an unobserved future cut.
+local routeTiming=setmetatable({}, {__mode='k'})
+local function developingRouteHold(selected,now)
+    local r=selected.sample;local shot=selected.shot
+    if not r or not shot or not shot.unified or not lines.forward or not r.path or #r.path<3
+        or shot.deepTarget or shot.endzoneTarget then return false end
+    local depth=downfield(r.p)/3
+    if depth<6 or depth>9.5 then return false end
+    local v=flat(r.v);local speed=v.Magnitude
+    if speed<CFG.MinMoveSpeed then return false end
+    local alignment=v.Unit:Dot(lines.forward)
+    if alignment<.25 or alignment>.89 then return false end
+    local u=shot.unified;local c=controller.unified.config
+    if u.RiskScore>c.ModRisk or (u.CatchDifficulty or 0)<1 then return false end
+    local p=r.path
+    local before=flat(p[#p-1].p-p[#p-2].p)
+    local previous=before.Magnitude>1e-4 and before.Unit:Dot(lines.forward) or alignment
+    local improving=alignment>previous+.045
+    local unsettled=(r.routeTurn or 0)>.12
+    -- The receiver is already eligible, but a short continuation may improve a
+    -- difficult diagonal approach. No delay on a stable easy catch, clear deep
+    -- play, scoring target, or more urgent contested window.
+    if not improving and not unsettled and u.CatchDifficulty<1.8 then return false end
+    local active=routeTiming[selected.player]
+    if not active or active.Epoch~=possession.epoch or active.Model~=r.model then
+        active={Epoch=possession.epoch,Model=r.model,Since=now};routeTiming[selected.player]=active end
+    if now-active.Since>=.20 then return false end
+    controller.unified.lastRouteHold={Epoch=possession.epoch,Receiver=selected.player.Name,
+        DepthYards=depth,Alignment=alignment,PreviousAlignment=previous,
+        CatchDifficulty=u.CatchDifficulty,RiskScore=u.RiskScore,HoldSeconds=.20}
+    return true
+end
 local function submit(ball,selected,defenders,now)
+    if developingRouteHold(selected,now) then setGate('WAIT_DIAGONAL_ROUTE_DEVELOPMENT');return end
     local fastBurn=selected.shot.clearBurn==true
     local deep=deepThrow(selected.shot,ball.hum)
     if sequence and (sequence.player~=selected.player or sequence.model~=selected.player.Character
