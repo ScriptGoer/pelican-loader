@@ -1,6 +1,6 @@
 # Experimental unified Auto QB — Build B1
 
-This branch adds an isolated local evaluator. Production `loader.lua`, its
+The `fix/auto-qb-regressions-20261024` repair branch contains an isolated local evaluator with targeted regression repairs. Production `loader.lua`, its
 V26.22 pin, and `games/ff3/auto_qb.lua` remain unchanged from main c9cc9ea.
 No ML, cloud decision service or arbitrary target-coordinate solver is used.
 
@@ -10,7 +10,7 @@ Start Yuna normally with QB Aimbot ON, Mouse Aimbot OFF, Auto Throw Type ON.
 In the observed FF3 live place, run:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/experimental-unified-qb/experimental/loader.lua"))({
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/fix/auto-qb-regressions-20261024/experimental/loader.lua"))({
     FF3 = { RiskMode = "TRUST", PassPlan = "NORMAL" }
 })
 ```
@@ -25,7 +25,7 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-lo
 ```
 
 Expand the HUD and use THR OFF to inspect selection without automatic passing.
-COPY exports the usual report. `RELEASE_VERSION|experimental-unified-b1` confirms
+COPY exports the usual report. `RELEASE_VERSION|repair-b2-20261024` confirms
 the active build. `UNIFIED_DECISIONS` contains at most 48 current evaluated
 candidates, their actual native flight/power, age, evaluation and winner/loss
 reason. Ordinary state/readiness/solver failures retain the existing diagnostics.
