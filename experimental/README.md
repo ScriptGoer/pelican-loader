@@ -1,214 +1,98 @@
-# Experimental unified Auto QB — Build B1
+# Pelican Auto QB — repaired experiment B3
 
-This branch adds an isolated local evaluator. Production `loader.lua`, its
-V26.22 pin, and `games/ff3/auto_qb.lua` remain unchanged from main c9cc9ea.
-No ML, cloud decision service or arbitrary target-coordinate solver is used.
+B3 repairs Build B on the dedicated `repair-unified-qb` branch. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and the later B2 diagnostics commit is `614550d`. B2 did not change B's decision engine. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md); it does not describe B3's active rules.
 
-## Launch / return to production
-
-Start Yuna normally with QB Aimbot ON, Mouse Aimbot OFF, Auto Throw Type ON.
-In the observed FF3 live place, run:
+Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
 ```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/experimental-unified-qb/experimental/loader.lua"))({
-    FF3 = { RiskMode = "TRUST", PassPlan = "NORMAL" }
-})
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The experimental loader uses the existing loader/controller ownership namespaces
-and confirmed Stop cleanup. Launching it replaces the previous controller;
-cleanup failure prevents stacking. X reload fetches this experimental loader.
-To revert, execute the regular main loader again:
+The loader pins the immutable `experimental-unified-b3` module. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3` in COPY. The existing loader ownership/confirmed-cleanup protocol prevents stacking with production/B. If an auto-execute script subsequently launches main again, it replaces the experiment; replace that auto-execute line or launch the experiment after it finishes. To return to production, execute the normal main loader. No production route or source file is modified.
 
-```lua
-loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/main/loader.lua"))()
+## Established causes and corrections
+
+| Regression | Verified implementation problem | B3 correction / practical limit |
+| --- | --- | --- |
+| Missing deep opportunities | B hard-disables `deepThrow`; its simulated risk caps can reject a native window that V26.22 admits; 3-ms grading truncation can leave useful alternatives unexamined. Disabling jump alone does not explain every missing throw. | Restore real flight/jump classification and observed takeoff/75-ms release path. Retain V26.22's credible TRUST burn and early-interception proof. Grade every fresh cached alternative. No claim every apparent live burn is safe. |
+| Uncomfortable Bullets | B forcibly sets `powerAllowed=true`, removing the actual native flight-time comfort veto. A difficulty cost alone does not prevent an uncomfortable winner. | Actual V26.22 comfort floors are mandatory again. EASE ranks admitted endpoints by comfort deficit, receiver-relative catch height, unnecessary loft and relative arrival speed before distance/flight. It favors a supported gentler pass when safe, rather than blindly choosing the fastest mode. |
+| Premature diagonal threshold throw | Eligibility and score were effectively sufficient for immediate submission; there was no developing-route timing assessment. | Only near-threshold, grounded-motion, wide windows with a quantitatively improving continuation can pause briefly. Future clearance must retain strict margin/lane surplus after a worst-speed movement allowance. A straightened route, closing window, goal/screen or brief contested opportunity has no added hold. |
+| Covered TRUST throw | The new reaction/acceleration/catch-neighborhood simulation allowed contest relief through an uncalibrated pooled cost cap. Constructed cases expose admissions without a current trailing advantage. | Remove that permission model. Use V26.22's actual whole-flight/arrival checks and specific TRUST trailing-corner proof. Current and projected advantage, early path and other defenders remain vetoes. |
+| Disconnected legacy behavior | B replaced Fit/Jump admission, forced clear-burn false, and removed deep-jump behavior while retaining old controls and report labels. | Restore derived burn evidence, native Fit counterfactuals, conditional native HIGH and the underlying functional controls. Retire unsupported mag/custom-height/unconditional-wide-Jump trials rather than display dead switches. |
+| Expensive/starved evaluator | Per-candidate pursuit integrates 16 steps per defender and copies model snapshots, while a separate 3-ms budget suppresses other candidates. Pre-solver omissions also consumed native-attempt slots. | Reuse the inherited analytic risk grade and cheap ordered joint ranking. Remove the separate grading cutoff. Keep the 8-ms native planning allowance, bounded mode-sweep attempts and eight-native-calls/frame guard; only real native calls consume native slots. Profile guard, capture, callback and interval cost. |
+
+These are independently verified code mechanisms and constructed counterexamples, not proof of the exact cause of an unreported live interception. No live Build B BAD PLAY capture was supplied with this repair request. The inherited body reach, instant-turn pursuit and game/native physics assumptions remain uncalibrated.
+
+## Joint selection and timing
+
+Receiver and supported native trajectory are evaluated together. A candidate must pass current team/movement/blacklist/filter, field/LOS, receiver reach, native output, power comfort, configured risk, mode admission and possession checks. The ordered score then compares admission, strict-versus-contested risk tier, developing readiness, comfort deficit, catch height, extra ballistic loft, relative arrival speed, proven contest gap, pass distance and flight. It is a vector of explicit costs, **not completion odds**. There are no new risk-score weights to tune until a fixture passes.
+
+V26.22's four-stud TRUST allowance is specifically a current **and projected** trailing-corner advantage with no early direct interception, closing burn or over-top help. It is not general permission to throw at covered players. SAFE/MOD retain their original risk math. More separation no longer gets a worse priority simply because a simulated pursuit contacted the flight earlier.
+
+The joint ranker replaces the old independent mode/receiver label preferences. Required Fit/Jump comparisons and final fresh solves remain. NORMAL still prefers easier shorter completions among comparable admitted windows. DEEP uses 20 yards beyond the observed LOS plus developed-route comebacks/end-zone exceptions. SHORT retains the genuinely wide-open deep exception. These restrictions are evaluated through the actual existing plan logic, not duplicated approximate filters.
+
+Developing timing does not predict an unseen receiver input or promise that a diagonal route will straighten. It forecasts current observed momentum, using measured velocity trend where available. It only considers a receiver close enough to the six-yard boundary to be affected by the short continuation. Significant lateral motion, improving catch geometry, ample current clearance and surviving future clearance are all required. The default forecast horizon is 0.18 seconds, bounded to 0.35 seconds; these are explicit application preferences, not measured FF3 reaction constants. A hold cannot renew indefinitely. Its safety/usefulness is checked again; it ends early when the receiver straightens or the opportunity becomes time-sensitive. The normal native final check still decides release.
+
+`FF3.Unified` now supports only `DevelopingRoutes`, `DevelopmentHorizon` and `DevelopmentMax`. Old `Samples`, acceleration/reaction, contest-relief, pooled-risk-cap and score-weight options are rejected explicitly. Remove the old Unified configuration table when launching B3. EASE changes ranking; it cannot waive conditional HIGH proof or full-power floors. `FF3.CloseBullet=false` remains an explicit advanced opt-out from those inherited floors.
+
+## Compact controls and feature audit
+
+**Folded:** only the 54×22 QB pill and existing red reload X. There is no persistent BAD PLAY/AWAY/SCREEN touch area. QB opens a 230-pixel-wide menu with three columns and at most three rows; TOOLS changes pages. Flagging a play closes the menu. Receiver and lead panels no longer stack over the grid.
+
+| Control/feature | Active behavior |
+| --- | --- |
+| AUTO / THR | Actual selection and automatic release toggles; OFF releases/cancels owned work as before. |
+| SAFE / MOD / TRUST | Actual V26.22 admission policies, including TRUST's qualified ordinary Bullet/Dime trailing-corner exception. |
+| NORMAL / DEEP / SHORT | Actual depth/comeback/end-zone/wide-deep rules described above. Visible in casual and league PLAY menus. |
+| EASE | OpenComfort ranking ON/OFF. Full-power comfort and HIGH safety proof remain independent. |
+| ARC AUTO / OLD | Existing verified native adaptive-angle request versus the native configured input; actual returned trajectory is still graded. |
+| HIGH | Conditional **receiver** native Jump type, using its own configured lead and fresh chest comparison. It does not toggle the QB's automatic deep jump. |
+| QB deep jump | Automatic ordinary jump, then the configured short observed-takeoff release offset; no apex wait. Rechecks cancel a lost window. Unsupported normal jump state retains the existing explicit fallback/report. |
+| WR list / ANY-FRIENDS | The WR list toggles NORMAL/BLOCKED; ANY-FRIENDS changes actual receiver eligibility. Friends are verified asynchronously. Manual mag-trust markings are preserved for production but are not an active setting in B3. League keeps ANY and hides casual friendship controls. |
+| SCREEN | League-only explicit teammate/current-possession stationary behind-LOS exception; strict native Bullet and final checks remain. Inside PLAY, not always on-screen. |
+| PROFILE | CASUAL/LEAGUE override; AUTO's VIP text remains a private-server hint, not proof of league identity. |
+| AWAY / CB | Existing deliberate throw-away action and opt-in friend route chat. TOOLS only, casual only; no new automatic messages. |
+| COPY / DATA | Usual reports/history when unpinned; pinned BAD export when flagged. CLEAR BAD returns them to their normal workflow. File-only success says SAVED, not COPIED. |
+| STOP / X | STOP ends and cleans up the experiment; X reloads through confirmed cleanup. |
+| Movement guide / receiver evidence | Existing advisory PlayerGui arrow and passive observations remain. Exact leads remain in DATA/BAD metadata; the separate LEADS panel control is removed from the compact menu. No automatic lead tuning or claimed receiver fault. |
+| MAG / custom raised Bullet / unconditional wide-open Jump preference | Retired from active planning, setters reject enabling unsupported trials, and controls are removed. Original native helper source remains intact. HIGH is the supported conditional replacement. |
+
+The separately running verified Pelican jump-width helper keeps its widened native jump button, while its own persistent bar is hidden during B3. Stop/revert restores that bar only if still owned; external visibility changes are preserved. Yuna/game UI is not hidden. `FF3.CompactCompanionHUD=false` opts out at startup. No Workspace objects, synthesized movement, anti-cheat changes or invasive hooks are introduced.
+
+## BAD THROW / MISSED capture and export
+
+1. After a bad pass, tap **QB → TOOLS → BAD THROW**. It pins the latest attempted possession within 45 seconds. For a current withheld opportunity, use **MISSED** instead. This avoids silently flagging a different recent throw.
+2. Flagging attempts immediate clipboard/file export and closes the menu. The report is also retained in executor session memory. API acceptance is not iOS clipboard readback proof.
+3. After the play settles, **QB → TOOLS → COPY / BAD DATA** exports the same pin with any late outcome observations. The file is `PELICAN_FF3_BAD_PLAY.json` where file APIs work.
+4. Paste/upload that JSON. **CLEAR BAD** removes the pin and restores ordinary COPY/DATA; it does not delete the exported file. Stop/reload preserves the pin. A full app exit needs the saved/exported artifact.
+
+The journal records anonymous receiver/defender positions, velocities, six-point motion history, relevant native settings/leads, ordered scores, actual return power/arc/time/arrival, comfort/threat evidence, eligibility exclusions, native/generator errors, scheduling/budget omissions and exact CodeId/EngineId plus wall/monotonic timestamps. Native supported tuples, failed generation and never-attempted modes are distinguished. Failed native output is not replaced with an earlier candidate's good margins.
+
+The actual released decision cohort is preserved separately from final native calculations, counterfactuals and final checks. First-plan, first-viable and first-development cohorts are also retained. A bounded 64-frame score/reason timeline helps distinguish an earlier opening from the latest covered state. Three possessions, two rolling full frames and up to 512 candidate rows per full frame are retained. The row limit covers the verified roster/mode bound; overflow/identity/truncation counters are explicit. Full inputs are in keyframes; older timeline rows are summaries. This is bounded evidence, not an exhaustive match recording.
+
+Exports have a 1.5 MB limit. If necessary, older timeline summaries are removed with an explicit omission count before export; full critical native evidence is preserved. An oversized critical report stays in memory and reports failure rather than pretending it exported. JSON/disk/clipboard work runs on deliberate export, not per candidate. Capture/finish costs are measured too. No automatic cloud upload is added, and credentials are not captured.
+
+Observed outcomes retain their original uncertainty. A missed catch, interception, route change or jump does not by itself establish who caused it or the required catching technique.
+
+## Deterministic replay and validation
+
+From this repair checkout, with Python and liblua5.4:
+
+```sh
+python3 scripts/build_experimental.py
+python3 scripts/replay_bad_play.py PELICAN_FF3_BAD_PLAY.json
+python3 tests/experimental/test_engine.py
+python3 tests/experimental/test_integration.py
+python3 tests/experimental/test_bad_play.py
+python3 tests/test_trust_burn.py
 ```
 
-Expand the HUD and use THR OFF to inspect selection without automatic passing.
-COPY exports the usual report. `RELEASE_VERSION|experimental-unified-b1` confirms
-the active build. `UNIFIED_DECISIONS` contains at most 48 current evaluated
-candidates, their actual native flight/power, age, evaluation and winner/loss
-reason. Ordinary state/readiness/solver failures retain the existing diagnostics.
-It is a bounded latest-decision view, not a permanent exhaustive match log.
-Throw/blocked history includes `Unified`; report includes parameters, evaluator
-maximum duration, checks, existing native-call/frame/heartbeat measurements.
+The five additional `tests/experimental/auto_qb_*_test.lua` suites run through `tests/experimental/run_lua.py`. The comparison tests require Git history for `4a4689b` and `c9cc9ea`. The fixture defaults to the repaired runtime, not production. Historical fixture options are explicit; the B3 scenarios also exercise production-default options.
 
-## Implementation
+Replay checks EngineId **and** full build-input CodeId, recomputes ordered decisions and the captured analytic path/arrival/comfort/Trust-burn calculations from actor snapshots, and compares them with the saved values. It validates released and critical keyframes, not just a final score copied from the report. Tampered risk values, missing inputs, truncated rows and wrong versions fail with nonzero status. Float32 comparison tolerance is diagnostic only; it never relaxes runtime safety thresholds. Native solver execution, authoritative team/field/possession state and server catches cannot be replayed offline. Time/rounding boundary mismatches must be investigated, not treated as player fault.
 
-`decision_engine.lua` is the source evaluator, embedded in the isolated runtime
-by `python3 scripts/build_experimental.py`. The generation script performs no
-production writes: it only writes `experimental/auto_qb.lua` and its loader.
-The baseline source must remain V26.22 when regenerating.
+The regression set compares B3 with real V26.22 and original B. It covers comfortable versus fast/floating throws, deep native takeoff/release, credible versus unsafe TRUST cases, opposing pursuit directions, developing/straightened/brief routes, all relevant controls, native errors/yields/external edits, screens, final comparisons, cleanup, compact HUD ownership and BAD export/replay. The original engine admits five no-trailing-advantage scenes in the constructed matrix that restored guards refuse. In local Lua-table-vector benchmarks, B's three-defender grade was approximately 1.7–3.2 ms versus roughly 0.1–0.4 ms for B3's analytic grade/ranking/capture. These are desktop fixture measurements, not native Roblox/iPhone frame guarantees.
 
-The runtime replaces risk grading, throwable, mode/receiver ranking and the
-old Fit/Jump counterfactual gates. It removes incumbent label/depth priorities,
-minimum-flight comfort vetoes and categorical high-safety vetoes from selection
-and final release. Fresh final native solve, actual arrival/reach, field/LOS,
-manual ownership, possession, one-attempt and cleanup checks remain. The native
-`solve(player,mode)` function is byte-identical to production. Existing supported
-lead/arc/power generation is reused; its limitations remain. Mag trials retain
-manual/friend eligibility. No automatic QB jump is added based on flight duration;
-user-started jump timing remains. A native Jump variant can still be selected
-when its measured trajectory wins; its name does not establish required catch action.
+The completed validation run passed **817 assertions/scenes** and native Luau compilation of all **19** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
-Every candidate uses the same bounded-acceleration pursuit model. Both observed
-momentum and a reaction delay affect predicted access. Defender endpoint pursuit
-and ball pursuit are examined, with closest relative segment approaches between
-16 integration steps. Vertical accessibility uses an inherited envelope. Overlap
-with the receiver's catch neighborhood receives continuous contest relief only
-when current AND projected route positioning favor the receiver. Multiple threats
-are pooled as a bounded risk cost. None of these costs are probabilities.
-
-Catch difficulty includes relative arrival velocity, head-relative height,
-route adjustment, additional modeled response adjustment and excessive flight.
-Score = downfield yards + touchdown bonus - risk weight * risk cost - comfort
-weight * catch difficulty. This is an application ranking, not calibrated expected
-points. Among eligible candidates, modes share that score. Risk eligibility alone
-uses nested caps SAFE .16 / MOD .32 / TRUST .58. Defaults and all assumptions are
-explicitly exposed through `FF3.Unified`, e.g.:
-
-```lua
-FF3 = { RiskMode="TRUST", Unified={ Samples=16, Acceleration=36,
-    ReactionSeconds=.12, PositionUncertainty=.35, VelocityUncertainty=.5,
-    HorizontalReach=4.5, VerticalReach=12.2, ContestRelief=.75,
-    DistanceScale=1.5, SafeRisk=.16, ModRisk=.32, TrustRisk=.58,
-    RiskWeight=70, ComfortWeight=8, TouchdownValue=45 } }
-```
-
-These are UNCALIBRATED assumptions; reach/response values are not verified FF3
-mechanics. Config rejects unknown/invalid values, non-nested caps and samples
-outside 4..32. NORMAL has no depth restriction. DEEP permits deep/end-zone throws;
-SHORT is explicitly short-only. Those plan restrictions are separate from risk
-and identical across risk modes. Receiver readiness/team/AFK exclusions remain.
-
-Native planning retains the existing cadence, frame-call cap and time allowance.
-A cheap end-zone arrival hint can prioritize a challenger while oldest-visit
-fairness overrides it after cache age. A separate 3-ms soft grading budget rotates
-receivers and variants to avoid permanent starvation. One synchronous grade can
-overrun the allowance. No iPhone timing guarantee is made.
-
-## Validation and comparative findings
-
-Run `python3 tests/experimental/test_engine.py`,
-`python3 tests/experimental/test_integration.py`, and
-`python3 tests/test_trust_burn.py`. Requires Python and liblua5.4; no Roblox,
-external service, paid source or third-party Python package is required.
-
-51 comparative assertions pass. Tests execute the real legacy grader/rankers and
-experimental evaluator/scheduler against constructed ballistics. They do NOT
-prove that the current native helper will emit every fixture or that a real
-receiver will catch it. 19 integration/source contracts pass, including identical
-native solver, fresh release/state guards, eight-call cap, isolated ownership,
-experimental reload routing, production pin and deterministic regeneration.
-These contracts are not a complete simulated Roblox lifecycle test.
-The existing 51 Trust checks and 144 SAFE/MOD differential scenes also pass.
-
-| Scenario | V26.22 fixture | Build B fixture |
-|---|---|---|
-| Open scoring receiver; distant midfield safety | Faster flight preference remains | Comfortable scoring trajectory wins |
-| Gentle 1.0 s vs fast .65 s, both open | Fast | Gentle |
-| Natural 1.0 s vs excessive 3.0 s float | Natural | Natural |
-| Four-stud isolated trail | TRUST accepts | TRUST accepts; MOD declines |
-| Near boundary 3.9 / 4.0 / 4.1 | Reject / accept / accept | TRUST accepts all; risk .346 / .355 / .364 |
-| Slight closing from four studs | Rejects four-stud exception | TRUST accepts |
-| Rapid closing | Reject | Reject |
-| Nearby safety moving into window | Reject in tested legacy scene | Reject |
-| Same location, defender moving toward vs away | Both legacy rejects in fixture | Toward rejects; away accepted |
-| Underneath interception | Reject | Reject |
-| Unreachable reversal | Necessary movement bound rejects | Hard movement rejection |
-| Brief scoring hint among six receivers | Next visit goes to older short receiver | Scoring hint gets next visit; stale receiver retains fairness |
-| Scoring candidate vs shorter eligible pass | Shorter wins | Scoring candidate wins |
-
-Initial model testing failed the four-stud case because it allowed defenders to
-react but kept receivers on a rigid continuation. Symmetric bounded receiver
-response fixed that inconsistency. A subsequent approaching-safety counterexample
-failed because projected trailing position received relief despite initially
-being ahead; relief now uses the weaker current/projected advantage. Both
-regression cases remain in tests. Final suites report zero assertion failures.
-
-### Remaining counterexamples / uncertainty
-
-In the low-arc burn fixture, seven studs of separation gets a HIGHER risk cost
-(.536) than four (.355): the ball encounters the trailing defender earlier while
-farther from the receiver. Both remain TRUST-eligible, but this can reverse their
-relative ranking. We have NOT established whether that ordering matches FF3.
-This is a documented model limitation requiring controlled trajectory/catch tests,
-not evidence that more separation is intrinsically worse.
-
-The model assumes humans can recognize and adjust toward the ball after the
-configured delay. It lacks authoritative catch-input, reaction and hitbox data.
-Vertical reach is not a timed jump simulation. Segment pursuit/height checks
-approximate nonlinear motion; acceleration, intent and uncertainty need live
-calibration. Standing/jump necessity cannot be inferred from mode labels alone.
-No real completion, interception or touchdown improvement has been measured.
-
-Desktop Lua-table vector emulation took roughly 2–3.3 ms per three-defender
-candidate over 1,000 iterations in observed runs; maximum samples varied around
-6–12 ms, with scheduling outliers as large as approximately 0.38 seconds across runs. This includes model overhead
-and emulated-vector allocations, not native Roblox vectors or native solver time.
-A representative final run had median 2.49 ms, p95 5.07 ms and p99 7.61 ms
-for the emulated evaluator. It neither proves nor disproves acceptable iPhone performance. Full runtime
-latency, thermal behavior, p95/p99 frames, and native call cost require device
-measurements. Lower Samples is configurable, with a fidelity tradeoff.
-
-## Build C
-
-First collect native candidates and real ball/catch outcomes for these scenes.
-Identify whether the best supported candidate still requires an awkward catch,
-lands outside the useful end-zone space, or fails despite a reachable adjacent
-placement. Then investigate an explicit point-target adapter; the existing native
-wrapper does not provide one. Expanded catch locations/arrival times should use
-this same evaluator and be compared against Build B with identical observations.
-ML and remote processing remain out of scope. Validate model calibration before
-expanding the search: more candidates cannot repair wrong catch mechanics.
-
-## B2 BAD PLAY evidence
-
-Press **BAD PLAY** after a bad throw. It pins the latest attempted possession
-within 45 seconds, even after the planner advances. Otherwise it selects the
-recent closed/current possession. The label shows the pinned ID. To deliberately
-flag the current withheld possession, use `getgenv().PELICAN_FF3_AUTO_QB.bad:flag(os.clock(),true)`.
-BAD PLAY attempts clipboard/file export immediately. After the play settles,
-press COPY or DATA to re-export the SAME pinned play with late observations.
-The latest export is saved as `PELICAN_FF3_BAD_PLAY.json` when writefile is available.
-Clipboard API acceptance cannot establish that iOS clipboard readback worked.
-No automatic upload is introduced. The pinned report also survives an ordinary
-reload in executor session memory. Full app exits require the exported file.
-
-Reports carry anonymous per-session actor tokens, exact evaluator inputs/results,
-current model parameters and a SHA-256 source-input fingerprint (CodeId), plus
-EngineId. Native tuples include origin, velocity, arrival, time, power, lead and
-control metadata. Planner snapshots and final-release recalculation are separate;
-QB/field/settings are retained at release. Non-evaluated candidates carry explicit
-budget/cache/scheduling reasons. Native solve status is separate from grading.
-Observations retain their original evidence/unknown labels; no fault or required
-catch technique is inferred. Obsolete numeric coverage placeholders are marked
-inactive and omitted from structured per-shot fields.
-
-Memory retains three recent possessions, two planner snapshots each, at most 128
-candidate rows per snapshot, and one pinned report. Dropped-frame/row counters
-identify incomplete evidence. Actor identities are capped at 256 tokens. Export
-has a 1.5 MB bound; an oversized report is retained in memory and reports a size
-error instead of claiming a complete export. Credentials are never collected.
-
-Replay locally with `python3 scripts/replay_bad_play.py PELICAN_FF3_BAD_PLAY.json`.
-Replay validates EngineId and recomputes recorded evaluator inputs and candidate
-selection order. Missing final inputs, malformed snapshots, score mismatches and
-version mismatches return nonzero status. It does not rerun the native solver,
-recreate unobserved candidates or reproduce authoritative server catches.
-A saved report's CodeId identifies the baseline, generator, engine and recorder
-source inputs; it is not falsely presented as a Git commit SHA.
-
-The 3-ms grading budget is a cooperative limit; one synchronous grade can exceed
-it. Counters record skipped work, grades above budget, capture overhead and native
-calls. Heartbeat intervals and callback-duration maxima distinguish the whole
-observed frame interval from this callback's elapsed work. These are live telemetry,
-not proof that this script caused every frame spike. JSON encoding/disk/clipboard
-work occurs on user export, never per candidate. Snapshot copying has a measurable
-cost and participates in the current budget; inspect skip rates on the device.
-
-Run `python3 tests/experimental/test_bad_play.py` for delayed flagging, immutable
-snapshots, final/planner separation, late observation attachment, ring eviction,
-anonymous export, JSON CLI round-trip and missing/corrupt/version evidence tests.
-The production entry and V26.22 module remain unchanged. No parameter adaptation
-or deep-throw behavior changes are included in this diagnostics update.
+**Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

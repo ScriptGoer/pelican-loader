@@ -1,5 +1,5 @@
 """Replay a saved BAD PLAY JSON locally. No network requests or code from the report."""
-import ctypes,ctypes.util,hashlib,json,sys
+import ctypes,ctypes.util,hashlib,json,sys,re
 from pathlib import Path
 R=Path(__file__).resolve().parents[1]
 def literal(v):
@@ -12,10 +12,14 @@ def literal(v):
     return '{'+','.join('['+literal(k)+']='+literal(x) for k,x in v.items())+'}'
 def run(report):
     engine=(R/'experimental/decision_engine.lua').read_text();digest=hashlib.sha256(engine.encode()).hexdigest()
+    runtime=(R/'experimental/auto_qb.lua').read_text()
+    match=re.search(r"end\)\(\)\.new\('([a-f0-9]{64})','([a-f0-9]{64})'\)",runtime)
+    if not match or match[2]!=digest:raise ValueError('Generated runtime/engine mismatch; rebuild before replay')
+    code_id=match[1]
     h=(R/'tests/test_trust_burn.py').read_text();pre=h.split("PRELUDE = r'''")[1].split("'''",1)[0]
     pre=pre.replace('a.X*b,a.Y*b,a.Z*b',"a.X*(type(b)=='number' and b or b.X),a.Y*(type(b)=='number' and b or b.Y),a.Z*(type(b)=='number' and b or b.Z)")
-    code=pre+'\nVector3={new=vec}\nlocal Engine=(function()\n'+engine+'\nend)()\nlocal replay=(function()\n'+(R/'experimental/replay.lua').read_text()+'\nend)()\nlocal result=replay('+literal(report)+',Engine,"'+digest+'")\n'
-    code+="for _,v in ipairs(result.Missing)do print('MISSING '..v)end;for _,v in ipairs(result.Mismatches)do print('MISMATCH '..v)end;print('Reproduced '..result.Reproduced..' evaluator inputs');if not result.Complete then error('REPLAY_INCOMPLETE_OR_MISMATCH')end"
+    code=pre+'\nVector3={new=vec}\nlocal Engine=(function()\n'+engine+'\nend)()\nlocal replay=(function()\n'+(R/'experimental/replay.lua').read_text()+'\nend)()\nlocal guard=(function()\n'+(R/'experimental/guard_replay.lua').read_text()+'\nend)()\nlocal result=replay('+literal(report)+',Engine,"'+digest+'","'+code_id+'",guard)\n'
+    code+="for _,v in ipairs(result.Missing)do print('MISSING '..v)end;for _,v in ipairs(result.Mismatches)do print('MISMATCH '..v)end;print('Reproduced '..result.Reproduced..' evaluator inputs; analytic risk replays '..result.GeometryReproduced);if not result.Complete then error('REPLAY_INCOMPLETE_OR_MISMATCH')end"
     lib=ctypes.CDLL(ctypes.util.find_library('lua5.4'));lib.luaL_newstate.restype=ctypes.c_void_p
     lib.luaL_openlibs.argtypes=[ctypes.c_void_p];lib.luaL_loadstring.argtypes=[ctypes.c_void_p,ctypes.c_char_p]
     lib.lua_pcallk.argtypes=[ctypes.c_void_p,ctypes.c_int,ctypes.c_int,ctypes.c_int,ctypes.c_longlong,ctypes.c_void_p]
