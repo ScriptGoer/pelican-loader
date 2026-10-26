@@ -1,4 +1,4 @@
-# B3.4 repair validation
+# B3.5 repair validation
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.
@@ -20,9 +20,13 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 | Unchanged production SAFE/MOD differential matrix | 144 |
 | Presentation controls and oscillating receivers | 30 |
 | Sparse replication and low placement comparisons | 17 |
-| **Total asserted checks/scenes** | **896** |
+| Jump state machine and coverage-label regressions | 19 |
+| **Total asserted checks/scenes** | **915** |
 
 Additional validation:
+
+- A newly supplied private B3.4 live BAD report reproduced 33 recorded evaluator inputs and 33 analytic risk inputs using the exact immutable B3.4 source. It recorded an ordinary Bullet, successful jump/release and an observer-reported receiver possession. It does not establish required movement, fault attribution or the cause of separate missed opportunities. Raw user telemetry is excluded from the repository.
+- B3.5 compares the old/current controllers through a safe 79-degree route turn after takeoff: the old controller cancels based on direction, while the rewritten controller uses fresh geometry without cancellation. The current controller uses one grounded preflight and one rising release after the offset. A forced final-budget omission recovers on the same jump with one packet. Off-lane rushers are not labeled active underneath threats; an actual near-release blocker remains rejected. These tests do not calibrate defender turning or prove live gameplay improvements.
 
 - B3.4 compares actual B3.2/B3.3/current controllers with a running avatar whose position arrives once per six mock frames: B3.3 falsely rejects it as idle; the other two throw. A stationary character with stale velocity still cannot qualify. Grounded body-level, unexpectedly low, explicit-negative-lead, airborne and arithmetic-boundary placements are covered. The same synthetic low native result is actually released by B3.3 and blocked by the corrected controller. These are mechanisms/counterexamples, not confirmation of the user's specific uncaptured plays.
 

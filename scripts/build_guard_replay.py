@@ -1,9 +1,10 @@
 """Generate offline analytic-risk replay from the unchanged production source."""
+from repair_coverage import repair as repair_coverage
 def build(root):
  s=(root/'games/ff3/auto_qb.lua').read_text()
  cfg=s[s.index('local CFG ='):s.index('local Players, Run, Input')]
  policy=s[s.index('local riskPolicy={'):s.index('function riskPolicy.normalize')]
- math=s[s.index('local function predict(s,t)'):s.index('local lastNativeInputs')]
+ math=repair_coverage(s[s.index('local function predict(s,t)'):s.index('local lastNativeInputs')])
  power=s[s.index('function touch.fullAllowed(shot)'):s.index('function touch.record')]
  pre='''-- Generated analytic risk replay. No Roblox/network/native calls.
 return function(shot,receiver,defenders,context)

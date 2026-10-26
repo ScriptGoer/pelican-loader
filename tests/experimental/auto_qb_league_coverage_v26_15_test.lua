@@ -15,7 +15,7 @@ local t=scene();local c=t.run();local max=t.steps(20);local p=t.payload()
 if not p then print(c.GetReport()) end
 check(p and p.Mode=='Fit' and p.FitReason=='COVERAGE_WINDOW_BETWEEN_LAYERS','actual native Fit can thread under/deep layers when its own trajectory is safe')
 check(p.FitComparison=='Bullet' and p.FitSecondComparison=='Dime','actual release retains two separate alternative-path proofs')
-check(p.Margin>=6 and p.Lane>=4 and p.CoverageLayers.Underneath>=2 and p.CoverageLayers.Deeper>=2,'Fit uses strict full-path and arrival clearance against actual geometric layers')
+check(p.Margin>=6 and p.Lane>=4 and p.CoverageLayers.Underneath==0 and p.CoverageLayers.Deeper>=2,'safe Fit clears underneath threats; opponent depth alone does not label active coverage')
 check(math.abs(p.Power-95)<1e-7 and p.Lead[1]==6 and p.Lead[2]==8,'native Fit keeps its real low-branch power and configured lead')
 check(max<=8 and #t.requests==1,'three final native calls stay within eight per frame')
 local n=#Mock.nativeSolveHistory

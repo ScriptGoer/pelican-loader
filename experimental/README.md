@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.4
+# Pelican Auto QB — repaired experiment B3.5
 
-B3.4 repairs a false-idle regression in B3.3's fast movement sampler and adds a grounded low-placement check. TRUST startup, immediate AWAY, presentation controls and the observed-zigzag candidate remain. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and B2 is `614550d`. Previous repairs remain pinned at their original tags. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
+B3.5 rewrites automatic QB-jump timing and corrects an overbroad underneath-coverage label. Prior B3.4 readiness/low-placement guards, TRUST startup, immediate AWAY and presentation controls remain. **Production main/V26.22 is unchanged.** Baseline: `c9cc9ea`; original B: `4a4689b`. Previous repairs remain pinned at their original tags.
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,17 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.4`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.4` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.5`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.5` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.5 jump lifecycle and coverage labels
+
+Auto Jump no longer treats a 45-degree WR direction change as proof that the pass is lost. The final native solve, current receiver reach and complete interception checks decide whether that changed route is throwable. A genuine closed window still cancels the throw.
+
+Grounded preflight runs before requesting a normal jump. Once airborne, the state machine uses observed takeoff and the configured 75-ms offset, without repeating grounded preflight on cache expiry. Failed takeoff remains retryable at the existing 250-ms application rate limit; there is no possession-wide failure latch. Known jump physics still require ascending release. After descent, wait for landing and a new normal jump rather than firing from the bottom. Unknown jump parameters retain the explicit legacy fallback.
+
+A final native-frame budget omission, changed launch pose or stale decision requests another fresh final solve on the next heartbeat without blacklisting the receiver or discarding observed takeoff. A sent/ambiguous packet still cannot be retried. No universal release delay or fabricated receiver intent is added.
+
+The old `Underneath` summary counted every opponent between QB and WR in downfield projection, including distant off-lane rushers. It now requires a modeled path or catch-point threat for that candidate. This is a diagnostic-label correction, **not evidence that this label caused live throw refusals**: the actual analytic interception guards already operate on every defender and remain unchanged. A rusher who can block/intercept the native flight remains a threat; teammates are excluded by existing team checks. We do not infer verified player roles or exempt defenders by name, proximity to QB or velocity alone. A live BAD report is still needed to establish whether the conservative instant-turn pursuit model rejected a particular harmless rusher.
 
 ## B3.4 missed opportunities and low placement
 
@@ -42,7 +52,7 @@ Joint ranking prefers this point candidate over a straight-route projection for 
 
 ## B3.2 automatic jump recovery
 
-Before an automatic deep jump, run the same fresh native trajectory/coverage/mode/possession checks used at final release, without sending a packet or starting the throw animation. A changed window therefore blocks the visible jump earlier. Record that evidence separately as `PreJump` with `PREJUMP_VERIFIED` or `PREJUMP_BLOCKED`; it is not a throw attempt. Cached-window expiry requires a fresh preflight while waiting. Final native release runs on a later heartbeat so preflight and release cannot consume each other's native-call allowance. Native call/time limits remain in force.
+Before an automatic deep jump, run the same fresh native trajectory/coverage/mode/possession checks used at final release, without sending a packet or starting the throw animation. A changed window therefore blocks the visible jump earlier. Record that evidence separately as `PreJump` with `PREJUMP_VERIFIED` or `PREJUMP_BLOCKED`; it is not a throw attempt. B3.5 supersedes the old airborne cache-expiry preflight: preflight now belongs to grounded jump preparation. Final native release runs on a later heartbeat so preflight and release cannot consume each other's native-call allowance. Native call/time limits remain in force.
 
 After a cancelled jump, a deep throw with verified normal jump physics must observe a rising local takeoff and the configured short offset. A descending/landed jump cannot authorize a later ground release. Short passes retain their ordinary release behavior. Unknown jump physics retain the explicit legacy fallback rather than guessing physics values.
 
@@ -148,6 +158,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **896 assertions/scenes** and native Luau compilation of all **24** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **915 assertions/scenes** and native Luau compilation of all **24** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

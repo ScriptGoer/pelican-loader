@@ -3,6 +3,7 @@ import sys
 sys.dont_write_bytecode=True
 from pathlib import Path
 from instrument_bad_play import instrument
+from repair_coverage import repair as repair_coverage
 from build_guard_replay import build as build_guard_replay
 root=Path(__file__).resolve().parents[1]
 s=(root/'games/ff3/auto_qb.lua').read_text()
@@ -114,31 +115,68 @@ end
 s=s[:a]+original+wrappers+s[b:]
 one("if not throwable(shot) then setGate(shot.safetyRead", "if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead")
 one('holdManual(best,best.shot.safetyRead', 'holdManual(best,best.shot.unified and best.shot.unified.Reason or best.shot.safetyRead')
-# Confirm the actual native window before committing the visible jump. The
-# normal fresh final solve still runs after observed takeoff; it may veto safely.
+# Auto Jump owns only takeoff timing. Fresh native geometry owns throw permission.
 one('local function releaseNow(ball,selected,defenders,now)','local function releaseNow(ball,selected,defenders,now,preJump)')
 one('    local unit=shot.velocity.Unit\n    -- Readable live InputBegan', '    if preJump then return true end\n    local unit=shot.velocity.Unit\n    -- Readable live InputBegan')
-one('    if seq.deep then\n        local _,root=body(seq.player)', '    local preflightThisFrame=false\n    if seq.deep then\n        local _,root=body(seq.player)')
-one('        requestJump(ball,now)\n        if stopped or sequence~=seq then return end',r'''        if ascentTime(ball.hum) and ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y<=0 then
-            abortPreparedBurn(seq,'DEEP_WAIT_LANDING');return
+one('if timing.delay==0 or stopped or not auto', 'if stopped or not auto')
+block('    function timing.Wait(seq,ball,now)','local function deepThrow(shot,hum)',r'''    function timing.Wait(seq,ball,now)
+        local jump=timing.last
+        local rising=ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y>0
+        if jump and jump.model==ball.model and jump.hum==ball.hum then
+            seq.jumpObservedAt=jump.at;seq.jumpTimingSource='OBSERVED_LOCAL_TAKEOFF'
+            if seq.deep and ascentTime(ball.hum) and not rising then
+                timing.status='DEEP_WAIT_LANDING';setGate(timing.status);return false
+            end
+            if now-jump.at<timing.delay then timing.status='WAIT_JUMP_RELEASE_OFFSET';setGate(timing.status);return false end
+            timing.status='POST_JUMP_READY';return true
         end
-        if not seq.preJumpCheckedAt or now-seq.preJumpCheckedAt>CFG.CacheAge then
+        if seq.deep and ascentTime(ball.hum) then
+            if ball.hum.FloorMaterial==Enum.Material.Air then
+                timing.status='DEEP_WAIT_LANDING'
+            elseif seq.jumpAwaitAt and now-seq.jumpAwaitAt<.25 then
+                timing.status='WAIT_LOCAL_TAKEOFF'
+            else
+                -- No takeoff does not poison the possession or create a ground
+                -- throw. requestJump can try again after the bounded retry gap.
+                seq.preJumpCheckedAt=nil;seq.jumpAwaitAt=nil
+                timing.status='WAIT_DEEP_TAKEOFF_RETRY'
+            end
+            setGate(timing.status);return false
+        end
+        timing.status='NO_NEW_JUMP_IMMEDIATE';return true
+    end
+end''')
+# A turn is not proof that an opening vanished: solve the current route instead.
+block('    if sequence.deep then\n        local movement=receiverRoot', '    if not throwing or not auto', '')
+block('    if seq.deep then\n        local _,root=body(seq.player)', '    if not controller.jumpTiming.Wait(seq,ball,now) then return end',r'''    if seq.deep then
+        local grounded=ball.hum.FloorMaterial~=Enum.Material.Air
+        local canRequest=grounded and ball.hum.Jump~=true and now>=(seq.nextJumpCheckAt or 0) and
+            (assistance.jumpEpoch~=possession.epoch or now-assistance.jumpRequestedAt>=.25)
+        if canRequest then
             local passed=releaseNow(ball,seq.selected,{},now,true)
             controller.bad:prejump(passed==true)
             if stopped or sequence~=seq then return end
             if not passed then cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return end
-            seq.preJumpCheckedAt=now;preflightThisFrame=true
+            seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
+            requestJump(ball,now)
+            return -- fresh final native solve after physics, on its own budget
         end
-        requestJump(ball,now)
-        if stopped or sequence~=seq then return end''')
-one('    if not controller.jumpTiming.Wait(seq,ball,now) then return end', '    if preflightThisFrame then return end -- separate native budgets; physics may observe this jump next heartbeat\n    if not controller.jumpTiming.Wait(seq,ball,now) then return end')
-one('        if timing.delay==0 then return true end','        if timing.delay==0 and not (seq.deep and ascentTime(ball.hum)) then return true end')
-one("            timing.status='POST_JUMP_READY';return true", "            if seq.deep and ascentTime(ball.hum) and ball.root.AssemblyLinearVelocity.Y<=0 then timing.status='DEEP_WAIT_LANDING';setGate(timing.status);return false end\n            timing.status='POST_JUMP_READY';return true")
-one('                assistance.jumpFailedEpoch=possession.epoch','                assistance.jumpFailedEpoch=nil -- a missed takeoff is not a possession-wide ban')
-one("        timing.status='NO_NEW_JUMP_IMMEDIATE';return true", "        if seq.deep and ascentTime(ball.hum) then timing.status='WAIT_DEEP_TAKEOFF';setGate(timing.status);return false end\n        timing.status='NO_NEW_JUMP_IMMEDIATE';return true")
+    end''')
+# Once a normal jump has begun, changing a prediction cannot invalidate its
+# timing state. The final native solve may still reject the actual window.
 one('    if assistance.jumpFailedEpoch==possession.epoch then return end','')
 one('    if assistance.jumpEpoch==possession.epoch and (not assistance.jumpRequestObserved or now-assistance.jumpRequestedAt<.25) then return end','    if assistance.jumpEpoch==possession.epoch and now-assistance.jumpRequestedAt<.25 then return end')
 one("    hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'", "    if sequence then sequence.jumpAwaitAt=now end\n    hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'")
+one('''        if controller.jumpTiming.delay>0 and assistance.jumpFailedEpoch==possession.epoch and deepThrow(best.shot,ball.hum) and not controller.jumpTiming.last then
+            holdManual(best,'JUMP_TAKEOFF_NOT_OBSERVED');return
+        end''','')
+one('''    else
+        local evidence=seq.blockEvidence
+        rememberBlocked(seq.player,evidence and evidence.shot,gate,evidence)''','''    elseif gate=='NATIVE_FRAME_BUDGET' or gate=='QB_LAUNCH_POSE_CHANGED_REPLAN' or gate=='DECISION_STALE_AFTER_NATIVE_SOLVER' then
+        setGate('JUMP_FINAL_REPLAN') -- no request was sent; keep observed takeoff
+    else
+        local evidence=seq.blockEvidence
+        rememberBlocked(seq.player,evidence and evidence.shot,gate,evidence)''')
 block('local function better(a,b)','local function classify(shot,s,defenders)',r'''local function better(a,b)
     throwable(a);if b then throwable(b) end
     return Unified.better(a,b)
@@ -156,7 +194,7 @@ risk=risk.replace('local speed=runSpeed(d)','local speed=runSpeed(d);shot.maxThr
 risk=risk.replace('local gradeStarted=os.clock();shot.maxThreatSpeed=0','local gradeStarted=os.clock();shot.maxThreatSpeed=0\n    shot.guardInputs={Clock=gradeStarted,Drops={}}\n    local ref=receiver.chestReference;if ref then shot.guardInputs.ChestReference={time=ref.time,at=ref.at}end')
 risk=risk.replace('local key=d.model or d','local key=d.model or d\n            if receiver.dropHistory[key]then shot.guardInputs.Drops[d.name]=receiver.dropHistory[key]end')
 risk=risk.replace('shot.guardSeconds=os.clock()-gradeStarted','shot.guardInputs.ClockEnd=os.clock();shot.guardSeconds=os.clock()-gradeStarted')
-s=s[:a]+risk+s[b:]
+s=s[:a]+repair_coverage(risk)+s[b:]
 # Ease changes ranking, never whether a high catch needs a chest-threat proof.
 one('    if not controller.passPlan.openComfort and not controller.safety.enabled then return true end','')
 s=s.replace("if controller.passPlan.openComfort and (shot.jumpBullet or shot.nativeCoverageJump) and not shot.jumpBulletAllowed", "if (shot.jumpBullet or shot.nativeCoverageJump) and not shot.jumpBulletAllowed")
@@ -202,27 +240,27 @@ s=s.replace('if pass<3 then limited=true end','if pass<#plannerModes then limite
 one('function controller.Stop(reason)','function controller.Stop(reason)\n    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false\n    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or \"USER_END\"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status=\"STOPPED_BEFORE_REQUEST\";controller.bad.current.Final.Gate=clean(reason or \"USER_END\")end end')
 
 # Accurate active-policy labels; unsupported prototype controls are retired.
-s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.4): generated repair of V26.22.')
+s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.5): generated repair of V26.22.')
 for prefix,value in {
  'OPEN_COMFORT_POLICY':'NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
  'CLOSE_BULLET_POLICY':'ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
  'MAG_POLICY':'UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
  'JUMP_BULLET_POLICY':'CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
- 'AUTO_JUMP_POLICY':'FRESH_NATIVE_PREFLIGHT; OBSERVED_RISING_TAKEOFF_OFFSET; CANCELLED_JUMP_RECOVERY; NO_KNOWN_PHYSICS_GROUND_FALLBACK',
+ 'AUTO_JUMP_POLICY':'GROUNDED_PREFLIGHT; OBSERVED_TAKEOFF_STATE_MACHINE; CURRENT_ROUTE_FINAL_SOLVE; RETRY_WITHOUT_POSSESSION_BAN',
 }.items():
  import re
  s=re.sub(r"'"+prefix+r"\|[^']*'",repr(prefix+'|'+value),s)
 s=s.replace('FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED','ORDERED_COMFORT_COMPARISON; OVERLAP_MODEL_UNCALIBRATED')
 
 # Update controls and history without rewriting native calculations.
-one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.4'")
-s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.4'")
+one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.5'")
+s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.5'")
 s=s.replace("MagTrial=shot.magTrial,MagExtraY=","Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=")
 s=s.replace("Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,","Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,")
 one("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=","Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
 s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
-loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.4"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
+loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.5"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
 loader=loader.replace('"main"','"repair-unified-qb"').replace('/main/loader.lua','/repair-unified-qb/experimental/loader.lua')
 (root/'experimental/loader.lua').write_text(loader)
 print('Generated B3 repair; production V26.22 untouched')

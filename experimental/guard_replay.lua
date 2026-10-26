@@ -210,7 +210,9 @@ local function risk(shot,receiver,defenders)
         if layers then
             local fraction=flight.Magnitude>0 and flat(d.p-shot.origin):Dot(flight)/(flight.Magnitude*flight.Magnitude) or 0
             if lines.forward and flat(d.p-receiver.p):Dot(lines.forward)>0 then layers.Deeper=layers.Deeper+1
-            elseif fraction>0 and fraction<1 then layers.Underneath=layers.Underneath+1 end
+            elseif fraction>0 and fraction<1 and (pathClearance<CFG.ThrowLane or clearance<CFG.ThrowMargin) then
+                layers.Underneath=layers.Underneath+1
+            end
             if pathClearance<CFG.ThrowLane then layers.LaneThreats=layers.LaneThreats+1 end
             if clearance<CFG.ThrowMargin then layers.CatchThreats=layers.CatchThreats+1 end
         end

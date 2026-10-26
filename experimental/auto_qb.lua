@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.4): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.5): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -334,7 +334,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('ad7fc1802395a6cb54e40981aa25a2188bba3e0ac6048bc51821264ece0c8013','8353c8095ffa75e675c44f97ad3b8d350a328b8bf2197e1965c0ac09eaa4d1da')
+end)().new('6efeb8dd3b415a1febba103737b37f4cc0462218e2d22847f242c948160c0ac5','8353c8095ffa75e675c44f97ad3b8d350a328b8bf2197e1965c0ac09eaa4d1da')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -738,7 +738,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.4',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.5',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1790,7 +1790,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.4','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.5','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1823,7 +1823,7 @@ function controller.GetReport()
         'FULL_POWER_MIN_YARDS|'..(touch.full or 'ACTUAL_FLIGHT_ONLY'),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.comfort,
         'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
-        'AUTO_JUMP_POLICY|FRESH_NATIVE_PREFLIGHT; OBSERVED_RISING_TAKEOFF_OFFSET; CANCELLED_JUMP_RECOVERY; NO_KNOWN_PHYSICS_GROUND_FALLBACK'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
+        'AUTO_JUMP_POLICY|GROUNDED_PREFLIGHT; OBSERVED_TAKEOFF_STATE_MACHINE; CURRENT_ROUTE_FINAL_SOLVE; RETRY_WITHOUT_POSSESSION_BAN'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
         'JUMP_DELAY_TARGET_SECONDS|'..controller.jumpTiming.delay,'JUMP_TIMING_STATUS|'..controller.jumpTiming.status,
         'JUMP_OBSERVATIONS|'..controller.jumpTiming.observations,'JUMP_TIMING_CANCELLED|'..controller.jumpTiming.cancelled,
         'LAST_JUMP_RELEASE_DELAY_SECONDS|'..tostring(controller.jumpTiming.lastReleaseDelay),
@@ -3043,7 +3043,9 @@ local function risk(shot,receiver,defenders)
         if layers then
             local fraction=flight.Magnitude>0 and flat(d.p-shot.origin):Dot(flight)/(flight.Magnitude*flight.Magnitude) or 0
             if lines.forward and flat(d.p-receiver.p):Dot(lines.forward)>0 then layers.Deeper=layers.Deeper+1
-            elseif fraction>0 and fraction<1 then layers.Underneath=layers.Underneath+1 end
+            elseif fraction>0 and fraction<1 and (pathClearance<CFG.ThrowLane or clearance<CFG.ThrowMargin) then
+                layers.Underneath=layers.Underneath+1
+            end
             if pathClearance<CFG.ThrowLane then layers.LaneThreats=layers.LaneThreats+1 end
             if clearance<CFG.ThrowMargin then layers.CatchThreats=layers.CatchThreats+1 end
         end
@@ -3803,7 +3805,7 @@ do
         timing.track=nil;timing.last=nil
     end
     function timing.Observe(now)
-        if timing.delay==0 or stopped or not auto or not possession.wasReady or usedTools[possession.tool]==possession.epoch then timing.Reset();return end
+        if stopped or not auto or not possession.wasReady or usedTools[possession.tool]==possession.epoch then timing.Reset();return end
         local p=timing.track
         if not p or p.model~=me.Character or not p.root.Parent or p.hum.Parent~=p.model then
             local model,root,_,hum=body(me)
@@ -3821,31 +3823,29 @@ do
         p.air=air
     end
     function timing.Wait(seq,ball,now)
-        if timing.delay==0 and not (seq.deep and ascentTime(ball.hum)) then return true end
         local jump=timing.last
+        local rising=ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y>0
         if jump and jump.model==ball.model and jump.hum==ball.hum then
             seq.jumpObservedAt=jump.at;seq.jumpTimingSource='OBSERVED_LOCAL_TAKEOFF'
+            if seq.deep and ascentTime(ball.hum) and not rising then
+                timing.status='DEEP_WAIT_LANDING';setGate(timing.status);return false
+            end
             if now-jump.at<timing.delay then timing.status='WAIT_JUMP_RELEASE_OFFSET';setGate(timing.status);return false end
-            if seq.deep and ascentTime(ball.hum) and ball.root.AssemblyLinearVelocity.Y<=0 then timing.status='DEEP_WAIT_LANDING';setGate(timing.status);return false end
             timing.status='POST_JUMP_READY';return true
         end
-        if seq.jumpObservedAt then
-            timing.status='JUMP_ENDED_BEFORE_RELEASE';timing.cancelled=timing.cancelled+1
-            cancelSequence(timing.status);cancelJump(timing.status);setGate(timing.status);return false
-        end
-        if not seq.jumpAwaitAt then
-            if ball.hum.Jump==true then seq.jumpAwaitAt=now
-            elseif seq.deep and assistance.jumpEpoch==possession.epoch and now-assistance.jumpRequestedAt<=.25 then seq.jumpAwaitAt=assistance.jumpRequestedAt end
-        end
-        if seq.jumpAwaitAt then
-            if now-seq.jumpAwaitAt>=.25 then
-                timing.status='JUMP_TAKEOFF_NOT_OBSERVED';timing.cancelled=timing.cancelled+1
-                assistance.jumpFailedEpoch=nil -- a missed takeoff is not a possession-wide ban
-                cancelSequence(timing.status);cancelJump(timing.status);setGate(timing.status);return false
+        if seq.deep and ascentTime(ball.hum) then
+            if ball.hum.FloorMaterial==Enum.Material.Air then
+                timing.status='DEEP_WAIT_LANDING'
+            elseif seq.jumpAwaitAt and now-seq.jumpAwaitAt<.25 then
+                timing.status='WAIT_LOCAL_TAKEOFF'
+            else
+                -- No takeoff does not poison the possession or create a ground
+                -- throw. requestJump can try again after the bounded retry gap.
+                seq.preJumpCheckedAt=nil;seq.jumpAwaitAt=nil
+                timing.status='WAIT_DEEP_TAKEOFF_RETRY'
             end
-            timing.status='WAIT_LOCAL_TAKEOFF';setGate(timing.status);return false
+            setGate(timing.status);return false
         end
-        if seq.deep and ascentTime(ball.hum) then timing.status='WAIT_DEEP_TAKEOFF';setGate(timing.status);return false end
         timing.status='NO_NEW_JUMP_IMMEDIATE';return true
     end
 end
@@ -4577,12 +4577,7 @@ local function releaseNow(ball,selected,defenders,now,preJump)
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
     if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or shot.planAllowed==false and shot.planReason or shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
     local _,receiverRoot=body(selected.player)
-    if sequence.deep then
-        local movement=receiverRoot and flat(receiverRoot.AssemblyLinearVelocity)
-        if not movement or movement.Magnitude<CFG.MinMoveSpeed or movement.Unit:Dot(sequence.route)<=math.cos(math.pi/4) then
-            setGate('RECEIVER_BROKE_BURN');return
-        end
-    end
+
     if not throwing or not auto or not ownsLock() or not teammate(selected.player) or not controller.receiverFilter.allowed(selected.player) or receiverMenu and receiverMenu.Visible then return end
     if shot.magTrial and not controller.mag.Allowed(selected.player) then setGate('MAG_TRUST_REVOKED');return end
     current,reason=ready()
@@ -4669,27 +4664,20 @@ local function driveSequence(now)
         or not teammate(seq.player) or receiverMenu and receiverMenu.Visible then
         cancelSequence(why or 'RELEASE_CONTEXT_CHANGED'); return
     end
-    local preflightThisFrame=false
     if seq.deep then
-        local _,root=body(seq.player)
-        local velocity=root and flat(root.AssemblyLinearVelocity)
-        if not velocity or velocity.Magnitude<CFG.MinMoveSpeed or velocity.Unit:Dot(seq.route)<=math.cos(math.pi/4) then
-            abortPreparedBurn(seq,'RECEIVER_BROKE_BURN');return
-        end
-        if ascentTime(ball.hum) and ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y<=0 then
-            abortPreparedBurn(seq,'DEEP_WAIT_LANDING');return
-        end
-        if not seq.preJumpCheckedAt or now-seq.preJumpCheckedAt>CFG.CacheAge then
+        local grounded=ball.hum.FloorMaterial~=Enum.Material.Air
+        local canRequest=grounded and ball.hum.Jump~=true and now>=(seq.nextJumpCheckAt or 0) and
+            (assistance.jumpEpoch~=possession.epoch or now-assistance.jumpRequestedAt>=.25)
+        if canRequest then
             local passed=releaseNow(ball,seq.selected,{},now,true)
             controller.bad:prejump(passed==true)
             if stopped or sequence~=seq then return end
             if not passed then cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return end
-            seq.preJumpCheckedAt=now;preflightThisFrame=true
+            seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
+            requestJump(ball,now)
+            return -- fresh final native solve after physics, on its own budget
         end
-        requestJump(ball,now)
-        if stopped or sequence~=seq then return end
     end
-    if preflightThisFrame then return end -- separate native budgets; physics may observe this jump next heartbeat
     if not controller.jumpTiming.Wait(seq,ball,now) then return end
     if not seq.animationStarted then seq.animation=visual.prepare(ball,now);seq.animationStarted=true end
     if stopped or sequence~=seq then return end
@@ -4699,6 +4687,8 @@ local function driveSequence(now)
     releaseNow(ball,seq.selected,defenders,now)
     if stopped or sequence~=seq then return end
     if usedTools[ball.tool]==possession.epoch then sequence=nil;lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
+    elseif gate=='NATIVE_FRAME_BUDGET' or gate=='QB_LAUNCH_POSE_CHANGED_REPLAN' or gate=='DECISION_STALE_AFTER_NATIVE_SOLVER' then
+        setGate('JUMP_FINAL_REPLAN') -- no request was sent; keep observed takeoff
     else
         local evidence=seq.blockEvidence
         rememberBlocked(seq.player,evidence and evidence.shot,gate,evidence)
@@ -4944,9 +4934,7 @@ local function tick(now,cachedOnly)
         if not stable then log('SELECT',best.player.Name..' '..best.shot.mode) end
         if not throwing then setGate('SELECT_ONLY'); return end
         if receiverMenu and receiverMenu.Visible then setGate('RECEIVER_MENU_OPEN'); return end
-        if controller.jumpTiming.delay>0 and assistance.jumpFailedEpoch==possession.epoch and deepThrow(best.shot,ball.hum) and not controller.jumpTiming.last then
-            holdManual(best,'JUMP_TAKEOFF_NOT_OBSERVED');return
-        end
+
         if controller.unified:wait(best.player,best.model,possession.epoch,best.shot,now) then
             setGate('DEVELOPING_ROUTE_CONTINUATION');controller.bad:timing(best,now);return
         end
