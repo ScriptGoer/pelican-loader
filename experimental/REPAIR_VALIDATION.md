@@ -1,4 +1,4 @@
-# B3.5 repair validation
+# B3.6 repair validation
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.
@@ -7,7 +7,7 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 
 | Suite | Checks passed |
 | --- | ---: |
-| Actual repaired-controller/native-shaped runtime contracts | 132 |
+| Actual repaired-controller/native-shaped runtime contracts | 144 |
 | Comparative V26.22 / Build B / B3 constructed scenes | 77 |
 | Source isolation, solver preservation and deterministic generation | 69 |
 | BAD report retention, privacy and replay | 24 |
@@ -21,9 +21,11 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 | Presentation controls and oscillating receivers | 30 |
 | Sparse replication and low placement comparisons | 17 |
 | Jump state machine and coverage-label regressions | 19 |
-| **Total asserted checks/scenes** | **915** |
+| **Total asserted checks/scenes** | **927** |
 
 Additional validation:
+
+- B3.6 flags and saves four independent reports, verifies distinct filenames and byte-preservation of the first file, retains all four in session memory, and checks the reported version. Existing single-report replay and historical replay remain compatible. Executor disk behavior is still unverified on iPhone.
 
 - A newly supplied private B3.4 live BAD report reproduced 33 recorded evaluator inputs and 33 analytic risk inputs using the exact immutable B3.4 source. It recorded an ordinary Bullet, successful jump/release and an observer-reported receiver possession. It does not establish required movement, fault attribution or the cause of separate missed opportunities. Raw user telemetry is excluded from the repository.
 - B3.5 compares the old/current controllers through a safe 79-degree route turn after takeoff: the old controller cancels based on direction, while the rewritten controller uses fresh geometry without cancellation. The current controller uses one grounded preflight and one rising release after the offset. A forced final-budget omission recovers on the same jump with one packet. Off-lane rushers are not labeled active underneath threats; an actual near-release blocker remains rejected. These tests do not calibrate defender turning or prove live gameplay improvements.

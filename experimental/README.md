@@ -1,4 +1,4 @@
-# Pelican Auto QB — repaired experiment B3.5
+# Pelican Auto QB — repaired experiment B3.6
 
 B3.5 rewrites automatic QB-jump timing and corrects an overbroad underneath-coverage label. Prior B3.4 readiness/low-placement guards, TRUST startup, immediate AWAY and presentation controls remain. **Production main/V26.22 is unchanged.** Baseline: `c9cc9ea`; original B: `4a4689b`. Previous repairs remain pinned at their original tags.
 
@@ -8,7 +8,13 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.5`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.5` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.6`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.6` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.6 independent BAD files
+
+Every BAD THROW/MISSED flag now gets its own `PELICAN_FF3_BAD_PLAY_<unique-id>.json` where executor file APIs work. Re-exporting that same pin updates its own file with late observations. Later flags cannot overwrite earlier unique files. `PELICAN_FF3_BAD_PLAY.json` remains a latest-report alias; clipboard/COPY still exports the latest pin only. Upload each unique file when reporting several plays.
+
+The last eight exported flags also remain in `getgenv().PELICAN_FF3_BAD_PLAY_ARCHIVE` across script reloads in the current executor session. CLEAR BAD clears the active pin, not that archive or saved files. Full app exit loses session memory; disk persistence depends on the executor. Failed writes cannot guarantee disk retention. Reports saved by earlier versions cannot reconstruct previously overwritten pins. Repeatedly flagging the same possession records repeated snapshots; four clicks do not necessarily represent four different throws.
 
 ## B3.5 jump lifecycle and coverage labels
 
@@ -125,7 +131,7 @@ The separately running verified Pelican jump-width helper keeps its widened nati
 
 1. After a bad pass, tap **QB → TOOLS → BAD THROW**. It pins the latest attempted possession within 45 seconds. For a current withheld opportunity, use **MISSED** instead. This avoids silently flagging a different recent throw.
 2. Flagging attempts immediate clipboard/file export and closes the menu. The report is also retained in executor session memory. API acceptance is not iOS clipboard readback proof.
-3. After the play settles, **QB → TOOLS → COPY / BAD DATA** exports the same pin with any late outcome observations. The file is `PELICAN_FF3_BAD_PLAY.json` where file APIs work.
+3. After the play settles, **QB → TOOLS → COPY / BAD DATA** exports the same pin with any late outcome observations. The unique file is named in its `ExportFile` field; `PELICAN_FF3_BAD_PLAY.json` is only the latest-report alias.
 4. Paste/upload that JSON. **CLEAR BAD** removes the pin and restores ordinary COPY/DATA; it does not delete the exported file. Stop/reload preserves the pin. A full app exit needs the saved/exported artifact.
 
 The journal records anonymous receiver/defender positions, velocities, six-point motion history, relevant native settings/leads, ordered scores, actual return power/arc/time/arrival, comfort/threat evidence, eligibility exclusions, native/generator errors, scheduling/budget omissions and exact CodeId/EngineId plus wall/monotonic timestamps. Native supported tuples, failed generation and never-attempted modes are distinguished. Failed native output is not replaced with an earlier candidate's good margins.
@@ -158,6 +164,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **915 assertions/scenes** and native Luau compilation of all **24** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **927 assertions/scenes** and native Luau compilation of all **24** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

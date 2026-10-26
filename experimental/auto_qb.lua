@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.5): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.6): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -317,7 +317,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.6',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -334,7 +334,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('6efeb8dd3b415a1febba103737b37f4cc0462218e2d22847f242c948160c0ac5','8353c8095ffa75e675c44f97ad3b8d350a328b8bf2197e1965c0ac09eaa4d1da')
+end)().new('d7cd6d9c68494cd5df126fe210064e9ed394c77ba7f3fbc4b1561082044853ba','8353c8095ffa75e675c44f97ad3b8d350a328b8bf2197e1965c0ac09eaa4d1da')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -738,7 +738,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.5',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.6',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1790,7 +1790,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.5','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.6','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -4962,6 +4962,17 @@ function controller.ExportBadPlay()
     local function done(ok,value)controller.bad.exportStatus=value;return ok,value end
     local report=controller.bad:report();if not report then return done(false,'FLAG_A_PLAY_FIRST') end
     env.PELICAN_FF3_BAD_PLAY_REPORT=report
+    local http=game:GetService('HttpService')
+    if not report.ExportFile then
+        env.PELICAN_FF3_BAD_FILE_SEQUENCE=(env.PELICAN_FF3_BAD_FILE_SEQUENCE or 0)+1
+        local valid,guid=pcall(function()return http:GenerateGUID(false)end)
+        local suffix=valid and type(guid)=='string' and guid:gsub('[^%w%-]','') or tostring(os.time())..'-'..tostring(env.PELICAN_FF3_BAD_FILE_SEQUENCE)
+        report.ExportFile='PELICAN_FF3_BAD_PLAY_'..suffix..'.json'
+    end
+    local archive=env.PELICAN_FF3_BAD_PLAY_ARCHIVE
+    if type(archive)~='table' then archive={};env.PELICAN_FF3_BAD_PLAY_ARCHIVE=archive end
+    local found=false;for _,old in ipairs(archive)do if old==report then found=true;break end end
+    if not found then archive[#archive+1]=report;while #archive>8 do table.remove(archive,1)end end
     local ok,encoded=pcall(function()return game:GetService('HttpService'):JSONEncode(report)end)
     if not ok then return done(false,'ENCODE_FAILED') end
     while #encoded>1500000 and report.Possession.Timeline and #report.Possession.Timeline>0 do
@@ -4975,7 +4986,8 @@ function controller.ExportBadPlay()
     env.PELICAN_FF3_BAD_PLAY_REPORT=report
     local copier=type(setclipboard)=='function' and setclipboard or type(toclipboard)=='function' and toclipboard
     local copied=copier and pcall(copier,encoded) or false
-    local saved=type(writefile)=='function' and pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) or false
+    local saved=type(writefile)=='function' and pcall(writefile,report.ExportFile,encoded) or false
+    if saved then pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) end -- latest-report alias only
     return done(copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API')
 end
 controller.presentation=(function()

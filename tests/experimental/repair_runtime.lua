@@ -189,8 +189,18 @@ do
  local f=assert(io.open('/tmp/pelican-b3-runtime-report.json','w'));f:write(text);f:close()
  local savedCopy=setclipboard;setclipboard=nil
  local ok,where=c.ExportBadPlay();check(ok and where=='SAVED','file-only export never claims a successful clipboard copy')
+ local firstFile=report.ExportFile;check(firstFile and isfile(firstFile),'unique first flagged report saved')
+ local firstContents=readfile(firstFile)
  c.unified.clearButton.Activated:Fire();check(c.bad:report()==nil and t.env.PELICAN_FF3_BAD_PLAY_REPORT==nil,'CLEAR BAD restores normal DATA/COPY workflow')
  check(c.bad:flag(Mock.time,true),'MISSED/current flag remains available separately from last attempted throw')
+ for i=1,3 do
+  check(c.ExportBadPlay(),'additional flag exports');local nextFile=c.bad:report().ExportFile
+  check(nextFile~=firstFile and isfile(nextFile),'each flag uses a separate saved file')
+  if i<3 then check(c.bad:flag(Mock.time,true),'next independent flag')end
+ end
+ check(readfile(firstFile)==firstContents,'four flags do not overwrite the first report')
+ check(#t.env.PELICAN_FF3_BAD_PLAY_ARCHIVE==4,'session archive retains all four flags')
+ check(c.bad:report().Version=='experimental-unified-b3.6','report version matches actual published build')
  setclipboard=savedCopy
 
  check(c.Stop('CAPTURE'),'capture cleanup')

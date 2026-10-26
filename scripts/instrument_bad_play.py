@@ -50,6 +50,17 @@ end
     local function done(ok,value)controller.bad.exportStatus=value;return ok,value end
     local report=controller.bad:report();if not report then return done(false,'FLAG_A_PLAY_FIRST') end
     env.PELICAN_FF3_BAD_PLAY_REPORT=report
+    local http=game:GetService('HttpService')
+    if not report.ExportFile then
+        env.PELICAN_FF3_BAD_FILE_SEQUENCE=(env.PELICAN_FF3_BAD_FILE_SEQUENCE or 0)+1
+        local valid,guid=pcall(function()return http:GenerateGUID(false)end)
+        local suffix=valid and type(guid)=='string' and guid:gsub('[^%w%-]','') or tostring(os.time())..'-'..tostring(env.PELICAN_FF3_BAD_FILE_SEQUENCE)
+        report.ExportFile='PELICAN_FF3_BAD_PLAY_'..suffix..'.json'
+    end
+    local archive=env.PELICAN_FF3_BAD_PLAY_ARCHIVE
+    if type(archive)~='table' then archive={};env.PELICAN_FF3_BAD_PLAY_ARCHIVE=archive end
+    local found=false;for _,old in ipairs(archive)do if old==report then found=true;break end end
+    if not found then archive[#archive+1]=report;while #archive>8 do table.remove(archive,1)end end
     local ok,encoded=pcall(function()return game:GetService('HttpService'):JSONEncode(report)end)
     if not ok then return done(false,'ENCODE_FAILED') end
     while #encoded>1500000 and report.Possession.Timeline and #report.Possession.Timeline>0 do
@@ -63,7 +74,8 @@ end
     env.PELICAN_FF3_BAD_PLAY_REPORT=report
     local copier=type(setclipboard)=='function' and setclipboard or type(toclipboard)=='function' and toclipboard
     local copied=copier and pcall(copier,encoded) or false
-    local saved=type(writefile)=='function' and pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) or false
+    local saved=type(writefile)=='function' and pcall(writefile,report.ExportFile,encoded) or false
+    if saved then pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) end -- latest-report alias only
     return done(copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API')
 end
 '''
@@ -104,7 +116,7 @@ controller.presentation:start(me)
     one('        receiverButton.Visible=expanded and not league;awayButton.Visible=not league', '        receiverButton.Visible=expanded and not league;awayButton.Visible=expanded and not league')
     one('        controller.league.screenButton.Visible=league;controller.league.profileButton.Visible=expanded','        controller.league.screenButton.Visible=expanded and league;controller.league.profileButton.Visible=expanded')
     one("        if not expanded or league then controller.receiverEvidence.panel.Visible=false end", "        controller.badButton.Visible=expanded;controller.badCurrentButton.Visible=expanded;controller.unified.easeButton.Visible=expanded\n        controller.mag.button.Visible=false\n        controller.jumpBullet.button.Visible=expanded and controller.nativeJump.supported and not league\n        controller.jumpBullet.button.Text=controller.nativeJump.enabled and 'HIGH ON' or 'HIGH OFF'\n        status.Text=expanded and gate:gsub('_',' '):sub(1,24) or 'QB'\n        if expanded then status.Size=UDim2.fromOffset(166,22);status.Position=UDim2.new(1,-194,0,40)else status.Size=UDim2.fromOffset(54,22);status.Position=UDim2.new(1,-82,0,40)end\n        if not expanded or league then controller.receiverEvidence.panel.Visible=false end")
-    one("'RELEASE_VERSION|experimental-unified-b3.5'", "'RELEASE_VERSION|experimental-unified-b3.5','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS'")
+    one("'RELEASE_VERSION|experimental-unified-b3.6'", "'RELEASE_VERSION|experimental-unified-b3.6','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS'")
 
     one("'BAD_PLAY_CODE_ID|'..controller.bad.CodeId", "'BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus)")
 
