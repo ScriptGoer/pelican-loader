@@ -228,4 +228,56 @@ do
  t.env.PELICAN_FF3_MOBILE_JUMP=nil;hud:check(2);check(bar.Enabled,'name match alone cannot claim another UI')
 end
 
+-- Reduced synthetic reproductions of the live report's policy gaps. Raw user
+-- reports and actor histories are deliberately not bundled with these tests.
+do
+ local t,c,a=scene(current,{RiskMode='TRUST'})
+ local wr=actor(0,-40,0,-20)
+ local function prepared(mode,margin,path)
+  local sh=native(wr,1.17,mode,95);sh.effectiveYLead=0;sh.appliedLead={X=6,Y=7}
+  sh.margin=margin;sh.lane=path;sh.directLane=2.5;sh.raceAdvantage=.6;sh.receiverETA=.68;sh.defenderETA=1.34
+  sh.routeLateral=0;sh.receiverTurn=.24;sh.fitAllowed=true;sh.powerAllowed=true
+  a.coverage(sh,wr,{});return sh
+ end
+ local flat=prepared('Fit',1.5,-1)
+ check(not a.allowed(flat) and flat.unified.Reason=='FLAT_NATIVE_REQUIRES_BULLET_GUARDS','head-level Fit cannot borrow relaxed non-Bullet admission')
+ local dime=prepared('Dime',1.5,-1)
+ check(not a.allowed(dime),'head-level Dime cannot borrow relaxed non-Bullet admission')
+ local strict=prepared('Fit',10,8);check(a.allowed(strict),'safe native Fit remains available even when native flattens it')
+ local soft=prepared('Dime',10,8);soft.power=69;check(a.allowed(soft),'strictly clear 69-power opportunity is not banned merely because one report was intercepted')
+ local lifted=prepared('Dime',1.5,-1);lifted.effectiveYLead=7;a.coverage(lifted,wr,{})
+ check(a.allowed(lifted),'genuinely elevated Dime retains the configured TRUST policy')
+ local burn=native(wr,1,'Bullet',95);burn.effectiveYLead=0
+ burn.origin=Vector3.new(0,5,0);burn.velocity=Vector3.new(0,12,-60);burn.arrival=Vector3.new(0,3,-60)
+ a.risk(burn,wr,{actor(0,-36,0,-20)});a.coverage(burn,wr,{actor(0,-36,0,-20)})
+ check(a.allowed(burn) and burn.trustBurn.Allowed,'credible deep trailing advantage survives geometry classification')
+ strict.unified.HardReason='SYNTHETIC_FINAL_POLICY_VETO'
+ check(not a.allowed(strict),'final throwable wrapper enforces evaluator veto rather than returning raw guard permission')
+ -- Native clamp bounds are the exact existing AntiOOB contract. The additional
+ -- correction allowance is the user's existing horizontal lead, not a new radius.
+ t.q.AntiOOB.XTolerance=3;t.q.AntiOOB.ZTolerance=3
+ local runner=actor(-54,-50,-20,1)
+ local boundary=native(runner,1.17,'Fit',95);boundary.origin=Vector3.new(4,12,-128);boundary.arrival=Vector3.new(-72,7,-48.5)
+ boundary.velocity=(boundary.arrival-boundary.origin)/boundary.time+Vector3.new(0,14*boundary.time,0)
+ boundary.networkPing=.1;boundary.appliedLead={X=6,Y=7};boundary.margin=20;boundary.lane=20;boundary.defenderETA=4;boundary.fitAllowed=true;boundary.powerAllowed=true
+ a.coverage(boundary,runner,{})
+ check(not a.allowed(boundary) and boundary.unified.Reason=='NATIVE_BOUNDARY_ROUTE_ADJUSTMENT','clamped endpoint cannot silently require a continuing WR to brake or cut back')
+ check(boundary.unified.Boundary.Excess>boundary.unified.Boundary.LeadAllowance,'report quantifies the continuation mismatch against configured lead')
+ runner.v=Vector3.new(20,0,1);a.coverage(boundary,runner,{})
+ check(a.allowed(boundary),'receiver already turning inward can use the same boundary endpoint')
+ runner.v=Vector3.new(-20,0,1);boundary.arrival=Vector3.new(-65,7,-48.5);a.coverage(boundary,runner,{})
+ check(a.allowed(boundary),'ordinary unclamped target is not confused with native boundary truncation')
+ boundary.arrival=Vector3.new(-72,7,-48.5);boundary.appliedLead.X=10;a.coverage(boundary,runner,{})
+ check(a.allowed(boundary),'configured horizontal lead remains the correction allowance')
+ check(c.Stop('LIVE_POLICY_REPRO'),'live policy reproduction cleans up')
+end
+do
+ local needle='controller.bad:grade(shot,s,defenders,inputs,controller.unified.config,(shot.guardSeconds or 0)+os.clock()-begun)'
+ local injected,n=current:gsub(needle:gsub('([^%w])','%%%1'),needle..";if controller.bad.finalActive then shot.unified.HardReason='TEST_FINAL_GEOMETRY_CHANGED'end",1)
+ check(n==1,'fresh-final-veto test patches the actual captured-grade site')
+ local t,c=scene(injected,{RiskMode='SAFE'});c.SetThrow(true);t.steps(12)
+ check(#t.requests==0 and c.GetReport():find('TEST_FINAL_GEOMETRY_CHANGED',1,true),'fresh final policy veto prevents the packet and reports its actual reason')
+ check(c.Stop('FINAL_POLICY_VETO'),'vetoed release cleans up without retrying a request')
+end
+
 print('PASS B3 runtime repair checks',checks,'(synthetic native/state contracts, not live catches)')

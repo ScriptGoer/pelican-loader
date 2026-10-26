@@ -67,6 +67,17 @@ b:observe('throw-1',{ObservedOutcome='UNKNOWN'})
 check(report.Possession.Outcome.Status=='UNKNOWN','late unknown outcome retained after ring eviction')
 b:heartbeat(1,.001,2);b:heartbeat(1.1,.004,8)
 check(b.profile.FrameIntervals.GT33_33==1 and b.profile.MaxNativeCalls==8,'live frame interval histogram')
+local edge=B.new('CODEID','DIGEST')
+local edgeWR={name='private_boundary_receiver',p=vec(0,3,150),v=vec(0,0,20),hum={WalkSpeed=20}}
+local edgeShot=shot(2,'Bullet');edgeShot.arrival=vec(0,5,175);edgeShot.velocity=vec(0,28,87.5);edgeShot.effectiveYLead=0;edgeShot.appliedLead={X=3,Y=0}
+local edgeContext={gravity=28,mode='SAFE',Guard={Allowed=true,Strict=true,Margin=45,Lane=45},NativeBoundary={Enabled=true,XTolerance=0,ZTolerance=0}}
+edge:begin(1,1,{{player={Name=edgeWR.name},sample=edgeWR}},{'Bullet'},{},e.config,'SAFE','NORMAL')
+e:evaluate(edgeShot,edgeWR,{},edgeContext);edge:grade(edgeShot,edgeWR,{},edgeContext,e.config,.001)
+edge:finish({player={Name=edgeWR.name},shot=edgeShot},.001);edge:flag(2,true)
+local edgeReport=edge:report();edgeReport.Version='MODEL_ONLY_TEST'
+check(replay(edgeReport,E,'DIGEST').Complete,'boundary/flat classification and veto reproduce from actual serialized fields')
+for _,row in pairs(edgeReport.Possession.FirstPlan.Rows)do row.Result.Boundary.Projected=row.Result.Boundary.Projected+1 end
+check(not replay(edgeReport,E,'DIGEST').Complete,'corrupt boundary evidence is rejected by replay')
 -- Minimal test-only JSON encoder; runtime uses HttpService outside throw work.
 local function json(v)
  if v==nil then return 'null' end
@@ -84,6 +95,15 @@ print('PASS '..count..' BAD PLAY retention, replay and privacy checks')
     code=code.replace('CODEID',codeid).replace('DIGEST',digest).replace('DEST',str(dest))
     ns['run'](code)
     subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(dest)],check=True)
+    # Reports must stay replayable against their actual published source after
+    # a repair changes the current engine/build fingerprint. No report code runs.
+    historical=json.loads(dest.read_text())
+    oldruntime=subprocess.check_output(['git','show','experimental-unified-b3:experimental/auto_qb.lua'],cwd=R,text=True)
+    ids=re.search(r"end\)\(\)\.new\('([a-f0-9]{64})','([a-f0-9]{64})'\)",oldruntime)
+    historical['CodeId'],historical['EngineId']=ids[1],ids[2]
+    older=Path(folder)/'historical.json';older.write_text(json.dumps(historical))
+    subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(older),'--ref','experimental-unified-b3'],check=True)
+    print('PASS explicit historical-source CLI replay without network or report-supplied code')
     report=json.loads(dest.read_text());report['Possession']['Final'].pop('Input')
     dest.write_text(json.dumps(report))
     failed=subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(dest)],capture_output=True,text=True)

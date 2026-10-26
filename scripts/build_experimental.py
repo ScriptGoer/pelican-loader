@@ -42,6 +42,7 @@ local function coverage(shot,s,defenders)
     controller.unified.BaselineCoverage(shot,s,defenders)
     local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),
         endzone=shot.endzoneTarget,CurrentDepthYards=downfield(s.p)/3,MinDepthYards=CFG.MinDownfieldYards,
+        NativeBoundary=profile and type(profile.q.AntiOOB)=='table' and {Enabled=profile.q.AntiOOB.Enabled,XTolerance=profile.q.AntiOOB.XTolerance,ZTolerance=profile.q.AntiOOB.ZTolerance} or nil,
         GoalOrScreen=lines.goalToGo or shot.screen or shot.endzoneTarget,ForwardX=lines.forward and lines.forward.X,
         ForwardZ=lines.forward and lines.forward.Z,OpenComfort=controller.passPlan.openComfort,
         ComfortSeconds=touch.enabled and touch.comfort or 0,WorldGravity=workspace.Gravity,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,SafetyReads=controller.safety.enabled,CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,FullPowerYards=touch.full},GuardInputs=shot.guardInputs,Guard=controller.unified.Guard(shot)}
@@ -51,12 +52,13 @@ local function coverage(shot,s,defenders)
 end
 local function throwable(shot)
     local g=controller.unified.Guard(shot)
-    Unified.admit(shot,g)
+    local allowed=Unified.admit(shot,g)
     if shot.unified then controller.bad:admit(shot,g) end
-    return g.Allowed
+    return allowed
 end
 '''
 s=s[:a]+original+wrappers+s[b:]
+one("if not throwable(shot) then setGate(shot.safetyRead", "if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead")
 block('local function better(a,b)','local function classify(shot,s,defenders)',r'''local function better(a,b)
     throwable(a);if b then throwable(b) end
     return Unified.better(a,b)
@@ -120,7 +122,7 @@ s=s.replace('if pass<3 then limited=true end','if pass<#plannerModes then limite
 one('function controller.Stop(reason)','function controller.Stop(reason)\n    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false\n    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or \"USER_END\"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status=\"STOPPED_BEFORE_REQUEST\";controller.bad.current.Final.Gate=clean(reason or \"USER_END\")end end')
 
 # Accurate active-policy labels; unsupported prototype controls are retired.
-s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3): generated repair of V26.22.')
+s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.1): generated repair of V26.22.')
 for prefix,value in {
  'OPEN_COMFORT_POLICY':'NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
  'CLOSE_BULLET_POLICY':'ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
@@ -132,14 +134,14 @@ for prefix,value in {
 s=s.replace('FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED','ORDERED_COMFORT_COMPARISON; OVERLAP_MODEL_UNCALIBRATED')
 
 # Update controls and history without rewriting native calculations.
-one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3'")
-s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3'")
+one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.1'")
+s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.1'")
 s=s.replace("MagTrial=shot.magTrial,MagExtraY=","Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=")
 s=s.replace("Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,","Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,")
 one("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=","Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
 s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
-loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
+loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.1"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
 loader=loader.replace('"main"','"repair-unified-qb"').replace('/main/loader.lua','/repair-unified-qb/experimental/loader.lua')
 (root/'experimental/loader.lua').write_text(loader)
 print('Generated B3 repair; production V26.22 untouched')

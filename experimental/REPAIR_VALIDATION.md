@@ -1,4 +1,4 @@
-# B3 repair validation
+# B3.1 repair validation
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.
@@ -7,10 +7,10 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 
 | Suite | Checks passed |
 | --- | ---: |
-| Actual repaired-controller/native-shaped runtime contracts | 104 |
+| Actual repaired-controller/native-shaped runtime contracts | 120 |
 | Comparative V26.22 / Build B / B3 constructed scenes | 77 |
 | Source isolation, solver preservation and deterministic generation | 69 |
-| BAD report retention, privacy and replay | 22 |
+| BAD report retention, privacy and replay | 24 |
 | Adaptive native angle and error cleanup | 94 |
 | Friends filter | 67 |
 | Conditional native receiver Jump | 41 |
@@ -18,9 +18,12 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 | League screens, profiles, UI and cleanup | 106 |
 | Unchanged production TRUST burn regression | 51 |
 | Unchanged production SAFE/MOD differential matrix | 144 |
-| **Total asserted checks/scenes** | **817** |
+| **Total asserted checks/scenes** | **835** |
 
 Additional validation:
+
+- B3.1 reduced reproductions cover flattened Fit/Dime admission, strict lower-power passes, genuine elevated/native deep windows, the boundary-clamp continuation mismatch, inward turns, unchanged configured lead allowance, and an evaluator veto arising only during final release. Boundary evidence round-trips through replay and corruption fails. The supplied live originals became unavailable after a workspace reset, so their complete replay is explicitly outstanding.
+- Historical source selection through `--ref experimental-unified-b3` reproduces a synthetic model report against the original published B3 fingerprints without network access.
 
 - All 19 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
 - An actual controller-generated synthetic BAD JSON reproduces 29 evaluations and 29 analytic risk grades. Deliberately corrupted risk, missing replay inputs and wrong-build fingerprints fail with nonzero exit status.

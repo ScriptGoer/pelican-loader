@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.1): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -21,8 +21,12 @@ function E.new(options)
 end
 function E.admit(shot,g)
  local u=shot.unified;if not u then return g.Allowed end
- u.Guard=g;u.Allowed=g.Allowed==true and not u.HardReason
- u.Reason=u.HardReason or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
+ -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
+ -- A mode label must not grant the looser elevated-pass admission to that path.
+ local policy=u.HardReason or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
+  and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
+ u.Guard=g;u.Allowed=g.Allowed==true and not policy
+ u.Reason=policy or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
 end
 function E:evaluate(shot,wr,defenders,c)
  local begun=os.clock();self.checks=self.checks+1
@@ -31,6 +35,29 @@ function E:evaluate(shot,wr,defenders,c)
  local t=shot.time
  if type(t)~='number'or t~=t or t<=0 or t==math.huge or not shot.origin or not shot.velocity or not shot.arrival then u.HardReason='INVALID_TRAJECTORY';u.Reason=u.HardReason;return u end
  local motion=flat(wr.v);local predicted=wr.p+motion*(t+math.max(0,shot.networkPing or 0))
+ local effective=shot.effectiveYLead or shot.EffectiveYLead
+ -- This is an arithmetic distinction about the returned endpoint, not a catch
+ -- hitbox, standing/jump region or an inference from the configured mode name.
+ u.FlatNative=type(effective)=='number' and math.abs(effective)<=.01 or false
+ local bounds=c.NativeBoundary
+ if bounds and bounds.Enabled then
+  local allowance=math.abs(shot.appliedLead and shot.appliedLead.X or shot.Lead and shot.Lead[1] or 0)
+  local tolerance=math.max(.05,flat(shot.arrival-shot.origin).Magnitude*.0001)
+  for _,axis in ipairs({'X','Z'})do
+   local cap=axis=='X' and 75 or 175;local inset=bounds[axis..'Tolerance']
+   if type(inset)=='number' and inset==inset and math.abs(inset)<cap then
+    local low,high=-cap+inset,cap+inset
+    local at,goal,speed=shot.arrival[axis],predicted[axis],motion[axis]
+    local edge=speed<0 and math.abs(at-low)<=tolerance and low or speed>0 and math.abs(at-high)<=tolerance and high
+    local excess=edge and (speed<0 and edge-goal or goal-edge)
+    if excess and excess>allowance+tolerance then
+     u.Boundary={Axis=axis,Edge=edge,Projected=goal,Excess=excess,LeadAllowance=allowance,Tolerance=tolerance,
+      Scope='OBSERVED_NATIVE_CLAMP; CONSTANT_VELOCITY_CONTINUATION; INTENT_UNKNOWN'}
+     u.HardReason='NATIVE_BOUNDARY_ROUTE_ADJUSTMENT'
+    end
+   end
+  end
+ end
  local ev=shot.velocity-Vector3.new(0,c.gravity*t,0)
  u.ArrivalRelativeSpeed=(ev-wr.v).Magnitude;u.HeightAboveHead=shot.arrival.Y-(wr.head and wr.head.Position.Y or wr.p.Y+2)
  u.Adjustment=flat(shot.arrival-predicted).Magnitude
@@ -274,7 +301,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -291,7 +318,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('b005cb26c3dd8d47b8b85d97a4e30e31746ce7291665bb0e7c75e7af5e15c77e','a2f5d4ffc655732ebfc3733e0f6eedc1b99bd41e40cc2efed86bcd06b5fd73b6')
+end)().new('748565ad24b4a44f8b4c4d03a077688c8c05e9928c07480224dda8cfd0b90692','f84d33cc895d9b8210ca545e3456f1770873ce6abee67acd1d775ede3ad9669d')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -644,7 +671,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.1',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1696,7 +1723,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.1','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -3081,6 +3108,7 @@ local function coverage(shot,s,defenders)
     controller.unified.BaselineCoverage(shot,s,defenders)
     local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),
         endzone=shot.endzoneTarget,CurrentDepthYards=downfield(s.p)/3,MinDepthYards=CFG.MinDownfieldYards,
+        NativeBoundary=profile and type(profile.q.AntiOOB)=='table' and {Enabled=profile.q.AntiOOB.Enabled,XTolerance=profile.q.AntiOOB.XTolerance,ZTolerance=profile.q.AntiOOB.ZTolerance} or nil,
         GoalOrScreen=lines.goalToGo or shot.screen or shot.endzoneTarget,ForwardX=lines.forward and lines.forward.X,
         ForwardZ=lines.forward and lines.forward.Z,OpenComfort=controller.passPlan.openComfort,
         ComfortSeconds=touch.enabled and touch.comfort or 0,WorldGravity=workspace.Gravity,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,SafetyReads=controller.safety.enabled,CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,FullPowerYards=touch.full},GuardInputs=shot.guardInputs,Guard=controller.unified.Guard(shot)}
@@ -3090,9 +3118,9 @@ local function coverage(shot,s,defenders)
 end
 local function throwable(shot)
     local g=controller.unified.Guard(shot)
-    Unified.admit(shot,g)
+    local allowed=Unified.admit(shot,g)
     if shot.unified then controller.bad:admit(shot,g) end
-    return g.Allowed
+    return allowed
 end
 controller.fit={}
 function controller.jumpBullet.assess(shot,alternatives)
@@ -4444,7 +4472,7 @@ local function releaseNow(ball,selected,defenders,now)
         end
     end
     if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
-    if not throwable(shot) then setGate(shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or shot.planAllowed==false and shot.planReason or shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
+    if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or shot.planAllowed==false and shot.planReason or shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
     local _,receiverRoot=body(selected.player)
     if sequence.deep then
         local movement=receiverRoot and flat(receiverRoot.AssemblyLinearVelocity)

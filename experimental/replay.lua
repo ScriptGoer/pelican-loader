@@ -29,7 +29,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
             for k in pairs(b)do if a[k]==nil then return false end end
             return true
         end
-        for _,field in ipairs({'Score','RiskScore','CatchDifficulty','ReceiverAdvantage','Allowed','Reason'})do
+        for _,field in ipairs({'Score','RiskScore','CatchDifficulty','ReceiverAdvantage','Allowed','Reason','FlatNative','Boundary'})do
             if not equal(shot.unified[field],row.Result[field])then out.Mismatches[#out.Mismatches+1]=key..':'..field end
         end
         if GuardReplay and row.Input.Context.GuardInputs then
@@ -47,7 +47,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
                 end
                 if not equal(geometry.trustBurn,g.TrustBurn)then out.Mismatches[#out.Mismatches+1]=key..':TRUST_BURN'end
             end
-        elseif GuardReplay and report.Version=='experimental-unified-b3' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
+        elseif GuardReplay and report.Version=='experimental-unified-b3.1' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
         if shot.unified.HardReason~=row.Result.HardReason then out.Mismatches[#out.Mismatches+1]=key..':HARD_REASON'end
         return shot
     end

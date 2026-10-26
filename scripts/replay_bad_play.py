@@ -1,5 +1,5 @@
 """Replay a saved BAD PLAY JSON locally. No network requests or code from the report."""
-import ctypes,ctypes.util,hashlib,json,sys,re
+import argparse,ctypes,ctypes.util,hashlib,io,json,sys,re,subprocess,tarfile,tempfile
 from pathlib import Path
 R=Path(__file__).resolve().parents[1]
 def literal(v):
@@ -31,7 +31,17 @@ def run(report):
         if status:raise ValueError(lib.lua_tolstring(state,-1,None).decode())
     finally:lib.lua_close(state)
 if __name__=='__main__':
-    if len(sys.argv)!=2:raise SystemExit('Usage: python3 scripts/replay_bad_play.py BAD_PLAY.json')
-    raw=Path(sys.argv[1]).read_bytes()
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('report',type=Path)
+    parser.add_argument('--ref',help='Explicit locally available source ref, e.g. experimental-unified-b3; no network fetch')
+    args=parser.parse_args();raw=args.report.read_bytes()
     if len(raw)>1500000:raise SystemExit('Report exceeds 1.5 MB bound')
+    if args.ref:
+        commit=subprocess.check_output(['git','rev-parse','--verify','--end-of-options',args.ref+'^{commit}'],cwd=R,text=True).strip()
+        archive=subprocess.check_output(['git','archive',commit,'experimental','scripts','tests/test_trust_burn.py'],cwd=R)
+        with tempfile.TemporaryDirectory(prefix='pelican-replay-') as directory:
+            with tarfile.open(fileobj=io.BytesIO(archive)) as source:source.extractall(directory,filter='data')
+            print('Replay source:',args.ref,commit,flush=True)
+            result=subprocess.run([sys.executable,str(Path(directory)/'scripts/replay_bad_play.py'),str(args.report.resolve())],cwd=directory)
+            raise SystemExit(result.returncode)
     run(json.loads(raw))

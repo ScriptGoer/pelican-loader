@@ -13,8 +13,12 @@ function E.new(options)
 end
 function E.admit(shot,g)
  local u=shot.unified;if not u then return g.Allowed end
- u.Guard=g;u.Allowed=g.Allowed==true and not u.HardReason
- u.Reason=u.HardReason or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
+ -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
+ -- A mode label must not grant the looser elevated-pass admission to that path.
+ local policy=u.HardReason or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
+  and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
+ u.Guard=g;u.Allowed=g.Allowed==true and not policy
+ u.Reason=policy or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
 end
 function E:evaluate(shot,wr,defenders,c)
  local begun=os.clock();self.checks=self.checks+1
@@ -23,6 +27,29 @@ function E:evaluate(shot,wr,defenders,c)
  local t=shot.time
  if type(t)~='number'or t~=t or t<=0 or t==math.huge or not shot.origin or not shot.velocity or not shot.arrival then u.HardReason='INVALID_TRAJECTORY';u.Reason=u.HardReason;return u end
  local motion=flat(wr.v);local predicted=wr.p+motion*(t+math.max(0,shot.networkPing or 0))
+ local effective=shot.effectiveYLead or shot.EffectiveYLead
+ -- This is an arithmetic distinction about the returned endpoint, not a catch
+ -- hitbox, standing/jump region or an inference from the configured mode name.
+ u.FlatNative=type(effective)=='number' and math.abs(effective)<=.01 or false
+ local bounds=c.NativeBoundary
+ if bounds and bounds.Enabled then
+  local allowance=math.abs(shot.appliedLead and shot.appliedLead.X or shot.Lead and shot.Lead[1] or 0)
+  local tolerance=math.max(.05,flat(shot.arrival-shot.origin).Magnitude*.0001)
+  for _,axis in ipairs({'X','Z'})do
+   local cap=axis=='X' and 75 or 175;local inset=bounds[axis..'Tolerance']
+   if type(inset)=='number' and inset==inset and math.abs(inset)<cap then
+    local low,high=-cap+inset,cap+inset
+    local at,goal,speed=shot.arrival[axis],predicted[axis],motion[axis]
+    local edge=speed<0 and math.abs(at-low)<=tolerance and low or speed>0 and math.abs(at-high)<=tolerance and high
+    local excess=edge and (speed<0 and edge-goal or goal-edge)
+    if excess and excess>allowance+tolerance then
+     u.Boundary={Axis=axis,Edge=edge,Projected=goal,Excess=excess,LeadAllowance=allowance,Tolerance=tolerance,
+      Scope='OBSERVED_NATIVE_CLAMP; CONSTANT_VELOCITY_CONTINUATION; INTENT_UNKNOWN'}
+     u.HardReason='NATIVE_BOUNDARY_ROUTE_ADJUSTMENT'
+    end
+   end
+  end
+ end
  local ev=shot.velocity-Vector3.new(0,c.gravity*t,0)
  u.ArrivalRelativeSpeed=(ev-wr.v).Magnitude;u.HeightAboveHead=shot.arrival.Y-(wr.head and wr.head.Position.Y or wr.p.Y+2)
  u.Adjustment=flat(shot.arrival-predicted).Magnitude

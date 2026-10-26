@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3
+# Pelican Auto QB — repaired experiment B3.1
 
-B3 repairs Build B on the dedicated `repair-unified-qb` branch. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and the later B2 diagnostics commit is `614550d`. B2 did not change B's decision engine. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md); it does not describe B3's active rules.
+B3.1 adds focused live-report policy fixes to B3 on the dedicated `repair-unified-qb` branch. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and the later B2 diagnostics commit is `614550d`. B2 did not change B's decision engine. The original repair remains pinned at `experimental-unified-b3`. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,19 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins the immutable `experimental-unified-b3` module. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3` in COPY. The existing loader ownership/confirmed-cleanup protocol prevents stacking with production/B. If an auto-execute script subsequently launches main again, it replaces the experiment; replace that auto-execute line or launch the experiment after it finishes. To return to production, execute the normal main loader. No production route or source file is modified.
+The loader pins the immutable `experimental-unified-b3.1` module. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.1` in COPY. The existing loader ownership/confirmed-cleanup protocol prevents stacking with production/B. If an auto-execute script subsequently launches main again, it replaces the experiment; replace that auto-execute line or launch the experiment after it finishes. To return to production, execute the normal main loader. No production route or source file is modified.
+
+## B3 live reports and B3.1 corrections
+
+Three B3 reports were initially read and matched to the published fingerprint. One records receiver possession after a long Bullet, one records opponent possession after a 69-power native Dime, and one records ground geometry after a downfield Fit. All three record substantial post-release route changes; none establishes quarterback/receiver fault or a calibrated catch window.
+
+The Fit exposed a concrete inherited admission loophole: its actual native vertical lead collapsed to approximately zero, yet its mode label let it use relaxed non-Bullet coverage admission. B3.1 recognizes exactly flattened native results from the returned effective lead. Those paths require the existing strict Bullet guards or the specific qualified TRUST trailing-corner proof. This is an arithmetic distinction, not a newly invented jump/standing catch threshold. Genuine elevated trajectories retain their configured policies.
+
+The Fit's endpoint was also truncated by the native AntiOOB boundary while observed receiver momentum continued outward beyond it. The old reach test checked only optimistic travel distance. B3.1 additionally rejects an observed boundary-clamped endpoint when constant-velocity continuation exceeds that boundary by more than the configured horizontal lead allowance. It uses the same native bounds already validated by the solver and the same endpoint arithmetic tolerance. It does not move the target, alter lead, infer route intent, add a release timer, or penalize an already inward-moving receiver merely for being near a sideline. Projected continuation and correction allowance are recorded in BAD evidence.
+
+Finally, the throwable wrapper returned raw baseline permission instead of the evaluator's final veto. B3.1 enforces that veto through the actual release path and reports its reason. A test injects a new veto only during the fresh final grade and verifies that no packet is sent.
+
+The 69-power interception passed strict coverage checks. Its later route change and observed physics do not establish that increasing power would have prevented it. B3.1 therefore does not globally speed up comfortable passes or claim that this interception's cause is fixed. The environment reset removed the uploaded originals after the initial reads, before complete offline replay. These fixes use the retained measurements, independent source inspection and reduced synthetic reproductions; full replay of those original live reports remains outstanding. Raw reports and player histories are not published here.
 
 ## Established causes and corrections
 
@@ -21,7 +33,7 @@ The loader pins the immutable `experimental-unified-b3` module. X reloads the re
 | Disconnected legacy behavior | B replaced Fit/Jump admission, forced clear-burn false, and removed deep-jump behavior while retaining old controls and report labels. | Restore derived burn evidence, native Fit counterfactuals, conditional native HIGH and the underlying functional controls. Retire unsupported mag/custom-height/unconditional-wide-Jump trials rather than display dead switches. |
 | Expensive/starved evaluator | Per-candidate pursuit integrates 16 steps per defender and copies model snapshots, while a separate 3-ms budget suppresses other candidates. Pre-solver omissions also consumed native-attempt slots. | Reuse the inherited analytic risk grade and cheap ordered joint ranking. Remove the separate grading cutoff. Keep the 8-ms native planning allowance, bounded mode-sweep attempts and eight-native-calls/frame guard; only real native calls consume native slots. Profile guard, capture, callback and interval cost. |
 
-These are independently verified code mechanisms and constructed counterexamples, not proof of the exact cause of an unreported live interception. No live Build B BAD PLAY capture was supplied with this repair request. The inherited body reach, instant-turn pursuit and game/native physics assumptions remain uncalibrated.
+The table documents B3's initial repair. The B3.1 section above distinguishes subsequent observed reports from established code defects. The inherited body reach, instant-turn pursuit and game/native physics assumptions remain uncalibrated.
 
 ## Joint selection and timing
 
@@ -42,7 +54,7 @@ Developing timing does not predict an unseen receiver input or promise that a di
 | Control/feature | Active behavior |
 | --- | --- |
 | AUTO / THR | Actual selection and automatic release toggles; OFF releases/cancels owned work as before. |
-| SAFE / MOD / TRUST | Actual V26.22 admission policies, including TRUST's qualified ordinary Bullet/Dime trailing-corner exception. |
+| SAFE / MOD / TRUST | V26.22 admission policies plus the B3.1 native-geometry/boundary vetoes, including TRUST's qualified ordinary Bullet/Dime trailing-corner exception. A flattened non-Bullet cannot borrow elevated-pass admission. |
 | NORMAL / DEEP / SHORT | Actual depth/comeback/end-zone/wide-deep rules described above. Visible in casual and league PLAY menus. |
 | EASE | OpenComfort ranking ON/OFF. Full-power comfort and HIGH safety proof remain independent. |
 | ARC AUTO / OLD | Existing verified native adaptive-angle request versus the native configured input; actual returned trajectory is still graded. |
@@ -81,6 +93,7 @@ From this repair checkout, with Python and liblua5.4:
 ```sh
 python3 scripts/build_experimental.py
 python3 scripts/replay_bad_play.py PELICAN_FF3_BAD_PLAY.json
+python3 scripts/replay_bad_play.py OLD_B3_BAD_PLAY.json --ref experimental-unified-b3
 python3 tests/experimental/test_engine.py
 python3 tests/experimental/test_integration.py
 python3 tests/experimental/test_bad_play.py
@@ -93,6 +106,8 @@ Replay checks EngineId **and** full build-input CodeId, recomputes ordered decis
 
 The regression set compares B3 with real V26.22 and original B. It covers comfortable versus fast/floating throws, deep native takeoff/release, credible versus unsafe TRUST cases, opposing pursuit directions, developing/straightened/brief routes, all relevant controls, native errors/yields/external edits, screens, final comparisons, cleanup, compact HUD ownership and BAD export/replay. The original engine admits five no-trailing-advantage scenes in the constructed matrix that restored guards refuse. In local Lua-table-vector benchmarks, B's three-defender grade was approximately 1.7–3.2 ms versus roughly 0.1–0.4 ms for B3's analytic grade/ranking/capture. These are desktop fixture measurements, not native Roblox/iPhone frame guarantees.
 
-The completed validation run passed **817 assertions/scenes** and native Luau compilation of all **19** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
+
+The completed validation run passed **835 assertions/scenes** and native Luau compilation of all **19** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.
