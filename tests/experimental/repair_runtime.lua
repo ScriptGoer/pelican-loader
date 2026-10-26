@@ -280,4 +280,35 @@ do
  check(c.Stop('FINAL_POLICY_VETO'),'vetoed release cleans up without retrying a request')
 end
 
+-- A cancelled automatic jump must not consume the whole possession or silently
+-- authorize a ground release when the game's next takeoff is not available.
+do
+ local options={simulateJump=true,nativeModes={Dime=true}}
+ local t,c=scene(current,{Profile='CASUAL',RiskMode='TRUST',PassPlan='DEEP',CloseBullet=false},options)
+ Mock.qhum.UseJumpPower=true;Mock.qhum.JumpPower=50
+ t.ar.Position=Vector3.new(0,6,-30);t.ar.AssemblyLinearVelocity=Vector3.new(0,0,-10);t.steps(8);c.SetThrow(true)
+ for _=1,40 do t.advance(1/60);t.drain();if (Mock.jumpCount or 0)>0 then break end end
+ check((Mock.jumpCount or 0)==1 and #t.requests==0,'first automatic jump starts after current native preflight, before release')
+ check(c.bad.current.PreJump and c.bad.current.PreJump.Status=='PREJUMP_VERIFIED','prejump evidence is distinguished from an actual release attempt')
+ t.ar.AssemblyLinearVelocity=Vector3.new()
+ for _=1,40 do t.advance(1/60);t.drain()end
+ check(#t.requests==0,'route losing its window still cancels rather than forcing the throw')
+ options.jumpFailure=true;t.ar.AssemblyLinearVelocity=Vector3.new(0,0,-10)
+ for _=1,50 do t.advance(1/60);t.drain()end
+ check(#t.requests==0 and not c.IsStopped,'unavailable cooldown takeoff does not become a ground throw or a possession-wide shutdown')
+ options.jumpFailure=false
+ for _=1,120 do t.advance(1/60);t.drain();if #t.requests>0 then break end end
+ check(#t.requests==1 and (Mock.jumpCount or 0)>=2,'later safe deep window gets a fresh automatic takeoff')
+ check(t.requests[1].qbVy>0 and t.payload().JumpObservedDelay>=.075,'recovered throw releases ascending after the takeoff offset, not from the bottom')
+ check(c.Stop('JUMP_RECOVERY'),'cancelled/recovered jump state cleans up')
+end
+do
+ local needle='controller.bad:grade(shot,s,defenders,inputs,controller.unified.config,(shot.guardSeconds or 0)+os.clock()-begun)'
+ local blocked=current:gsub(needle:gsub('([^%w])','%%%1'),needle..";if controller.bad.finalActive then shot.unified.HardReason='TEST_PREJUMP_BLOCKED'end",1)
+ local t,c=scene(blocked,{RiskMode='SAFE'},{simulateJump=true})
+ Mock.qhum.UseJumpPower=true;Mock.qhum.JumpPower=50;c.SetThrow(true);t.steps(12)
+ check(#t.requests==0 and (Mock.jumpCount or 0)==0,'fresh native veto blocks the visible jump itself')
+ check(c.bad.current.PreJump and c.bad.current.PreJump.Status=='PREJUMP_BLOCKED','blocked preflight remains exportable')
+ check(c.Stop('PREJUMP_BLOCK'),'blocked preflight cleans up')
+end
 print('PASS B3 runtime repair checks',checks,'(synthetic native/state contracts, not live catches)')

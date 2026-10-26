@@ -59,6 +59,31 @@ end
 '''
 s=s[:a]+original+wrappers+s[b:]
 one("if not throwable(shot) then setGate(shot.safetyRead", "if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead")
+# Confirm the actual native window before committing the visible jump. The
+# normal fresh final solve still runs after observed takeoff; it may veto safely.
+one('local function releaseNow(ball,selected,defenders,now)','local function releaseNow(ball,selected,defenders,now,preJump)')
+one('    local unit=shot.velocity.Unit\n    -- Readable live InputBegan', '    if preJump then return true end\n    local unit=shot.velocity.Unit\n    -- Readable live InputBegan')
+one('    if seq.deep then\n        local _,root=body(seq.player)', '    local preflightThisFrame=false\n    if seq.deep then\n        local _,root=body(seq.player)')
+one('        requestJump(ball,now)\n        if stopped or sequence~=seq then return end',r'''        if ascentTime(ball.hum) and ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y<=0 then
+            abortPreparedBurn(seq,'DEEP_WAIT_LANDING');return
+        end
+        if not seq.preJumpCheckedAt or now-seq.preJumpCheckedAt>CFG.CacheAge then
+            local passed=releaseNow(ball,seq.selected,{},now,true)
+            controller.bad:prejump(passed==true)
+            if stopped or sequence~=seq then return end
+            if not passed then cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return end
+            seq.preJumpCheckedAt=now;preflightThisFrame=true
+        end
+        requestJump(ball,now)
+        if stopped or sequence~=seq then return end''')
+one('    if not controller.jumpTiming.Wait(seq,ball,now) then return end', '    if preflightThisFrame then return end -- separate native budgets; physics may observe this jump next heartbeat\n    if not controller.jumpTiming.Wait(seq,ball,now) then return end')
+one('        if timing.delay==0 then return true end','        if timing.delay==0 and not (seq.deep and ascentTime(ball.hum)) then return true end')
+one("            timing.status='POST_JUMP_READY';return true", "            if seq.deep and ascentTime(ball.hum) and ball.root.AssemblyLinearVelocity.Y<=0 then timing.status='DEEP_WAIT_LANDING';setGate(timing.status);return false end\n            timing.status='POST_JUMP_READY';return true")
+one('                assistance.jumpFailedEpoch=possession.epoch','                assistance.jumpFailedEpoch=nil -- a missed takeoff is not a possession-wide ban')
+one("        timing.status='NO_NEW_JUMP_IMMEDIATE';return true", "        if seq.deep and ascentTime(ball.hum) then timing.status='WAIT_DEEP_TAKEOFF';setGate(timing.status);return false end\n        timing.status='NO_NEW_JUMP_IMMEDIATE';return true")
+one('    if assistance.jumpFailedEpoch==possession.epoch then return end','')
+one('    if assistance.jumpEpoch==possession.epoch and (not assistance.jumpRequestObserved or now-assistance.jumpRequestedAt<.25) then return end','    if assistance.jumpEpoch==possession.epoch and now-assistance.jumpRequestedAt<.25 then return end')
+one("    hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'", "    if sequence then sequence.jumpAwaitAt=now end\n    hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'")
 block('local function better(a,b)','local function classify(shot,s,defenders)',r'''local function better(a,b)
     throwable(a);if b then throwable(b) end
     return Unified.better(a,b)
@@ -122,26 +147,27 @@ s=s.replace('if pass<3 then limited=true end','if pass<#plannerModes then limite
 one('function controller.Stop(reason)','function controller.Stop(reason)\n    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false\n    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or \"USER_END\"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status=\"STOPPED_BEFORE_REQUEST\";controller.bad.current.Final.Gate=clean(reason or \"USER_END\")end end')
 
 # Accurate active-policy labels; unsupported prototype controls are retired.
-s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.1): generated repair of V26.22.')
+s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.2): generated repair of V26.22.')
 for prefix,value in {
  'OPEN_COMFORT_POLICY':'NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
  'CLOSE_BULLET_POLICY':'ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
  'MAG_POLICY':'UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
  'JUMP_BULLET_POLICY':'CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
+ 'AUTO_JUMP_POLICY':'FRESH_NATIVE_PREFLIGHT; OBSERVED_RISING_TAKEOFF_OFFSET; CANCELLED_JUMP_RECOVERY; NO_KNOWN_PHYSICS_GROUND_FALLBACK',
 }.items():
  import re
  s=re.sub(r"'"+prefix+r"\|[^']*'",repr(prefix+'|'+value),s)
 s=s.replace('FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED','ORDERED_COMFORT_COMPARISON; OVERLAP_MODEL_UNCALIBRATED')
 
 # Update controls and history without rewriting native calculations.
-one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.1'")
-s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.1'")
+one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.2'")
+s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.2'")
 s=s.replace("MagTrial=shot.magTrial,MagExtraY=","Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=")
 s=s.replace("Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,","Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,")
 one("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=","Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
 s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
-loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.1"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
+loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.2"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
 loader=loader.replace('"main"','"repair-unified-qb"').replace('/main/loader.lua','/repair-unified-qb/experimental/loader.lua')
 (root/'experimental/loader.lua').write_text(loader)
 print('Generated B3 repair; production V26.22 untouched')

@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.1
+# Pelican Auto QB — repaired experiment B3.2
 
-B3.1 adds focused live-report policy fixes to B3 on the dedicated `repair-unified-qb` branch. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and the later B2 diagnostics commit is `614550d`. B2 did not change B's decision engine. The original repair remains pinned at `experimental-unified-b3`. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
+B3.2 adds automatic-jump sequencing fixes to the B3.1 live-report repair on the dedicated `repair-unified-qb` branch. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and the later B2 diagnostics commit is `614550d`. B2 did not change B's decision engine. Previous repairs remain pinned at `experimental-unified-b3` and `experimental-unified-b3.1`. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,17 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins the immutable `experimental-unified-b3.1` module. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.1` in COPY. The existing loader ownership/confirmed-cleanup protocol prevents stacking with production/B. If an auto-execute script subsequently launches main again, it replaces the experiment; replace that auto-execute line or launch the experiment after it finishes. To return to production, execute the normal main loader. No production route or source file is modified.
+The loader pins the immutable `experimental-unified-b3.2` module. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.2` in COPY. The existing loader ownership/confirmed-cleanup protocol prevents stacking with production/B. If an auto-execute script subsequently launches main again, it replaces the experiment; replace that auto-execute line or launch the experiment after it finishes. To return to production, execute the normal main loader. No production route or source file is modified.
+
+## B3.2 automatic jump recovery
+
+Before an automatic deep jump, run the same fresh native trajectory/coverage/mode/possession checks used at final release, without sending a packet or starting the throw animation. A changed window therefore blocks the visible jump earlier. Record that evidence separately as `PreJump` with `PREJUMP_VERIFIED` or `PREJUMP_BLOCKED`; it is not a throw attempt. Cached-window expiry requires a fresh preflight while waiting. Final native release runs on a later heartbeat so preflight and release cannot consume each other's native-call allowance. Native call/time limits remain in force.
+
+After a cancelled jump, a deep throw with verified normal jump physics must observe a rising local takeoff and the configured short offset. A descending/landed jump cannot authorize a later ground release. Short passes retain their ordinary release behavior. Unknown jump physics retain the explicit legacy fallback rather than guessing physics values.
+
+Missed takeoff no longer bans the whole possession. Requests retain the existing 0.25-second rate limit, and a new request gets a new wait timestamp; an old expired wait cannot cancel it immediately. This rate limit is application scheduling, not a claimed game cooldown measurement. The next safe deep window may use the remaining ascent or a fresh takeoff after landing. Final safety checks can still cancel a genuinely lost opportunity; preflight cannot guarantee future route intent or coverage.
+
+Regression checks cancel a real mocked deep preparation, simulate cooldown with no takeoff, verify zero ground packets, then permit takeoff and verify one ascending release after the offset. A separate fresh-native veto test confirms zero jumps. No extra UI or automatic character movement is added beyond the existing ordinary jump.
 
 ## B3 live reports and B3.1 corrections
 
@@ -59,7 +69,7 @@ Developing timing does not predict an unseen receiver input or promise that a di
 | EASE | OpenComfort ranking ON/OFF. Full-power comfort and HIGH safety proof remain independent. |
 | ARC AUTO / OLD | Existing verified native adaptive-angle request versus the native configured input; actual returned trajectory is still graded. |
 | HIGH | Conditional **receiver** native Jump type, using its own configured lead and fresh chest comparison. It does not toggle the QB's automatic deep jump. |
-| QB deep jump | Automatic ordinary jump, then the configured short observed-takeoff release offset; no apex wait. Rechecks cancel a lost window. Unsupported normal jump state retains the existing explicit fallback/report. |
+| QB deep jump | Fresh native preflight, ordinary jump, then the short observed-takeoff offset; no apex wait. Known-physics deep throws cannot fall back to ground release after cancellation/cooldown. Unknown jump physics retain the explicit legacy fallback/report. Final rechecks still cancel lost windows. |
 | WR list / ANY-FRIENDS | The WR list toggles NORMAL/BLOCKED; ANY-FRIENDS changes actual receiver eligibility. Friends are verified asynchronously. Manual mag-trust markings are preserved for production but are not an active setting in B3. League keeps ANY and hides casual friendship controls. |
 | SCREEN | League-only explicit teammate/current-possession stationary behind-LOS exception; strict native Bullet and final checks remain. Inside PLAY, not always on-screen. |
 | PROFILE | CASUAL/LEAGUE override; AUTO's VIP text remains a private-server hint, not proof of league identity. |
@@ -108,6 +118,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **835 assertions/scenes** and native Luau compilation of all **19** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **846 assertions/scenes** and native Luau compilation of all **19** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

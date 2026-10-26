@@ -149,6 +149,12 @@ function B:sent(id,api,now)
     self.current.ThrowId=id or ('local:'..self.current.Id);self.current.SentAt=now;self.current.Final.Status=api
     self.lastSent=self.current;self.finalActive=false
 end
+function B:prejump(allowed)
+    if not self.current or not self.current.Final then return end
+    self.current.PreJump=copy(self.current.Final)
+    self.current.PreJump.Status=allowed and 'PREJUMP_VERIFIED' or 'PREJUMP_BLOCKED'
+    self.current.Final=nil;self.finalActive=false
+end
 function B:observe(id,value)
     for _,p in pairs({last=self.lastSent,closed=self.lastClosed})do if p.ThrowId==id then p.Observation=copy(value);p.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end end
     for _,p in ipairs(self.ring)do if p.ThrowId==id then p.Observation=copy(value);p.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end end
@@ -158,7 +164,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.2',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id

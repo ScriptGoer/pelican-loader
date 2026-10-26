@@ -22,7 +22,7 @@ for line in [
 repair=repair.replace(';shot.maxThreatSpeed=math.max(shot.maxThreatSpeed,speed)','')
 check(original==repair,'complete original path and Trust-burn grader retained, aside from timing counters')
 check(block(b,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.')==block(e,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.'),'real deep flight/jump classification restored')
-for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b3.1"']:
+for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b3.2"']:
  check(token in loader,'isolated loader ownership/ref '+token)
 for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","local fitVariant=selected.shot.fitAlternativeVariant","shot.powerAllowed=touch.fullAllowed(shot)","controller.bad:released(shot)","DEVELOPING_ROUTE_CONTINUATION"]:
  check(token in e,'preserved live contract '+token)

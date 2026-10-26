@@ -47,7 +47,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
                 end
                 if not equal(geometry.trustBurn,g.TrustBurn)then out.Mismatches[#out.Mismatches+1]=key..':TRUST_BURN'end
             end
-        elseif GuardReplay and report.Version=='experimental-unified-b3.1' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
+        elseif GuardReplay and report.Version=='experimental-unified-b3.2' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
         if shot.unified.HardReason~=row.Result.HardReason then out.Mismatches[#out.Mismatches+1]=key..':HARD_REASON'end
         return shot
     end
@@ -71,6 +71,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
         out.Selections[#out.Selections+1]={Recorded=f.Selected,Replayed=key}
         if key~=f.Selected then out.Mismatches[#out.Mismatches+1]='FRAME_'..i..':SELECTION'end
     end
+    if p.PreJump and p.PreJump.Input and p.PreJump.Result then candidate(p.PreJump,'PREJUMP_NATIVE_CHECK')end
     if p.Final and p.Final.Input and p.Final.Result then candidate(p.Final,'FINAL_RELEASE')
     elseif p.SentAt or p.Final and not p.Final.NativeFailure and not p.Final.Gate then out.Missing[#out.Missing+1]='FINAL_EVALUATOR_INPUT_OR_RESULT_MISSING'end
     out.TimelineScope='SUMMARY_ONLY; REPLAY_CHECKS_CAPTURED_FULL_KEYFRAMES'
