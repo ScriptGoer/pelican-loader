@@ -53,16 +53,23 @@ function E:evaluate(shot,wr,defenders,c)
  end
  local ev=shot.velocity-Vector3.new(0,c.gravity*t,0)
  u.ArrivalRelativeSpeed=(ev-wr.v).Magnitude;u.HeightAboveHead=shot.arrival.Y-(wr.head and wr.head.Position.Y or wr.p.Y+2)
+ u.BelowBody=c.ReceiverGrounded and math.max(0,wr.p.Y-shot.arrival.Y) or 0
+ local leadY=shot.appliedLead and shot.appliedLead.Y or shot.Lead and shot.Lead[2]
+ -- Grounded torso placement policy, not a calibrated FF3 catch radius. An
+ -- explicitly negative configured lead remains deliberate user placement.
+ if c.ReceiverGrounded and leadY and leadY>=0 and u.BelowBody>math.max(.05,flat(shot.arrival-shot.origin).Magnitude*.0001) then
+  u.HardReason=u.HardReason or 'NATIVE_PLACEMENT_BELOW_RECEIVER_BODY'
+ end
  u.Adjustment=flat(shot.arrival-predicted).Magnitude
  local apexAt=math.max(0,math.min(t,shot.velocity.Y/c.gravity))
  u.ExcessLoft=math.max(0,shot.origin.Y+shot.velocity.Y*apexAt-.5*c.gravity*apexAt*apexAt-math.max(shot.origin.Y,shot.arrival.Y))
- u.CatchDifficulty={RelativeSpeed=u.ArrivalRelativeSpeed,HeightAboveHead=u.HeightAboveHead,RouteAdjustment=u.Adjustment,ExcessLoft=u.ExcessLoft,RequiredAction='UNKNOWN'}
+ u.CatchDifficulty={RelativeSpeed=u.ArrivalRelativeSpeed,HeightAboveHead=u.HeightAboveHead,BelowGroundedBody=u.BelowBody,RouteAdjustment=u.Adjustment,ExcessLoft=u.ExcessLoft,RequiredAction='UNKNOWN'}
  u.RiskScore=math.max(0,-math.min(g.Margin or 0,g.Lane or 0)) -- clearance debt, not probability
  u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
  for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
  u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,ComfortDeficit=math.max(0,comfort-t),
-  CatchHeight=c.OpenComfort and math.max(0,u.HeightAboveHead)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
+  CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
   RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
   ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
  local forward=Vector3.new(c.ForwardX or 0,0,c.ForwardZ or 0);local along=motion:Dot(forward);local lateral=motion-forward*along

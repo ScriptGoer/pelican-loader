@@ -105,6 +105,8 @@ print('PASS '..count..' BAD PLAY retention, replay and privacy checks')
         if isinstance(value,dict):
             score=value.get('Score')
             if isinstance(score,dict):assert score.pop('RouteStability',0)==0
+            difficulty=value.get('CatchDifficulty')
+            if isinstance(difficulty,dict):assert difficulty.pop('BelowGroundedBody',0)==0
             for item in value.values():original_score_shape(item)
         elif isinstance(value,list):
             for item in value:original_score_shape(item)

@@ -19,7 +19,8 @@ function B:actor(a)
     local history={};local path=a.path or {}
     for i=1,math.min(6,#path)do local at=math.floor(1+(i-1)*math.max(0,#path-1)/math.max(1,math.min(6,#path)-1));local p=path[at];history[#history+1]={At=p.at,p=vector(p.p)}end
     return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),acceleration=vector(a.acceleration),observedSpeed=a.observedSpeed,
-        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
+        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,
+        MotionSince=a.motionSince,ReadinessAt=a.readyAt,ReadinessPosition=vector(a.readyP),Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
 end
 function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then break end;out[#out+1]=self:actor(a)end;return out end
 function B:pos(epoch,now)
@@ -164,7 +165,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.3',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id

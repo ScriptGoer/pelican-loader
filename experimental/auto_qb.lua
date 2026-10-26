@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.3): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.4): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -61,16 +61,23 @@ function E:evaluate(shot,wr,defenders,c)
  end
  local ev=shot.velocity-Vector3.new(0,c.gravity*t,0)
  u.ArrivalRelativeSpeed=(ev-wr.v).Magnitude;u.HeightAboveHead=shot.arrival.Y-(wr.head and wr.head.Position.Y or wr.p.Y+2)
+ u.BelowBody=c.ReceiverGrounded and math.max(0,wr.p.Y-shot.arrival.Y) or 0
+ local leadY=shot.appliedLead and shot.appliedLead.Y or shot.Lead and shot.Lead[2]
+ -- Grounded torso placement policy, not a calibrated FF3 catch radius. An
+ -- explicitly negative configured lead remains deliberate user placement.
+ if c.ReceiverGrounded and leadY and leadY>=0 and u.BelowBody>math.max(.05,flat(shot.arrival-shot.origin).Magnitude*.0001) then
+  u.HardReason=u.HardReason or 'NATIVE_PLACEMENT_BELOW_RECEIVER_BODY'
+ end
  u.Adjustment=flat(shot.arrival-predicted).Magnitude
  local apexAt=math.max(0,math.min(t,shot.velocity.Y/c.gravity))
  u.ExcessLoft=math.max(0,shot.origin.Y+shot.velocity.Y*apexAt-.5*c.gravity*apexAt*apexAt-math.max(shot.origin.Y,shot.arrival.Y))
- u.CatchDifficulty={RelativeSpeed=u.ArrivalRelativeSpeed,HeightAboveHead=u.HeightAboveHead,RouteAdjustment=u.Adjustment,ExcessLoft=u.ExcessLoft,RequiredAction='UNKNOWN'}
+ u.CatchDifficulty={RelativeSpeed=u.ArrivalRelativeSpeed,HeightAboveHead=u.HeightAboveHead,BelowGroundedBody=u.BelowBody,RouteAdjustment=u.Adjustment,ExcessLoft=u.ExcessLoft,RequiredAction='UNKNOWN'}
  u.RiskScore=math.max(0,-math.min(g.Margin or 0,g.Lane or 0)) -- clearance debt, not probability
  u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
  for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
  u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,ComfortDeficit=math.max(0,comfort-t),
-  CatchHeight=c.OpenComfort and math.max(0,u.HeightAboveHead)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
+  CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
   RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
   ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
  local forward=Vector3.new(c.ForwardX or 0,0,c.ForwardZ or 0);local along=motion:Dot(forward);local lateral=motion-forward*along
@@ -164,7 +171,8 @@ function B:actor(a)
     local history={};local path=a.path or {}
     for i=1,math.min(6,#path)do local at=math.floor(1+(i-1)*math.max(0,#path-1)/math.max(1,math.min(6,#path)-1));local p=path[at];history[#history+1]={At=p.at,p=vector(p.p)}end
     return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),acceleration=vector(a.acceleration),observedSpeed=a.observedSpeed,
-        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
+        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,
+        MotionSince=a.motionSince,ReadinessAt=a.readyAt,ReadinessPosition=vector(a.readyP),Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
 end
 function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then break end;out[#out+1]=self:actor(a)end;return out end
 function B:pos(epoch,now)
@@ -309,7 +317,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.3',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -326,7 +334,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('94d3951a5126a6d56fa0f0084b91e3198ee368811a49e17b36458fa539cd445f','102f437501ddb386194f53e3bc700f7f8eba568c95cc31495f8350e76ec8eb4f')
+end)().new('ad7fc1802395a6cb54e40981aa25a2188bba3e0ac6048bc51821264ece0c8013','8353c8095ffa75e675c44f97ad3b8d350a328b8bf2197e1965c0ac09eaa4d1da')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -730,7 +738,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.3',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.4',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1782,7 +1790,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.3','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.4','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -2454,7 +2462,7 @@ local function sample(player,now)
     local s=samples[player]
     if not s or s.model~=model or now-(s.motionAt or s.at)>.35 then
         s={model=model,p=root.Position,v=velocity,at=now,n=1,turn=0,routeTurn=0,path={},motionSince=nil,observedSpeed=0,
-            motionAt=now,motionP=root.Position,motionV=velocity,motionFrame=motionFrame}; samples[player]=s
+            motionAt=now,motionP=root.Position,motionV=velocity,motionFrame=motionFrame,readyAt=now,readyP=root.Position}; samples[player]=s
         s.path[1]={at=now,p=root.Position}
     elseif s.motionFrame~=motionFrame then
         local dt=now-s.motionAt
@@ -2462,10 +2470,16 @@ local function sample(player,now)
             local observed=(root.Position-s.motionP)/dt
             -- A teleport makes interception estimates stale, rather than a route ban.
             if observed.Magnitude>100 then s.n=0; s.path={}; s.motionSince=nil end
-            s.observedSpeed=flat(observed).Magnitude
-            if s.observedSpeed>=CFG.MinMoveSpeed and flat(velocity).Magnitude>=CFG.MinMoveSpeed and observed.Magnitude<=100 then
-                s.motionSince=s.motionSince or s.motionAt
-            else s.motionSince=nil end
+            local readyElapsed=now-(s.readyAt or s.motionAt)
+            if observed.Magnitude>100 then
+                s.readyAt=now;s.readyP=root.Position;s.observedSpeed=0
+            elseif readyElapsed>=CFG.Interval then
+                s.observedSpeed=flat(root.Position-(s.readyP or s.motionP)).Magnitude/readyElapsed
+                if s.observedSpeed>=CFG.MinMoveSpeed and flat(velocity).Magnitude>=CFG.MinMoveSpeed then
+                    s.motionSince=s.motionSince or s.readyAt or s.motionAt
+                else s.motionSince=nil end
+                s.readyAt=now;s.readyP=root.Position
+            elseif flat(velocity).Magnitude<CFG.MinMoveSpeed then s.motionSince=nil end
             s.acceleration=flat(velocity-s.motionV)/dt
             s.turn=clamp((velocity-s.motionV).Magnitude/30,0,1)
             s.routeTurn=clamp(flat(velocity-s.motionV).Magnitude/30,0,1)
@@ -3175,6 +3189,7 @@ local function coverage(shot,s,defenders)
     if shot.oscillationBullet and not s.oscillation then shot.releaseBlocked=true end
     local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),
         endzone=shot.endzoneTarget,CurrentDepthYards=downfield(s.p)/3,MinDepthYards=CFG.MinDownfieldYards,
+        ReceiverGrounded=s.hum and s.hum.FloorMaterial~=nil and s.hum.FloorMaterial~=Enum.Material.Air,
         NativeBoundary=profile and type(profile.q.AntiOOB)=='table' and {Enabled=profile.q.AntiOOB.Enabled,XTolerance=profile.q.AntiOOB.XTolerance,ZTolerance=profile.q.AntiOOB.ZTolerance} or nil,
         GoalOrScreen=lines.goalToGo or shot.screen or shot.endzoneTarget,ForwardX=lines.forward and lines.forward.X,
         ForwardZ=lines.forward and lines.forward.Z,OpenComfort=controller.passPlan.openComfort,
@@ -4921,7 +4936,7 @@ local function tick(now,cachedOnly)
         if best.shot.mode=='Fit' then controller.fit.assess(best.shot,controller.fit.alternatives(best.player,best.sample,defenders,now)) end
         if best.shot.jumpBullet or best.shot.nativeCoverageJump then controller.jumpBullet.assess(best.shot,controller.fit.alternatives(best.player,best.sample,defenders,now,nil,nil,true)) end
         if not throwable(best.shot) then
-            opportunities[best.player]=nil; holdManual(best,best.shot.safetyRead and best.shot.safetyRead.High and best.shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or best.shot.planAllowed==false and best.shot.planReason or best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
+            opportunities[best.player]=nil; holdManual(best,best.shot.unified and best.shot.unified.Reason or best.shot.safetyRead and best.shot.safetyRead.High and best.shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or best.shot.planAllowed==false and best.shot.planReason or best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
             assistance.guidePending={r=best,ball=ball,defenders=defenders};return
         end
         best.manualOnly=false

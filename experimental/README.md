@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.3
+# Pelican Auto QB — repaired experiment B3.4
 
-B3.3 adds TRUST startup, immediate AWAY, local presentation control and an observed-zigzag Bullet to the existing repair on `repair-unified-qb`. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and B2 is `614550d`. Previous repairs remain pinned at their original B3, B3.1 and B3.2 tags. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
+B3.4 repairs a false-idle regression in B3.3's fast movement sampler and adds a grounded low-placement check. TRUST startup, immediate AWAY, presentation controls and the observed-zigzag candidate remain. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and B2 is `614550d`. Previous repairs remain pinned at their original tags. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,17 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.3`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.3` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.4`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.4` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.4 missed opportunities and low placement
+
+B3.3 sampled teammate history faster to detect oscillation, but also updated the continuous-movement gate on every sample. A replicated avatar can retain running velocity while its position updates arrive less frequently. Unchanged positions between those updates reset readiness repeatedly, falsely classifying a moving open receiver as idle. A comparison using actual published controllers reproduces this: B3.2 throws, B3.3 refuses the same runner, and B3.4 throws again.
+
+Readiness now measures displacement over the original 0.12-second planning interval, separately from fast reversal history. Current velocity stops and teleport invalidation remain immediate. A stationary character with stale nonzero velocity still fails measured-motion readiness. No defender thresholds, risk tolerances or release delays were loosened to make this test pass. These constructed scenes establish the regression mechanism; a live MISSED report is still needed to identify all blockers in a particular play.
+
+The old comfort score charged only height above the receiver's head, so even a foot-level native endpoint had zero height cost. B3.4 also penalizes below-body placement for a receiver whose FloorMaterial identifies them as grounded. It refuses an endpoint below that receiver's current root/body reference when the applied lead is nonnegative, using the existing narrow arithmetic tolerance. Explicit negative lead remains deliberate user placement. Airborne receivers are exempt from this current-body floor because they may land before arrival.
+
+This is a torso-placement preference and coherence guard, not a newly calibrated catch hitbox. It does not raise everyone's lead or repair an unobserved difference between native prediction and the actual server ball. A native-shaped test reproduces B3.3 accepting a below-body result and B3.4 refusing it before a packet. For a live low pass whose native endpoint was normal, collect BAD THROW and its ball observations; the cause remains open until that evidence is available.
 
 ## B3.3 play controls and observed zigzags
 
@@ -138,6 +148,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **879 assertions/scenes** and native Luau compilation of all **23** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **896 assertions/scenes** and native Luau compilation of all **24** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

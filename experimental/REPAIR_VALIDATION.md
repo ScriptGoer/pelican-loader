@@ -1,4 +1,4 @@
-# B3.3 repair validation
+# B3.4 repair validation
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.
@@ -19,19 +19,22 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 | Unchanged production TRUST burn regression | 51 |
 | Unchanged production SAFE/MOD differential matrix | 144 |
 | Presentation controls and oscillating receivers | 30 |
-| **Total asserted checks/scenes** | **879** |
+| Sparse replication and low placement comparisons | 17 |
+| **Total asserted checks/scenes** | **896** |
 
 Additional validation:
 
+- B3.4 compares actual B3.2/B3.3/current controllers with a running avatar whose position arrives once per six mock frames: B3.3 falsely rejects it as idle; the other two throw. A stationary character with stale velocity still cannot qualify. Grounded body-level, unexpectedly low, explicit-negative-lead, airborne and arithmetic-boundary placements are covered. The same synthetic low native result is actually released by B3.3 and blocked by the corrected controller. These are mechanisms/counterexamples, not confirmation of the user's specific uncaptured plays.
+
 - B3.3 verifies TRUST startup despite stale saved SAFE, later risk selection, immediate folded AWAY activation, exact local `z` matching, separate executor GUI/opener hiding, late GUI hiding, preservation of game/touch controls and previously closed windows, captured Lighting application/restoration and cleanup. Live Yuna UI locations, inaccessible executor overlays and continuously reapplied fullbright remain unverified/unsupported as documented.
-- Oscillation tests reject AFK, old movement, straight routes and a single cut. The full native-shaped controller releases one comfortable `ZigzagBullet` for an open repeated-reversal case, rejects a covered case, restores native settings and remains within eight calls/frame. Its captured JSON reproduces 18 evaluator inputs and 18 analytic risk grades. The existing throw capture still reproduces 29/29. No claim of live human catch success or remote input prediction is made.
+- Oscillation tests reject AFK, old movement, straight routes and a single cut. The full native-shaped controller releases one comfortable `ZigzagBullet` for an open repeated-reversal case, rejects a covered case, restores native settings and remains within eight calls/frame. Its current captured JSON reproduces 17 evaluator inputs and 17 analytic risk grades. The existing throw capture still reproduces 29/29. No claim of live human catch success or remote input prediction is made.
 
 - B3.2 tests a blocked native preflight producing zero visible jumps, cancellation after takeoff, a later safe window while takeoff is unavailable, and recovery with one ascending release after the offset. No ground packet is permitted during the simulated cooldown. Prejump evidence remains separate from final release evidence. These are mocked lifecycle checks; the actual game cooldown and mobile timing remain unverified.
 
 - B3.1 reduced reproductions cover flattened Fit/Dime admission, strict lower-power passes, genuine elevated/native deep windows, the boundary-clamp continuation mismatch, inward turns, unchanged configured lead allowance, and an evaluator veto arising only during final release. Boundary evidence round-trips through replay and corruption fails. The supplied live originals became unavailable after a workspace reset, so their complete replay is explicitly outstanding.
 - Historical source selection through `--ref experimental-unified-b3` reproduces a synthetic model report against the original published B3 fingerprints without network access.
 
-- All 23 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
+- All 24 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
 - An actual controller-generated synthetic BAD JSON reproduces 29 evaluations and 29 analytic risk grades. Deliberately corrupted risk, missing replay inputs and wrong-build fingerprints fail with nonzero exit status.
 - The original Build B accepts five constructed no-trailing-advantage scenes that the preserved V26.22 guards reject. These demonstrate a code-level admission difference; they do not establish the cause of a specific live interception.
 - A real mocked sampler approaches six yards diagonally, briefly holds the proven developing opportunity, then releases after straightening before the continuation expires. A closing opportunity cancels the hold; this is not a universal release timer.

@@ -47,7 +47,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
                 end
                 if not equal(geometry.trustBurn,g.TrustBurn)then out.Mismatches[#out.Mismatches+1]=key..':TRUST_BURN'end
             end
-        elseif GuardReplay and report.Version=='experimental-unified-b3.3' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
+        elseif GuardReplay and report.Version=='experimental-unified-b3.4' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
         if shot.unified.HardReason~=row.Result.HardReason then out.Mismatches[#out.Mismatches+1]=key..':HARD_REASON'end
         return shot
     end
