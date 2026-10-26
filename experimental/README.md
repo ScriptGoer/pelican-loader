@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.6
+# Pelican Auto QB — repaired experiment B3.7
 
-B3.5 rewrites automatic QB-jump timing and corrects an overbroad underneath-coverage label. Prior B3.4 readiness/low-placement guards, TRUST startup, immediate AWAY and presentation controls remain. **Production main/V26.22 is unchanged.** Baseline: `c9cc9ea`; original B: `4a4689b`. Previous repairs remain pinned at their original tags.
+B3.7 fixes a native-candidate ranking error demonstrated by a low deep Bullet report: existing modeled interception exposure now precedes catch-height comfort. Prior jump lifecycle, multi-flag files, readiness, TRUST startup and mobile controls remain. **Production main/V26.22 is unchanged.** Baseline: `c9cc9ea`; original B: `4a4689b`. Earlier repairs remain pinned at their original tags.
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,15 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.6`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.6` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.7`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.7` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.7 contested trajectory ranking
+
+A supplied live report reproduced 17 evaluator/analytic risk inputs with the exact B3.6 source. The captured cohort contained an admitted deep Bullet targeting head height and an admitted Dime honoring its configured positive Y lead. Both used TRUST's trailing-corner proof. The Dime had substantially less modeled whole-path clearance debt, but the old ranker compared catch-height cost first and selected Bullet. The selected Bullet's own zero Y lead was honored: this report does not show the native solver discarding Dime lead.
+
+The ranker already calculated `RiskScore = max(0, -min(Margin, Lane))`, a conservative geometric clearance deficit in studs. It now includes that existing value as `Score.RiskDebt`, immediately after strict-versus-contested RiskTier and before comfort/height/loft. No coefficient, new height offset, catch window or game probability is introduced. Clear paths have zero debt, retaining their existing comfort ordering. EASE controls comfort ranking; it cannot suppress this risk comparison. Admission still wins before all costs: a rejected Dime/Fit/Jump cannot become eligible by score. Native high-safety restrictions, Fit comparisons and final fresh checks remain intact.
+
+Counterfactual ranking of that exact recorded cohort changes Bullet to Dime; it does not rerun the unmade native final solve or predict a completed catch. A rounded constructed full-controller scene separately reproduces old Bullet versus current Dime releases, with configured positive Dime height preserved. Wide-open flat throws, high-safety policy and SAFE rejection remain covered. Underlying defender reach/instant-turn assumptions remain uncalibrated. This targeted correction does not claim to repair every inherited adaptive-arc/native lead limitation or attribute the observed interception to one player.
 
 ## B3.6 independent BAD files
 
@@ -93,7 +101,7 @@ The table documents B3's initial repair. The B3.1 section above distinguishes su
 
 ## Joint selection and timing
 
-Receiver and supported native trajectory are evaluated together. A candidate must pass current team/movement/blacklist/filter, field/LOS, receiver reach, native output, power comfort, configured risk, mode admission and possession checks. The ordered score then compares admission, strict-versus-contested risk tier, developing readiness, comfort deficit, catch height, extra ballistic loft, relative arrival speed, proven contest gap, pass distance and flight. It is a vector of explicit costs, **not completion odds**. There are no new risk-score weights to tune until a fixture passes.
+Receiver and supported native trajectory are evaluated together. A candidate must pass current team/movement/blacklist/filter, field/LOS, receiver reach, native output, power comfort, configured risk, mode admission and possession checks. The ordered score then compares admission, strict-versus-contested risk tier, existing path-clearance debt, developing readiness, comfort deficit, catch height, extra ballistic loft, relative arrival speed, proven contest gap, pass distance and flight. It is a vector of explicit costs, **not completion odds**. There are no new risk-score weights to tune until a fixture passes.
 
 V26.22's four-stud TRUST allowance is specifically a current **and projected** trailing-corner advantage with no early direct interception, closing burn or over-top help. It is not general permission to throw at covered players. SAFE/MOD retain their original risk math. More separation no longer gets a worse priority simply because a simulated pursuit contacted the flight earlier.
 
@@ -164,6 +172,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **927 assertions/scenes** and native Luau compilation of all **24** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **951 assertions/scenes** and native Luau compilation of all **25** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

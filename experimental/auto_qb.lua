@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.6): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.7): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -76,7 +76,11 @@ function E:evaluate(shot,wr,defenders,c)
  u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
  for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
- u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,ComfortDeficit=math.max(0,comfort-t),
+ -- Admitted contest paths can still have very different modeled exposure.
+ -- Compare the existing clearance debt before comfort: an extra catch-height
+ -- cost must not beat a less exposed native path. Zero-debt open passes retain
+ -- the existing comfort ordering; this changes no release permission or lead.
+ u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,RiskDebt=u.RiskScore,ComfortDeficit=math.max(0,comfort-t),
   CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
   RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
   ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
@@ -103,7 +107,7 @@ function E.better(a,b)
  if not b then return true end
  local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar end
  local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
- for _,k in ipairs({'RiskTier','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
+ for _,k in ipairs({'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
  return false
 end
 function E:wait(player,model,epoch,shot,now)
@@ -317,7 +321,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.6',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.7',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -334,7 +338,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('d7cd6d9c68494cd5df126fe210064e9ed394c77ba7f3fbc4b1561082044853ba','8353c8095ffa75e675c44f97ad3b8d350a328b8bf2197e1965c0ac09eaa4d1da')
+end)().new('c125647579859d4dbee33bfaf134a624b9093d5c2a66a3d793c34c7d6b0a356a','3626267406c0c9b4ecb00134646d70f84ce022f8c61096f31ec7cc6957817edf')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -738,7 +742,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.6',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.7',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1790,7 +1794,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.6','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.7','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,

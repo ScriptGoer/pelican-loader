@@ -68,7 +68,11 @@ function E:evaluate(shot,wr,defenders,c)
  u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
  for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
- u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,ComfortDeficit=math.max(0,comfort-t),
+ -- Admitted contest paths can still have very different modeled exposure.
+ -- Compare the existing clearance debt before comfort: an extra catch-height
+ -- cost must not beat a less exposed native path. Zero-debt open passes retain
+ -- the existing comfort ordering; this changes no release permission or lead.
+ u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,RiskDebt=u.RiskScore,ComfortDeficit=math.max(0,comfort-t),
   CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
   RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
   ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
@@ -95,7 +99,7 @@ function E.better(a,b)
  if not b then return true end
  local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar end
  local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
- for _,k in ipairs({'RiskTier','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
+ for _,k in ipairs({'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
  return false
 end
 function E:wait(player,model,epoch,shot,now)
