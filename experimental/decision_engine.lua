@@ -15,7 +15,8 @@ function E.admit(shot,g)
  local u=shot.unified;if not u then return g.Allowed end
  -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
  -- A mode label must not grant the looser elevated-pass admission to that path.
- local policy=u.HardReason or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
+ local policy=u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
   and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
  u.Guard=g;u.Allowed=g.Allowed==true and not policy
  u.Reason=policy or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
@@ -62,6 +63,7 @@ function E:evaluate(shot,wr,defenders,c)
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
  u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,ComfortDeficit=math.max(0,comfort-t),
   CatchHeight=c.OpenComfort and math.max(0,u.HeightAboveHead)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
+  RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
   ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
  local forward=Vector3.new(c.ForwardX or 0,0,c.ForwardZ or 0);local along=motion:Dot(forward);local lateral=motion-forward*along
  local depth=c.CurrentDepthYards;local h=self.config.DevelopmentHorizon
@@ -86,7 +88,7 @@ function E.better(a,b)
  if not b then return true end
  local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar end
  local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
- for _,k in ipairs({'RiskTier','Development','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
+ for _,k in ipairs({'RiskTier','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
  return false
 end
 function E:wait(player,model,epoch,shot,now)

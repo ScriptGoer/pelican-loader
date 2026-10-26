@@ -2,9 +2,10 @@
 from pathlib import Path
 import subprocess,sys,json,tempfile
 ROOT=Path(__file__).resolve().parents[2]
-for name in ['repair_runtime.lua','comparative_model.lua']:
+for name in ['repair_runtime.lua','comparative_model.lua','presentation_oscillation.lua']:
  subprocess.run([sys.executable,str(ROOT/'tests/experimental/run_lua.py'),str(ROOT/'tests/experimental'/name)],cwd=ROOT,check=True)
 subprocess.run([sys.executable,str(ROOT/'scripts/replay_bad_play.py'),'/tmp/pelican-b3-runtime-report.json'],cwd=ROOT,check=True)
+subprocess.run([sys.executable,str(ROOT/'scripts/replay_bad_play.py'),'/tmp/pelican-zigzag-runtime-report.json'],cwd=ROOT,check=True)
 
 # An altered analytic-risk receipt must fail even if its ranking tier is unchanged.
 report=json.loads(Path('/tmp/pelican-b3-runtime-report.json').read_text())

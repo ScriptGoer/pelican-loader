@@ -11,7 +11,8 @@ check(c.league.mode=='LEAGUE' and c.receiverFilter.mode=='ANY' and not c.mag.ena
 check(c.receiverFilter.checks==0 and not c.SetReceiverFilter('FRIENDS') and not c.SetMagTrial(true) and not c.SetComebackChat(true),'hidden friendship/chat/trial workflows cannot be reenabled inside league')
 local visible=0;local status
 for _,o in ipairs(ui:GetChildren()) do if o:IsA('TextButton') and o.Visible then visible=visible+1;if o.Name~='Reload' and o.Name~='Screen' then status=o end end end
-check(visible==2 and status and not ui:FindFirstChild('Screen').Visible and not ui:FindFirstChild('ThrowAway').Visible,'collapsed league HUD is QB and reload only')
+status=ui:FindFirstChild('CompactQB')
+check(visible==3 and status and not ui:FindFirstChild('Screen').Visible and ui:FindFirstChild('ThrowAway').Visible,'collapsed league HUD keeps immediate AWAY beside QB and reload')
 status.Activated:Fire()
 for _,name in ipairs({'ReceiverFilter','MagTrial','History','Receivers'}) do
     local b=ui:FindFirstChild(name);check(b and not b.Visible,'league expansion does not expose extra feature '..name)

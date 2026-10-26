@@ -19,7 +19,7 @@ function B:actor(a)
     local history={};local path=a.path or {}
     for i=1,math.min(6,#path)do local at=math.floor(1+(i-1)*math.max(0,#path-1)/math.max(1,math.min(6,#path)-1));local p=path[at];history[#history+1]={At=p.at,p=vector(p.p)}end
     return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),acceleration=vector(a.acceleration),observedSpeed=a.observedSpeed,
-        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.turn,RouteTurn=a.routeTurn,History=history}
+        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
 end
 function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then break end;out[#out+1]=self:actor(a)end;return out end
 function B:pos(epoch,now)
@@ -76,7 +76,7 @@ function B:trajectory(shot)
     return {origin=vector(shot.origin),velocity=vector(shot.velocity),arrival=vector(shot.arrival),time=shot.time,
         power=shot.power,variant=shot.variant,mode=shot.mode,networkPing=shot.networkPing,NativeAt=shot.at,
         Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},NativeInput=shot.nativeInput,NativeInputKind=shot.nativeInputKind,PowerMethod=shot.powerMethod,
-        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle,softBullet=shot.softBullet,jumpBullet=shot.jumpBullet,nativeCoverageJump=shot.nativeCoverageJump,magTrial=shot.magTrial,screen=shot.screen,receiverResidual=shot.receiverResidual}
+        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle,softBullet=shot.softBullet,oscillationBullet=shot.oscillationBullet,jumpBullet=shot.jumpBullet,nativeCoverageJump=shot.nativeCoverageJump,magTrial=shot.magTrial,screen=shot.screen,receiverResidual=shot.receiverResidual}
 end
 function B:input(shot,wr,defenders,context,config)
     return {Shot=self:trajectory(shot),Receiver=self:actor(wr),Defenders=self:actors(defenders),Context=self:context(context),Config=copy(config)}
@@ -164,7 +164,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.2',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.3',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id

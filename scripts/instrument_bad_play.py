@@ -6,7 +6,7 @@ def instrument(s,root):
         nonlocal s
         assert s.count(old)==1,(old[:90],s.count(old));s=s.replace(old,new,1)
     module=(root/'experimental/bad_play.lua').read_text()
-    inputs=['experimental/decision_engine.lua','experimental/bad_play.lua','experimental/compact_hud.lua','scripts/build_experimental.py','scripts/instrument_bad_play.py','scripts/build_guard_replay.py','games/ff3/auto_qb.lua']
+    inputs=['experimental/decision_engine.lua','experimental/bad_play.lua','experimental/compact_hud.lua','experimental/oscillation.lua','experimental/presentation.lua','scripts/build_experimental.py','scripts/instrument_bad_play.py','scripts/build_guard_replay.py','games/ff3/auto_qb.lua']
     code=hashlib.sha256(b''.join((root/p).read_bytes() for p in inputs)).hexdigest()
     engine_id=hashlib.sha256((root/'experimental/decision_engine.lua').read_bytes()).hexdigest()
     one('controller.unified=Unified.new((context.FF3Options or {}).Unified)',f"controller.unified=Unified.new((context.FF3Options or {{}}).Unified)\ncontroller.bad=(function()\n{module}\nend)().new('{code}','{engine_id}')\ncontroller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT")
@@ -67,7 +67,35 @@ end
     return done(copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API')
 end
 '''
-    one('local built,buildError=pcall(function()',export+'local built,buildError=pcall(function()')
+    presentation=r'''controller.presentation=(function()
+PRESENTATION_SOURCE
+end)().new({containers={pg},job=game.JobId,lighting=game:GetService('Lighting'),baseline=function()return env.PELICAN_FF3_VISUAL_BASELINE end,
+ error=function(err)fatalError=clean(err);log('PRESENTATION_ERROR',err);controller.Stop('PRESENTATION_ERROR')end,
+ roots=function()
+    local list={};if gui then list[#list+1]=gui end
+    if profile and profile.hud then for _,card in pairs(profile.hud)do if type(card)=='table' and card.CardText then list[#list+1]=card.CardText end end end
+    for _,item in ipairs(controller.presentation.extraRoots or {})do list[#list+1]=item end
+    return list
+ end})
+if core then controller.presentation.options.containers[#controller.presentation.options.containers+1]=core end
+if type(gethui)=='function' then
+ local ok,h=pcall(gethui)
+ if ok and typeof(h)=='Instance' and h~=core and h~=pg then
+    controller.presentation.options.hiddenContainer=h;controller.presentation.options.containers[#controller.presentation.options.containers+1]=h
+ end
+end
+function controller.SetPresentationHidden(value)controller.presentation:set(value==true)end
+function controller.RegisterPresentationGui(o)
+ if typeof(o)~='Instance' then return false end
+ local p=controller.presentation;p.extraRoots=p.extraRoots or {};if #p.extraRoots>=64 then return false end
+ p.extraRoots[#p.extraRoots+1]=o;if p.hidden then p:scan()end;return true
+end
+controller.presentation:start(me)
+'''.replace('PRESENTATION_SOURCE',(root/'experimental/presentation.lua').read_text())
+    one('local built,buildError=pcall(function()',export+presentation+'local built,buildError=pcall(function()')
+    one('controller.unified.helperHUD:stop()',"if controller.presentation then controller.presentation:stop()end;controller.unified.helperHUD:stop()")
+    one('cleanupComplete=historyClean and friendsClean and', 'cleanupComplete=historyClean and friendsClean and (not controller.presentation or controller.presentation.clean) and')
+    one('controller.league.Update(now);if ff3Options.', 'controller.presentation:update(now);controller.unified.ObserveOscillation(now);controller.league.Update(now);if ff3Options.')
     one("status=button('WAIT YUNA',-166,138)","status=button('QB',-82,54,40);status.Name='CompactQB'")
     one("    local kill=button('X',-26,22);", "    local kill=button('X',-26,22,40);")
     one("    awayButton=button('AWAY',-226,54,62);", "    controller.badButton=button('BAD THROW',-226,106,162);controller.badButton.Name='BadPlay'\n    controller.badCurrentButton=button('MISSED',-116,106,162);controller.badCurrentButton.Name='MissedPlay'\n    for _,entry in ipairs({{controller.badButton,false},{controller.badCurrentButton,true}})do\n        connect(entry[1].Activated,function()local ok=controller.bad:flag(os.clock(),entry[2]);if ok then controller.ExportBadPlay() end;entry[1].Text=ok and 'FLAGGED' or 'NO PLAY';expanded=false;controller.league.Paint() end)\n    end\n    controller.unified.easeButton=button(controller.passPlan.openComfort and 'EASE ON' or 'EASE OFF',-226,106,187);controller.unified.easeButton.Name='OpenComfort'\n    connect(controller.unified.easeButton.Activated,function()controller.SetOpenComfort(not controller.passPlan.openComfort)end)\n    awayButton=button('AWAY',-226,54,62);")
@@ -76,7 +104,9 @@ end
     one('        receiverButton.Visible=expanded and not league;awayButton.Visible=not league', '        receiverButton.Visible=expanded and not league;awayButton.Visible=expanded and not league')
     one('        controller.league.screenButton.Visible=league;controller.league.profileButton.Visible=expanded','        controller.league.screenButton.Visible=expanded and league;controller.league.profileButton.Visible=expanded')
     one("        if not expanded or league then controller.receiverEvidence.panel.Visible=false end", "        controller.badButton.Visible=expanded;controller.badCurrentButton.Visible=expanded;controller.unified.easeButton.Visible=expanded\n        controller.mag.button.Visible=false\n        controller.jumpBullet.button.Visible=expanded and controller.nativeJump.supported and not league\n        controller.jumpBullet.button.Text=controller.nativeJump.enabled and 'HIGH ON' or 'HIGH OFF'\n        status.Text=expanded and gate:gsub('_',' '):sub(1,24) or 'QB'\n        if expanded then status.Size=UDim2.fromOffset(166,22);status.Position=UDim2.new(1,-194,0,40)else status.Size=UDim2.fromOffset(54,22);status.Position=UDim2.new(1,-82,0,40)end\n        if not expanded or league then controller.receiverEvidence.panel.Visible=false end")
-    one("'RELEASE_VERSION|experimental-unified-b3.2'", "'RELEASE_VERSION|experimental-unified-b3.2','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS'")
+    one("'RELEASE_VERSION|experimental-unified-b3.3'", "'RELEASE_VERSION|experimental-unified-b3.3','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS'")
+
+    one("'BAD_PLAY_CODE_ID|'..controller.bad.CodeId", "'BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus)")
 
     # Two compact pages replace the old scatter of controls. The folded HUD
     # owns only a 54-pixel QB pill and the existing red reload button.
@@ -92,7 +122,7 @@ end
         local list={};local function add(b,allowed)if allowed~=false then list[#list+1]=b end end
         if controller.unified.toolsOpen then
             add(controller.badButton);add(controller.badCurrentButton);add(copyButton);add(controller.history.button)
-            add(awayButton,not league);add(controller.league.profileButton);add(controller.comeback.button,not league)
+            add(controller.league.profileButton);add(controller.comeback.button,not league)
             add(controller.receiverEvidence.button);add(controller.unified.stopButton)
         else
             add(autoButton);add(throwButton);add(riskButton);add(controller.passPlan.button)
@@ -103,6 +133,7 @@ end
             b.Visible=expanded and not receiverMenu.Visible and not controller.receiverEvidence.panel.Visible
             b.Size=UDim2.fromOffset(72,24);b.Position=UDim2.new(1,-230+((i-1)%3)*76,0,68+math.floor((i-1)/3)*26)
         end
+        awayButton.Visible=true;awayButton.Size=UDim2.fromOffset(40,22);awayButton.Position=UDim2.new(1,expanded and -274 or -126,0,40)
         receiverMenu.Position=UDim2.new(1,-166,0,68)
         controller.receiverEvidence.panel.Position=UDim2.new(1,-230,0,68);controller.receiverEvidence.panel.Size=UDim2.fromOffset(226,139)
 """)

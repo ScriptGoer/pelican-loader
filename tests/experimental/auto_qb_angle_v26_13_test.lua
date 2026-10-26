@@ -7,7 +7,7 @@ local function scene(options)
     options=options or {};options.newAngleDefaults=true
     options.nativePower=true;options.nativeAngle=options.nativeAngle~=false;options.angleDegrees=true
     options.manualValue=true;options.preVerticalAimpoint=true
-    options.ff3=options.ff3 or {};options.ff3.CloseBullet=false;options.ff3.WideOpenJump=false
+    options.ff3=options.ff3 or {};options.ff3.RiskMode=options.ff3.RiskMode or 'SAFE';options.ff3.CloseBullet=false;options.ff3.WideOpenJump=false
     local t=helpers.setup(nil,options)
     t.q.Power=95;t.ar.Position=Vector3.new(0,6,-30);t.ar.AssemblyLinearVelocity=Vector3.new(0,0,-10)
     t.br.AssemblyLinearVelocity=Vector3.new();t.dr.Position=Vector3.new(65,6,-160);t.dr.AssemblyLinearVelocity=Vector3.new()

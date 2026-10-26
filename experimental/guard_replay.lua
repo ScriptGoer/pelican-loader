@@ -244,6 +244,7 @@ local function risk(shot,receiver,defenders)
 end
 
  riskPolicy.mode=context.mode
+ if shot.oscillationBullet then shot.variant='SoftBullet' end -- same comfort floor as the owned low-power adapter
  receiver.chestReference=inputs.ChestReference
  receiver.dropHistory={}
  for _,d in ipairs(defenders)do d.model=d;local at=inputs.Drops and inputs.Drops[d.name];if at then receiver.dropHistory[d]=at end end

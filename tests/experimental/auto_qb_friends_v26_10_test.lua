@@ -89,7 +89,7 @@ check(button and button.Text=='ANY' and not button.Visible,'ANY/FRIENDS starts f
 local status;for _,o in ipairs(ui:GetChildren()) do if o:IsA('TextButton') and o.Visible and o.Name~='ThrowAway' and o.Text~='X' then status=o end end
 status.Activated:Fire();button.Activated:Fire()
 check(button.Visible and button.Text=='FRIENDS' and t.env.PELICAN_FF3_RECEIVER_FILTER=='FRIENDS','compact button selects and saves FRIENDS')
-check(has(c,'PASS_PLAN|NORMAL') and has(c,'RISK_MODE|SAFE'),'friend filter does not change pass plan or risk')
+check(has(c,'PASS_PLAN|NORMAL') and has(c,'RISK_MODE|TRUST'),'friend filter does not change pass plan or TRUST startup risk')
 check(not c.SetReceiverFilter('ALL') and c.receiverFilter.mode=='FRIENDS','invalid filter leaves FRIENDS intact')
 check(c.Stop('RELOAD'),'friend filter reload cleanup');c=t.run()
 check(c.receiverFilter.mode=='FRIENDS','deliberate friend filter persists across ordinary controller reload')

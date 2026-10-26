@@ -8,7 +8,11 @@ checks=0
 def check(value,label):
  global checks
  assert value,label;checks+=1
-check(block(b,'local function solve(player,mode)','function controller.mag.RefreshModes()')==block(e,'local function solve(player,mode)','function controller.mag.RefreshModes()'),'native solver and lead transaction unchanged')
+native=block(e,'local function solve(player,mode)','function controller.mag.RefreshModes()')
+import re
+native=re.sub(r'    -- BEGIN OBSERVED OSCILLATION ADAPTER\n.*?    -- END OBSERVED OSCILLATION ADAPTER\n','',native,flags=re.S)
+native=native.replace("mode=='QuickBullet' or zig","mode=='QuickBullet'").replace('softBullet=soft,oscillationBullet=zig,','softBullet=soft,')
+check(block(b,'local function solve(player,mode)','function controller.mag.RefreshModes()')==native,'native solver unchanged outside explicit zigzag request/endpoint guards; original lead transaction preserved')
 original=block(b,'local function risk(shot,receiver,defenders)','local lastNativeInputs')
 repair=block(e,'local function risk(shot,receiver,defenders)','local lastNativeInputs')
 for line in [
@@ -22,7 +26,7 @@ for line in [
 repair=repair.replace(';shot.maxThreatSpeed=math.max(shot.maxThreatSpeed,speed)','')
 check(original==repair,'complete original path and Trust-burn grader retained, aside from timing counters')
 check(block(b,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.')==block(e,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.'),'real deep flight/jump classification restored')
-for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b3.2"']:
+for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b3.3"']:
  check(token in loader,'isolated loader ownership/ref '+token)
 for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","local fitVariant=selected.shot.fitAlternativeVariant","shot.powerAllowed=touch.fullAllowed(shot)","controller.bad:released(shot)","DEVELOPING_ROUTE_CONTINUATION"]:
  check(token in e,'preserved live contract '+token)

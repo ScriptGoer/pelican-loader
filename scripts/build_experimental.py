@@ -17,6 +17,39 @@ def block(a,b,new):
 engine=(root/'experimental/decision_engine.lua').read_text()
 one('local context = ... or {}','local context = ... or {}\nlocal Unified=(function()\n'+engine+'\nend)()')
 one('local controller = {Version=VERSION, IsStopped=false}','local controller = {Version=VERSION, IsStopped=false}\ncontroller.unified=Unified.new((context.FF3Options or {}).Unified)')
+one('controller.unified=Unified.new((context.FF3Options or {}).Unified)','controller.unified=Unified.new((context.FF3Options or {}).Unified)\ncontroller.unified.oscillation=(function()\n'+(root/'experimental/oscillation.lua').read_text()+'\nend)()')
+one("ff3Options.RiskMode or (riskPolicy.normalize(env.PELICAN_FF3_RISK_MODE) or 'SAFE')","ff3Options.RiskMode or 'TRUST'")
+one('    controller.passPlan.observe(s,player)', '    s.oscillation=controller.unified.oscillation.detect(s.path,lines.forward,now,CFG)\n    controller.passPlan.observe(s,player)')
+one('local function receiverReady(player,s,now,point)',r'''function controller.unified.ObserveOscillation(now)
+    if not auto or not profile or now<(controller.unified.nextMotionAt or 0) then return end
+    controller.unified.nextMotionAt=now+.05 -- bounded observation cadence, not native solve work
+    for player in pairs(samples)do if teammate(player)then sample(player,now)end end
+end
+local function receiverReady(player,s,now,point)''')
+one("    if not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then", "    if not vector(root.AssemblyLinearVelocity) or not s.oscillation and flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then")
+one("    if not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed then", "    if not s.oscillation and (not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed) then")
+one("local minimum=power and power>=94.5 and touch.comfort or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick", "local minimum=power and power>=94.5 and touch.comfort or shot.oscillationBullet and touch.comfort*.95 or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick")
+# Only this opt-in candidate modifies lead cancellation. Existing native tuple,
+# protected temporary-mode transaction and restoration code remain unchanged.
+one("    local soft=mode=='SoftBullet' or mode=='QuickBullet'", "    -- BEGIN OBSERVED OSCILLATION ADAPTER\n    local zig=mode=='ZigzagBullet'\n    if zig and (not samples[player] or not samples[player].oscillation) then return nil,'NO_OBSERVED_ZIGZAG' end\n    -- END OBSERVED OSCILLATION ADAPTER\n    local soft=mode=='SoftBullet' or mode=='QuickBullet' or zig")
+one('    local appliedLead\n',r'''    local appliedLead
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    if zig then
+        local s=samples[player];local _,_,head=body(me);local ping=me:GetNetworkPing()
+        if not head or not finite(ping) or ping<0 then return nil,'ZIGZAG_POSE_UNVERIFIED' end
+        requestedPower=controller.unified.oscillation.power(s,head.Position,touch.comfort,CFG.Gravity,touch.min,profile.leads.Bullet)
+        if not requestedPower then return nil,'ZIGZAG_COMFORT_POINT_OUT_OF_RANGE' end
+        local x,why=controller.unified.oscillation.control(s,head.Position,requestedPower,CFG.Gravity,ping,profile.leads.Bullet)
+        if not x then return nil,why end
+        appliedLead=Vector2.new(x,profile.leads.Bullet.Y)
+    end
+    -- END OBSERVED OSCILLATION ADAPTER
+''')
+one('    if fastJump and (not finite(requestedPower)',r'''    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    if zig and not controller.unified.oscillation.contains(samples[player],arrival,math.abs(profile.leads.Bullet.X)) then return nil,'ZIGZAG_NATIVE_POINT_OUTSIDE_OBSERVED_AREA' end
+    -- END OBSERVED OSCILLATION ADAPTER
+    if fastJump and (not finite(requestedPower)''')
+one('variant=mode,softBullet=soft,jumpBullet=jump','variant=mode,softBullet=soft,oscillationBullet=zig,jumpBullet=jump')
 # Preserve the full V26.22 trajectory guards and native solver. Rank only after
 # actual coverage/comfort/plan checks, not through a second simulated permission.
 a=s.index('local function coverage(shot,s,defenders)');b=s.index('controller.fit={}',a)
@@ -24,6 +57,7 @@ original=s[a:b].replace('local function coverage(','function controller.unified.
 wrappers=r'''
 function controller.unified.Guard(shot)
     local allowed=controller.unified.BaselineThrowable(shot)
+    if shot.oscillationBullet and not (shot.wideOpen and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane) then allowed=false end
     local reason=shot.planAllowed==false and shot.planReason or shot.releaseBlocked and 'RELEASE_BLOCKED'
         or shot.powerAllowed==false and shot.powerReason
         or shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY'
@@ -40,6 +74,7 @@ function controller.unified.Guard(shot)
 end
 local function coverage(shot,s,defenders)
     controller.unified.BaselineCoverage(shot,s,defenders)
+    if shot.oscillationBullet and not s.oscillation then shot.releaseBlocked=true end
     local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),
         endzone=shot.endzoneTarget,CurrentDepthYards=downfield(s.p)/3,MinDepthYards=CFG.MinDownfieldYards,
         NativeBoundary=profile and type(profile.q.AntiOOB)=='table' and {Enabled=profile.q.AntiOOB.Enabled,XTolerance=profile.q.AntiOOB.XTolerance,ZTolerance=profile.q.AntiOOB.ZTolerance} or nil,
@@ -121,7 +156,7 @@ one('        submit(ball,best,defenders,now)',r'''        if controller.unified:
 # those experiments from active generation and expose rejection, not dead UI.
 block('function controller.mag.RefreshModes()','\ncontroller.mag.RefreshModes()\n',r'''function controller.mag.RefreshModes()
     for i=#plannerModes,1,-1 do plannerModes[i]=nil end
-    for _,m in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime'})do plannerModes[#plannerModes+1]=m end
+    for _,m in ipairs({'ZigzagBullet','SoftBullet','QuickBullet','Bullet','Fit','Dime'})do plannerModes[#plannerModes+1]=m end
     if controller.nativeJump.supported and controller.nativeJump.enabled then plannerModes[#plannerModes+1]='CoverageJump' end
 end
 controller.mag.enabled=false;controller.jumpBullet.enabled=false;controller.passPlan.preferJump=false
@@ -147,7 +182,7 @@ s=s.replace('if pass<3 then limited=true end','if pass<#plannerModes then limite
 one('function controller.Stop(reason)','function controller.Stop(reason)\n    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false\n    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or \"USER_END\"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status=\"STOPPED_BEFORE_REQUEST\";controller.bad.current.Final.Gate=clean(reason or \"USER_END\")end end')
 
 # Accurate active-policy labels; unsupported prototype controls are retired.
-s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.2): generated repair of V26.22.')
+s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.3): generated repair of V26.22.')
 for prefix,value in {
  'OPEN_COMFORT_POLICY':'NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
  'CLOSE_BULLET_POLICY':'ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
@@ -160,14 +195,14 @@ for prefix,value in {
 s=s.replace('FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED','ORDERED_COMFORT_COMPARISON; OVERLAP_MODEL_UNCALIBRATED')
 
 # Update controls and history without rewriting native calculations.
-one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.2'")
-s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.2'")
+one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.3'")
+s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.3'")
 s=s.replace("MagTrial=shot.magTrial,MagExtraY=","Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=")
 s=s.replace("Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,","Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,")
 one("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=","Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
 s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
-loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.2"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
+loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.3"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
 loader=loader.replace('"main"','"repair-unified-qb"').replace('/main/loader.lua','/repair-unified-qb/experimental/loader.lua')
 (root/'experimental/loader.lua').write_text(loader)
 print('Generated B3 repair; production V26.22 untouched')

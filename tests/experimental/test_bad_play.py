@@ -101,6 +101,14 @@ print('PASS '..count..' BAD PLAY retention, replay and privacy checks')
     oldruntime=subprocess.check_output(['git','show','experimental-unified-b3:experimental/auto_qb.lua'],cwd=R,text=True)
     ids=re.search(r"end\)\(\)\.new\('([a-f0-9]{64})','([a-f0-9]{64})'\)",oldruntime)
     historical['CodeId'],historical['EngineId']=ids[1],ids[2]
+    def original_score_shape(value):
+        if isinstance(value,dict):
+            score=value.get('Score')
+            if isinstance(score,dict):assert score.pop('RouteStability',0)==0
+            for item in value.values():original_score_shape(item)
+        elif isinstance(value,list):
+            for item in value:original_score_shape(item)
+    original_score_shape(historical) # synthetic non-oscillating inputs serialized in original B3's schema
     older=Path(folder)/'historical.json';older.write_text(json.dumps(historical))
     subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(older),'--ref','experimental-unified-b3'],check=True)
     print('PASS explicit historical-source CLI replay without network or report-supplied code')

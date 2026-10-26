@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.2): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.3): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -23,7 +23,8 @@ function E.admit(shot,g)
  local u=shot.unified;if not u then return g.Allowed end
  -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
  -- A mode label must not grant the looser elevated-pass admission to that path.
- local policy=u.HardReason or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
+ local policy=u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
   and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
  u.Guard=g;u.Allowed=g.Allowed==true and not policy
  u.Reason=policy or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
@@ -70,6 +71,7 @@ function E:evaluate(shot,wr,defenders,c)
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
  u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,ComfortDeficit=math.max(0,comfort-t),
   CatchHeight=c.OpenComfort and math.max(0,u.HeightAboveHead)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
+  RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
   ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
  local forward=Vector3.new(c.ForwardX or 0,0,c.ForwardZ or 0);local along=motion:Dot(forward);local lateral=motion-forward*along
  local depth=c.CurrentDepthYards;local h=self.config.DevelopmentHorizon
@@ -94,7 +96,7 @@ function E.better(a,b)
  if not b then return true end
  local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar end
  local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
- for _,k in ipairs({'RiskTier','Development','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
+ for _,k in ipairs({'RiskTier','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
  return false
 end
 function E:wait(player,model,epoch,shot,now)
@@ -162,7 +164,7 @@ function B:actor(a)
     local history={};local path=a.path or {}
     for i=1,math.min(6,#path)do local at=math.floor(1+(i-1)*math.max(0,#path-1)/math.max(1,math.min(6,#path)-1));local p=path[at];history[#history+1]={At=p.at,p=vector(p.p)}end
     return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),acceleration=vector(a.acceleration),observedSpeed=a.observedSpeed,
-        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.turn,RouteTurn=a.routeTurn,History=history}
+        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
 end
 function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then break end;out[#out+1]=self:actor(a)end;return out end
 function B:pos(epoch,now)
@@ -219,7 +221,7 @@ function B:trajectory(shot)
     return {origin=vector(shot.origin),velocity=vector(shot.velocity),arrival=vector(shot.arrival),time=shot.time,
         power=shot.power,variant=shot.variant,mode=shot.mode,networkPing=shot.networkPing,NativeAt=shot.at,
         Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},NativeInput=shot.nativeInput,NativeInputKind=shot.nativeInputKind,PowerMethod=shot.powerMethod,
-        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle,softBullet=shot.softBullet,jumpBullet=shot.jumpBullet,nativeCoverageJump=shot.nativeCoverageJump,magTrial=shot.magTrial,screen=shot.screen,receiverResidual=shot.receiverResidual}
+        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle,softBullet=shot.softBullet,oscillationBullet=shot.oscillationBullet,jumpBullet=shot.jumpBullet,nativeCoverageJump=shot.nativeCoverageJump,magTrial=shot.magTrial,screen=shot.screen,receiverResidual=shot.receiverResidual}
 end
 function B:input(shot,wr,defenders,context,config)
     return {Shot=self:trajectory(shot),Receiver=self:actor(wr),Defenders=self:actors(defenders),Context=self:context(context),Config=copy(config)}
@@ -307,7 +309,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.2',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.3',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -324,7 +326,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('165706a2fcf9cb3efb09616dc5cf434636a3aea176a2e198a8abcbad3ef4730f','f84d33cc895d9b8210ca545e3456f1770873ce6abee67acd1d775ede3ad9669d')
+end)().new('94d3951a5126a6d56fa0f0084b91e3198ee368811a49e17b36458fa539cd445f','102f437501ddb386194f53e3bc700f7f8eba568c95cc31495f8350e76ec8eb4f')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -347,6 +349,57 @@ end
 return H
 
 end)().new(pg,env)
+controller.unified.oscillation=(function()
+-- Observed bounded lateral reversals. No remote inputs or inferred route intent.
+local O={}
+local function flat(v)return Vector3.new(v.X,0,v.Z)end
+function O.detect(path,forward,now,policy)
+ if not forward or #path<4 then return end
+ local first,last=path[1],path[#path]
+ if last.at-first.at<policy.MinMotionAge then return end
+ local right=Vector3.new(-forward.Z,0,forward.X)
+ local travel,lateral,along,run,sign,turns,active=0,0,0,0,0,0,first.at
+ local minX,maxX,minZ,maxZ=first.p.X,first.p.X,first.p.Z,first.p.Z
+ for i=2,#path do
+  local a,b=path[i-1],path[i];local delta=flat(b.p-a.p);local dt=b.at-a.at
+  travel=travel+delta.Magnitude;lateral=lateral+math.abs(delta:Dot(right));along=along+math.abs(delta:Dot(forward))
+  if dt>0 and delta.Magnitude/dt>=policy.MinMoveSpeed then active=b.at end
+  minX=math.min(minX,b.p.X);maxX=math.max(maxX,b.p.X);minZ=math.min(minZ,b.p.Z);maxZ=math.max(maxZ,b.p.Z)
+  local step=delta:Dot(right);local direction=step>0 and 1 or step<0 and -1 or 0
+  if direction~=0 then
+   if sign==0 then sign=direction;run=0
+   elseif direction==sign then run=0
+   else run=run+math.abs(step);if run>=policy.MinMotionTravel/2 then turns=turns+1;sign=direction;run=0 end end
+  end
+ end
+ if turns<2 or travel<policy.MinMotionTravel or lateral<along*2 or flat(last.p-first.p).Magnitude>travel*.5
+  or now-active>policy.Interval then return end
+ return {Reversals=turns,Travel=travel,Age=last.at-first.at,ActiveAt=active,At=last.at,MinX=minX,MaxX=maxX,MinZ=minZ,MaxZ=maxZ,
+  Scope='RECENT_OBSERVED_LATERAL_REVERSALS; CONTINUATION_NOT_GUARANTEED'}
+end
+function O.control(s,origin,power,gravity,ping,lead)
+ if not s.oscillation then return nil,'NO_OBSERVED_ZIGZAG' end
+ local target=s.head.Position+Vector3.new(0,lead.Y,0);local delta=target-origin;local range=flat(delta).Magnitude
+ if range<.01 then return nil,'ZIGZAG_RANGE_INVALID' end
+ local disc=power^4-gravity*(gravity*range*range+2*delta.Y*power*power)
+ if disc<0 then return nil,'ZIGZAG_POINT_UNREACHABLE' end
+ local angle=math.atan((power*power-math.sqrt(disc))/(gravity*range))
+ local time=range/(power*math.cos(angle))
+ return -flat(s.v).Magnitude*(time+ping),time
+end
+function O.power(s,origin,time,gravity,minPower,lead)
+ local delta=s.head.Position+Vector3.new(0,lead.Y,0)-origin
+ local request=math.sqrt(flat(delta).Magnitude^2/time^2+(delta.Y/time+gravity*time/2)^2)
+ if request>94 then return nil,'ZIGZAG_COMFORT_POINT_OUT_OF_RANGE' end
+ return math.floor(math.max(minPower,request))
+end
+function O.contains(s,point,allowance)
+ local b=s and s.oscillation
+ return b and point.X>=b.MinX-allowance and point.X<=b.MaxX+allowance and point.Z>=b.MinZ-allowance and point.Z<=b.MaxZ+allowance or false
+end
+return O
+
+end)()
 local connections, events, counts, samples = {}, {}, {}, {}
 local profile, lease, choice, pending, gui, status, autoButton, throwButton, copyButton
 local receiverButton, receiverMenu, renderReceivers, awayButton, riskButton
@@ -577,7 +630,7 @@ function riskPolicy.normalize(value)
     value=value:upper();if value=='MODERATE' then value='MOD' end
     return riskPolicy.profiles[value] and value or nil
 end
-riskPolicy.mode=riskPolicy.normalize(ff3Options.RiskMode or (riskPolicy.normalize(env.PELICAN_FF3_RISK_MODE) or 'SAFE'))
+riskPolicy.mode=riskPolicy.normalize(ff3Options.RiskMode or 'TRUST')
 assert(riskPolicy.mode,'FF3.RiskMode must be SAFE, MOD or TRUST')
 env.PELICAN_FF3_RISK_MODE=riskPolicy.mode
 local closeBullet=ff3Options.CloseBullet
@@ -677,7 +730,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.2',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.3',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1623,7 +1676,7 @@ function touch.fullAllowed(shot)
     if shot.screen and controller.league.mode=='LEAGUE' then shot.powerReason='EXPLICIT_ARMED_SCREEN_RECEIVER_PREPARED';return true end
     if not touch.enabled then return true end
     local power=shot.power or shot.velocity and shot.velocity.Magnitude
-    local minimum=power and power>=94.5 and touch.comfort or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick
+    local minimum=power and power>=94.5 and touch.comfort or shot.oscillationBullet and touch.comfort*.95 or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick
     shot.minimumFlight=minimum
     if not finite(shot.time) or shot.time<minimum then shot.powerReason='NATIVE_FLIGHT_TOO_FAST';return false end
     if power and power<94.5 then shot.powerReason='NATIVE_FLIGHT_COMFORT_CHECKED';return true end
@@ -1729,7 +1782,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.2','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.3','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1849,7 +1902,7 @@ local function preserve(copy)
     env.PELICAN_FF3_LAST_REPORT=controller.GetReport()
 end
 function controller.Stop(reason)
-    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false;controller.unified.helperHUD:stop()
+    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false;if controller.presentation then controller.presentation:stop()end;controller.unified.helperHUD:stop()
     if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or "USER_END"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status="STOPPED_BEFORE_REQUEST";controller.bad.current.Final.Gate=clean(reason or "USER_END")end end
     controller.reactivity.watch=nil
     if controller.league.ClearScreen then controller.league.ClearScreen('STOPPED') end
@@ -1871,7 +1924,7 @@ function controller.Stop(reason)
     if controller.receiverEvidence then controller.receiverEvidence.Stop(stopReason) end
     local friendsClean=controller.receiverFilter.stop()
     local historyClean=controller.history.Stop(stopReason,fatalError~='NONE')
-    cleanupComplete=historyClean and friendsClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and controller.jumpTiming.track==nil and controller.jumpTiming.last==nil and controller.reactivity.watch==nil and assistance.guide==nil and controller.comeback.worker==nil
+    cleanupComplete=historyClean and friendsClean and (not controller.presentation or controller.presentation.clean) and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and controller.jumpTiming.track==nil and controller.jumpTiming.last==nil and controller.reactivity.watch==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -2434,8 +2487,14 @@ local function sample(player,now)
     s.p,s.v,s.at=root.Position,velocity,now
     while #s.path>1 and now-s.path[1].at>CFG.MotionWindow do table.remove(s.path,1) end
     s.hum,s.head,s.root,s.name=hum,head,root,player.Name
+    s.oscillation=controller.unified.oscillation.detect(s.path,lines.forward,now,CFG)
     controller.passPlan.observe(s,player)
     return s
+end
+function controller.unified.ObserveOscillation(now)
+    if not auto or not profile or now<(controller.unified.nextMotionAt or 0) then return end
+    controller.unified.nextMotionAt=now+.05 -- bounded observation cadence, not native solve work
+    for player in pairs(samples)do if teammate(player)then sample(player,now)end end
 end
 local function receiverReady(player,s,now,point)
     if controller.IsBlacklisted(player) then return false,'BLACKLISTED' end
@@ -2450,8 +2509,8 @@ local function receiverReady(player,s,now,point)
         return true
     end
     if not controller.field.BeyondMinimum(root.Position) then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
-    if not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
-    if not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
+    if not vector(root.AssemblyLinearVelocity) or not s.oscillation and flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
+    if not s.oscillation and (not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed) then return false,'IDLE_OR_ROUTE_NOT_READY' end
     local travel=0
     for i=2,#s.path do travel=travel+flat(s.path[i].p-s.path[i-1].p).Magnitude end
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
@@ -3096,6 +3155,7 @@ end
 
 function controller.unified.Guard(shot)
     local allowed=controller.unified.BaselineThrowable(shot)
+    if shot.oscillationBullet and not (shot.wideOpen and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane) then allowed=false end
     local reason=shot.planAllowed==false and shot.planReason or shot.releaseBlocked and 'RELEASE_BLOCKED'
         or shot.powerAllowed==false and shot.powerReason
         or shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY'
@@ -3112,6 +3172,7 @@ function controller.unified.Guard(shot)
 end
 local function coverage(shot,s,defenders)
     controller.unified.BaselineCoverage(shot,s,defenders)
+    if shot.oscillationBullet and not s.oscillation then shot.releaseBlocked=true end
     local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),
         endzone=shot.endzoneTarget,CurrentDepthYards=downfield(s.p)/3,MinDepthYards=CFG.MinDownfieldYards,
         NativeBoundary=profile and type(profile.q.AntiOOB)=='table' and {Enabled=profile.q.AntiOOB.Enabled,XTolerance=profile.q.AntiOOB.XTolerance,ZTolerance=profile.q.AntiOOB.ZTolerance} or nil,
@@ -3275,7 +3336,11 @@ local function solve(player,mode)
     if nativeJump and not controller.nativeJump.enabled then return nil,'NATIVE_JUMP_OFF' end
     local screen=controller.league.ScreenEligible and controller.league.ScreenEligible(player,samples[player],os.clock()) or false
     if screen and mode~='SoftBullet' and mode~='QuickBullet' and mode~='Bullet' then return nil,'SCREEN_BULLET_ONLY' end
-    local soft=mode=='SoftBullet' or mode=='QuickBullet'
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    local zig=mode=='ZigzagBullet'
+    if zig and (not samples[player] or not samples[player].oscillation) then return nil,'NO_OBSERVED_ZIGZAG' end
+    -- END OBSERVED OSCILLATION ADAPTER
+    local soft=mode=='SoftBullet' or mode=='QuickBullet' or zig
     local jump=mode=='JumpBullet'
     local mag=mode=='MagDime'
     if mag and not controller.mag.Allowed(player) then return controller.mag.Reject('MAG_TRUST_OR_TRIAL_UNAVAILABLE') end
@@ -3285,6 +3350,17 @@ local function solve(player,mode)
     if fastJump then requestedPower=profile and profile.q.Power end
     if soft and not requestedPower then return nil,'CLOSE_BULLET_NOT_NEEDED' end
     local appliedLead
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    if zig then
+        local s=samples[player];local _,_,head=body(me);local ping=me:GetNetworkPing()
+        if not head or not finite(ping) or ping<0 then return nil,'ZIGZAG_POSE_UNVERIFIED' end
+        requestedPower=controller.unified.oscillation.power(s,head.Position,touch.comfort,CFG.Gravity,touch.min,profile.leads.Bullet)
+        if not requestedPower then return nil,'ZIGZAG_COMFORT_POINT_OUT_OF_RANGE' end
+        local x,why=controller.unified.oscillation.control(s,head.Position,requestedPower,CFG.Gravity,ping,profile.leads.Bullet)
+        if not x then return nil,why end
+        appliedLead=Vector2.new(x,profile.leads.Bullet.Y)
+    end
+    -- END OBSERVED OSCILLATION ADAPTER
     if jump then
         if not profile or not leadTable(profile.leads) or profile.leads.Fit.Y<=0 then return nil,'JUMP_BULLET_FIT_HEIGHT_UNAVAILABLE' end
         appliedLead=Vector2.new(profile.leads.Bullet.X,profile.leads.Fit.Y);requestedPower=95
@@ -3446,6 +3522,9 @@ local function solve(player,mode)
         end
     end
     appliedLead=appliedLead or profile.leads[soft and 'Bullet' or nativeMode]
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    if zig and not controller.unified.oscillation.contains(samples[player],arrival,math.abs(profile.leads.Bullet.X)) then return nil,'ZIGZAG_NATIVE_POINT_OUTSIDE_OBSERVED_AREA' end
+    -- END OBSERVED OSCILLATION ADAPTER
     if fastJump and (not finite(requestedPower) or math.abs(power-requestedPower)>1 or math.abs(velocity.Magnitude-power)>1
         or math.abs(arrival.Y-aimpoint.Y-appliedLead.Y)>endpointTolerance) then return nil,'NATIVE_JUMP_POWER_OR_LEAD_UNVERIFIED' end
     if fastJump then
@@ -3453,7 +3532,7 @@ local function solve(player,mode)
         if math.atan(velocity.Y/math.max(.001,flat(velocity).Magnitude))>(math.pi/2+rise)/2+.0001 then return nil,'NATIVE_JUMP_HIGH_ARC_REJECTED' end
     end
     return {origin=origin,velocity=velocity,power=power,time=time,mode=mag and 'Dime' or (soft or jump) and 'Bullet' or nativeJump and 'Jump' or mode,arrival=arrival,
-        variant=mode,softBullet=soft,jumpBullet=jump,nativeCoverageJump=nativeJump,screen=screen,nativeMode=nativeMode,appliedLead=appliedLead,
+        variant=mode,softBullet=soft,oscillationBullet=zig,jumpBullet=jump,nativeCoverageJump=nativeJump,screen=screen,nativeMode=nativeMode,appliedLead=appliedLead,
         magTrial=mag,magPlayer=mag and player or nil,magTrustSource=mag and controller.mag.Source(player,false) or nil,
         magExtraY=mag and controller.mag.extraY or nil,magBaseLead=mag and profile.leads.Dime or nil,
         angleControl=angleControl,actualAngle=actualAngle,nativeAngleAdjustment=angleControl and actualAngle-angleControl.requested or nil,
@@ -3469,7 +3548,7 @@ controller.jumpBullet.baseModes=#plannerModes
 controller.jumpBullet.plannerModes=plannerModes
 function controller.mag.RefreshModes()
     for i=#plannerModes,1,-1 do plannerModes[i]=nil end
-    for _,m in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime'})do plannerModes[#plannerModes+1]=m end
+    for _,m in ipairs({'ZigzagBullet','SoftBullet','QuickBullet','Bullet','Fit','Dime'})do plannerModes[#plannerModes+1]=m end
     if controller.nativeJump.supported and controller.nativeJump.enabled then plannerModes[#plannerModes+1]='CoverageJump' end
 end
 controller.mag.enabled=false;controller.jumpBullet.enabled=false;controller.passPlan.preferJump=false
@@ -4896,6 +4975,127 @@ function controller.ExportBadPlay()
     local saved=type(writefile)=='function' and pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) or false
     return done(copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API')
 end
+controller.presentation=(function()
+-- Local presentation ownership. Never disables Roblox controls/chat or inputs.
+local P={}
+local function is(o,k)return typeof(o)=='Instance' and o:IsA(k)end
+local function root(o)
+ for _=1,32 do if not o then return end;if is(o,'ScreenGui')then return o end;o=o.Parent end
+end
+local function ownedName(o)
+ local n=o.Name:lower();return n:find('pelican',1,true) or n:find('yuna',1,true)
+end
+function P.new(options)
+ return setmetatable({options=options,hidden=false,leases={},connections={},nextScan=0,status='VISIBLE',lightingStatus='NOT_REQUESTED'},{__index=P})
+end
+function P:connect(signal,fn)
+ if signal then local c=signal:Connect(fn);self.connections[#self.connections+1]=c;return c end
+end
+function P:claim(o)
+ if not self.hidden or not o or self.leases[o] then return end
+ local prop=is(o,'ScreenGui') and 'Enabled' or is(o,'GuiObject') and 'Visible'
+ if not prop then return end
+ local before=o[prop];self.leases[o]={property=prop,before=before};o[prop]=false
+ if o.GetPropertyChangedSignal then
+  self.leases[o].connection=o:GetPropertyChangedSignal(prop):Connect(function()
+   if self.hidden and o.Parent and o[prop]~=false then o[prop]=false end
+  end)
+ end
+end
+function P:scan()
+ local opts=self.options
+ for _,container in ipairs(opts.containers)do
+  local queue=container:GetChildren();local i=1
+  while i<=#queue and i<=512 do
+   local o=queue[i];i=i+1
+   if is(o,'ScreenGui') then
+    if container==opts.hiddenContainer or ownedName(o) then self:claim(o)end
+   elseif is(o,'Folder') then for _,child in ipairs(o:GetChildren())do if #queue<512 then queue[#queue+1]=child end end
+   elseif container==opts.hiddenContainer and is(o,'GuiObject') then self:claim(o)end
+  end
+ end
+ for _,o in ipairs(opts.roots()or {})do self:claim(root(o)or o)end
+end
+function P:normalLighting()
+ local b=self.options.baseline and self.options.baseline()
+ if type(b)~='table' or type(b.Values)~='table' or b.JobId~=self.options.job or b.Source~='USER_CAPTURED_BEFORE_VISUAL_MODS' then self.lightingStatus='ORIGINAL_LIGHTING_UNAVAILABLE';return end
+ self.lightLease={};local light=self.options.lighting
+ for key,value in pairs(b.Values)do
+  local ok,before=pcall(function()return light[key]end)
+  if ok then
+   local wrote=pcall(function()light[key]=value end)
+   if wrote then self.lightLease[key]={before=before,written=value}end
+  end
+ end
+ self.lightingStatus='CAPTURED_BASELINE_APPLIED; OTHER_VISUAL_WRITERS_NOT_DISABLED'
+end
+function P:set(hidden)
+ if self.stopped and hidden then return end
+ if self.hidden==hidden and (hidden or not next(self.leases) and not self.lightLease) then return end
+ self.hidden=hidden
+ if hidden then self:scan();self:normalLighting();self.status='HIDDEN'
+ else
+  local remaining={}
+  for o,l in pairs(self.leases)do
+   if l.connection then local ok=pcall(function()l.connection:Disconnect()end);if not ok then self.connections[#self.connections+1]=l.connection end;l.connection=nil end
+   local ok=pcall(function()if o.Parent and o[l.property]==false then o[l.property]=l.before end end)
+   if not ok then remaining[o]=l end
+  end
+  self.leases=remaining
+  local lightRemaining={}
+  for key,l in pairs(self.lightLease or {})do local ok=pcall(function()if self.options.lighting[key]==l.written then self.options.lighting[key]=l.before end end);if not ok then lightRemaining[key]=l end end
+  self.lightLease=next(lightRemaining) and lightRemaining or nil;self.status=next(remaining) and 'RESTORE_FAILED' or 'VISIBLE'
+ end
+end
+function P:message(text)if text=='z' then self:set(not self.hidden);return true end;return false end
+function P:start(me)
+ self:connect(me.Chatted,function(text)
+  local ok,err=pcall(self.message,self,text)
+  if not ok then self:stop();if self.options.error then self.options.error(err)end end
+ end)
+ for _,container in ipairs(self.options.containers)do
+  self:connect(container.DescendantAdded,function(o)
+   if self.hidden and (is(o,'ScreenGui') or ownedName(o)) then
+    if container==self.options.hiddenContainer or ownedName(o) then self:claim(root(o)or o)end
+    self.nextScan=0
+   end
+  end)
+ end
+end
+function P:update(now)
+ if self.hidden and now>=self.nextScan then self.nextScan=now+.5;self:scan()end
+end
+function P:stop()
+ self:set(false);self.stopped=true
+ local remaining={}
+ for _,c in ipairs(self.connections)do local ok=pcall(function()c:Disconnect()end);if not ok then remaining[#remaining+1]=c end end
+ self.connections=remaining;self.clean=#remaining==0 and not next(self.leases) and not self.lightLease
+ return self.clean
+end
+return P
+
+end)().new({containers={pg},job=game.JobId,lighting=game:GetService('Lighting'),baseline=function()return env.PELICAN_FF3_VISUAL_BASELINE end,
+ error=function(err)fatalError=clean(err);log('PRESENTATION_ERROR',err);controller.Stop('PRESENTATION_ERROR')end,
+ roots=function()
+    local list={};if gui then list[#list+1]=gui end
+    if profile and profile.hud then for _,card in pairs(profile.hud)do if type(card)=='table' and card.CardText then list[#list+1]=card.CardText end end end
+    for _,item in ipairs(controller.presentation.extraRoots or {})do list[#list+1]=item end
+    return list
+ end})
+if core then controller.presentation.options.containers[#controller.presentation.options.containers+1]=core end
+if type(gethui)=='function' then
+ local ok,h=pcall(gethui)
+ if ok and typeof(h)=='Instance' and h~=core and h~=pg then
+    controller.presentation.options.hiddenContainer=h;controller.presentation.options.containers[#controller.presentation.options.containers+1]=h
+ end
+end
+function controller.SetPresentationHidden(value)controller.presentation:set(value==true)end
+function controller.RegisterPresentationGui(o)
+ if typeof(o)~='Instance' then return false end
+ local p=controller.presentation;p.extraRoots=p.extraRoots or {};if #p.extraRoots>=64 then return false end
+ p.extraRoots[#p.extraRoots+1]=o;if p.hidden then p:scan()end;return true
+end
+controller.presentation:start(me)
 local built,buildError=pcall(function()
     gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V26'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
     status=button('QB',-82,54,40);status.Name='CompactQB'
@@ -5066,7 +5266,7 @@ local built,buildError=pcall(function()
         local list={};local function add(b,allowed)if allowed~=false then list[#list+1]=b end end
         if controller.unified.toolsOpen then
             add(controller.badButton);add(controller.badCurrentButton);add(copyButton);add(controller.history.button)
-            add(awayButton,not league);add(controller.league.profileButton);add(controller.comeback.button,not league)
+            add(controller.league.profileButton);add(controller.comeback.button,not league)
             add(controller.unified.clearButton,controller.bad:report()~=nil);add(controller.unified.stopButton)
         else
             add(autoButton);add(throwButton);add(riskButton);add(controller.passPlan.button)
@@ -5077,6 +5277,7 @@ local built,buildError=pcall(function()
             b.Visible=expanded and not receiverMenu.Visible and not controller.receiverEvidence.panel.Visible
             b.Size=UDim2.fromOffset(72,24);b.Position=UDim2.new(1,-230+((i-1)%3)*76,0,68+math.floor((i-1)/3)*26)
         end
+        awayButton.Visible=true;awayButton.Size=UDim2.fromOffset(40,22);awayButton.Position=UDim2.new(1,expanded and -274 or -126,0,40)
         receiverMenu.Position=UDim2.new(1,-166,0,68)
         controller.receiverEvidence.panel.Position=UDim2.new(1,-230,0,68);controller.receiverEvidence.panel.Size=UDim2.fromOffset(226,139)
 
@@ -5110,7 +5311,7 @@ local built,buildError=pcall(function()
     connect(Run.Heartbeat,function()
         if stopped then return end
         local now=os.clock(); frameCalls=0;motionFrame=motionFrame+1
-        local ok,err=pcall(function() controller.league.Update(now);if ff3Options.CompactCompanionHUD~=false then controller.unified.helperHUD:check(now)end;controller.jumpTiming.Observe(now);updateJump(now);driveSequence(now) end)
+        local ok,err=pcall(function() controller.presentation:update(now);controller.unified.ObserveOscillation(now);controller.league.Update(now);if ff3Options.CompactCompanionHUD~=false then controller.unified.helperHUD:check(now)end;controller.jumpTiming.Observe(now);updateJump(now);driveSequence(now) end)
         if not ok then fatalError=clean(err); log('RELEASE_ERROR',err); controller.Stop('RELEASE_SEQUENCE_ERROR'); return end
         local wakeOK,wake=pcall(controller.reactivity.Wake,now)
         if not wakeOK then fatalError=clean(wake);log('MOTION_WATCH_ERROR',wake);controller.Stop('MOTION_WATCH_ERROR');return end

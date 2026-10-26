@@ -3,7 +3,7 @@ local setup=dofile('tests/experimental/fixtures/ff3_league_fixture.lua')
 local checks=0
 local function check(v,msg) checks=checks+1;assert(v,msg) end
 local function scene(profile)
-    local t=setup({ff3={Profile=profile or 'LEAGUE',CloseBullet=false}})
+    local t=setup({ff3={Profile=profile or 'LEAGUE',RiskMode='SAFE',CloseBullet=false}})
     t.ar.Position=Vector3.new(0,6,-70);t.ar.AssemblyLinearVelocity=Vector3.new(0,0,-6)
     t.dr.Position=Vector3.new(-8,6,35)
     t.addDB('LB2',Vector3.new(8,6,35))

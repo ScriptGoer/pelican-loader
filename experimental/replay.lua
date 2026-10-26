@@ -8,7 +8,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
     local function vec(a)return a and Vector3.new(a[1],a[2],a[3])end
     local function actor(a)
         assert(a and a.p and a.v,'Actor position/velocity missing')
-        return {name=a.Id,p=vec(a.p),v=vec(a.v),observedSpeed=a.observedSpeed,hum={WalkSpeed=a.WalkSpeed,JumpPower=a.JumpPower},turn=a.Turn or 0,routeTurn=a.RouteTurn or a.Turn or 0,head=a.Head and {Position=vec(a.Head)} or nil,acceleration=vec(a.acceleration)}
+        return {name=a.Id,p=vec(a.p),v=vec(a.v),observedSpeed=a.observedSpeed,hum={WalkSpeed=a.WalkSpeed,JumpPower=a.JumpPower},turn=a.Turn or 0,routeTurn=a.RouteTurn or a.Turn or 0,head=a.Head and {Position=vec(a.Head)} or nil,acceleration=vec(a.acceleration),oscillation=a.Oscillation}
     end
     local function candidate(row,key)
         if not row.Input or not row.Result then out.Missing[#out.Missing+1]=key..':INPUT_OR_RESULT_MISSING';return end
@@ -47,7 +47,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
                 end
                 if not equal(geometry.trustBurn,g.TrustBurn)then out.Mismatches[#out.Mismatches+1]=key..':TRUST_BURN'end
             end
-        elseif GuardReplay and report.Version=='experimental-unified-b3.2' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
+        elseif GuardReplay and report.Version=='experimental-unified-b3.3' then out.Missing[#out.Missing+1]=key..':GUARD_INPUTS_MISSING'end
         if shot.unified.HardReason~=row.Result.HardReason then out.Mismatches[#out.Mismatches+1]=key..':HARD_REASON'end
         return shot
     end

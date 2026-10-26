@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.2
+# Pelican Auto QB — repaired experiment B3.3
 
-B3.2 adds automatic-jump sequencing fixes to the B3.1 live-report repair on the dedicated `repair-unified-qb` branch. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and the later B2 diagnostics commit is `614550d`. B2 did not change B's decision engine. Previous repairs remain pinned at `experimental-unified-b3` and `experimental-unified-b3.1`. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
+B3.3 adds TRUST startup, immediate AWAY, local presentation control and an observed-zigzag Bullet to the existing repair on `repair-unified-qb`. **Production main/V26.22 is unchanged.** The baseline is `c9cc9ea`; original B is `4a4689b`, and B2 is `614550d`. Previous repairs remain pinned at their original B3, B3.1 and B3.2 tags. Historical documentation is preserved in [BUILD_B_ORIGINAL.md](BUILD_B_ORIGINAL.md).
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,27 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins the immutable `experimental-unified-b3.2` module. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.2` in COPY. The existing loader ownership/confirmed-cleanup protocol prevents stacking with production/B. If an auto-execute script subsequently launches main again, it replaces the experiment; replace that auto-execute line or launch the experiment after it finishes. To return to production, execute the normal main loader. No production route or source file is modified.
+The loader pins `experimental-unified-b3.3`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.3` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.3 play controls and observed zigzags
+
+TRUST is the startup default even when a previous session saved SAFE. An explicit `FF3.RiskMode` or a later risk-button selection still works. AWAY is always available as a 40×22 button beside QB/reload, including league mode; it invokes the existing deliberate throw-away action without opening TOOLS. This retains the existing unverified grounding-rule limitation.
+
+Type exactly lowercase `z` in your own Roblox chat to hide script GUIs; type exactly `z` again to restore their prior enabled/visible states. It includes Pelican, accessible executor `gethui()` contents (including separate openers), named Pelican/Yuna roots and the qualified native Yuna HUD's root. Unknown script GUIs outside those sources can be explicitly registered with `controller.RegisterPresentationGui(instance)`. Roblox chat, game HUD and native touch controls remain available. New executor ScreenGuis are hidden as they appear. No global input hook, chat interception, synthetic message, camera change or blanket disabling of game UI is added. Executor-drawn overlays outside Roblox GUI instances are not claimed supported. Stop restores owned GUI states and disconnects the listener. Automation remains active while its GUI is hidden.
+
+**Lighting is conditional, not fully solved.** Normal pre-modifier Lighting values cannot be recovered after another script overwrites them without a retained snapshot or that script's own restore handler. If desired, execute this **before Yuna or any visual modifier**, once per game session:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/experimental-unified-b3.3/experimental/visual_baseline.lua"))()
+```
+
+Then `z` applies that actual captured baseline; the next `z` restores the prior modifier values only where still owned. Without a valid same-game capture, COPY reports `ORIGINAL_LIGHTING_UNAVAILABLE`; no default brightness/clock/fog values are invented. A fullbright writer can reapply its values, so this does not claim to suspend an unidentified fullbright feature. That feature's owner/native restore implementation is still needed for reliable automatic suspension. Do not run the capture helper after fullbright and expect it to know the original state.
+
+For zigzagging receivers, bounded 20 Hz observations reuse known teammate samples. Two meaningful lateral reversals, sufficient actual travel, recent activity and a mostly bounded lateral footprint qualify; a one-time cut, AFK receiver or teleport does not. The normal continuous-movement gate can then use that verified activity rather than resetting at every reversal. This is observed movement, not access to player inputs or a promise that oscillation will continue.
+
+The additional `ZigzagBullet` candidate uses the existing protected low-arc native Power transaction with a temporary horizontal lead cancellation. The initial estimate targets the receiver's present area rather than projecting a full straight route through each reversal. The actual returned native endpoint must stay inside the recent observed footprint plus the player's existing Bullet-X placement allowance; actual power, flight comfort, reach, team, LOS, blacklist and field checks still apply. This candidate requires strict **wide-open** coverage even in TRUST, gets no trailing-contest relaxation, and is revalidated at release. Native settings/leads are restored synchronously. If native placement cannot be verified, it is rejected and the other supported candidates remain available. No new catch-height numbers or forced packets are introduced.
+
+Joint ranking prefers this point candidate over a straight-route projection for a verified open oscillator. There is no added universal throw delay. BAD captures include the observed oscillation summary, native override lead and competing candidates; replay reproduces ranking/risk using that captured motion classification, while native execution and the classifier's original full sampling stream are outside replay scope.
 
 ## B3.2 automatic jump recovery
 
@@ -59,7 +79,7 @@ Developing timing does not predict an unseen receiver input or promise that a di
 
 ## Compact controls and feature audit
 
-**Folded:** only the 54×22 QB pill and existing red reload X. There is no persistent BAD PLAY/AWAY/SCREEN touch area. QB opens a 230-pixel-wide menu with three columns and at most three rows; TOOLS changes pages. Flagging a play closes the menu. Receiver and lead panels no longer stack over the grid.
+**Folded:** 54×22 QB, 40×22 AWAY and the existing red reload X. BAD PLAY and SCREEN remain inside menus. QB opens a 230-pixel-wide menu with three columns and at most three rows; TOOLS changes pages. Flagging closes the menu; receiver/lead panels do not stack over the grid. `z` also hides these controls.
 
 | Control/feature | Active behavior |
 | --- | --- |
@@ -73,7 +93,7 @@ Developing timing does not predict an unseen receiver input or promise that a di
 | WR list / ANY-FRIENDS | The WR list toggles NORMAL/BLOCKED; ANY-FRIENDS changes actual receiver eligibility. Friends are verified asynchronously. Manual mag-trust markings are preserved for production but are not an active setting in B3. League keeps ANY and hides casual friendship controls. |
 | SCREEN | League-only explicit teammate/current-possession stationary behind-LOS exception; strict native Bullet and final checks remain. Inside PLAY, not always on-screen. |
 | PROFILE | CASUAL/LEAGUE override; AUTO's VIP text remains a private-server hint, not proof of league identity. |
-| AWAY / CB | Existing deliberate throw-away action and opt-in friend route chat. TOOLS only, casual only; no new automatic messages. |
+| AWAY / CB | AWAY is immediate in casual/league. CB remains opt-in friend route chat in casual TOOLS. No new automatic chat messages. |
 | COPY / DATA | Usual reports/history when unpinned; pinned BAD export when flagged. CLEAR BAD returns them to their normal workflow. File-only success says SAVED, not COPIED. |
 | STOP / X | STOP ends and cleans up the experiment; X reloads through confirmed cleanup. |
 | Movement guide / receiver evidence | Existing advisory PlayerGui arrow and passive observations remain. Exact leads remain in DATA/BAD metadata; the separate LEADS panel control is removed from the compact menu. No automatic lead tuning or claimed receiver fault. |
@@ -118,6 +138,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **846 assertions/scenes** and native Luau compilation of all **19** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **879 assertions/scenes** and native Luau compilation of all **23** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.
