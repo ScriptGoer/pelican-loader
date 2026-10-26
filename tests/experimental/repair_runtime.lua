@@ -200,7 +200,7 @@ do
  end
  check(readfile(firstFile)==firstContents,'four flags do not overwrite the first report')
  check(#t.env.PELICAN_FF3_BAD_PLAY_ARCHIVE==4,'session archive retains all four flags')
- check(c.bad:report().Version=='experimental-unified-b3.7','report version matches actual published build')
+ check(c.bad:report().Version=='experimental-unified-b3.8','report version matches actual published build')
  setclipboard=savedCopy
 
  check(c.Stop('CAPTURE'),'capture cleanup')
@@ -315,7 +315,7 @@ end
 do
  local needle='controller.bad:grade(shot,s,defenders,inputs,controller.unified.config,(shot.guardSeconds or 0)+os.clock()-begun)'
  local blocked=current:gsub(needle:gsub('([^%w])','%%%1'),needle..";if controller.bad.finalActive then shot.unified.HardReason='TEST_PREJUMP_BLOCKED'end",1)
- local t,c=scene(blocked,{RiskMode='SAFE'},{simulateJump=true})
+ local t,c=scene(blocked,{RiskMode='SAFE',CloseBullet=false},{simulateJump=true,nativeModes={Dime=true}})
  Mock.qhum.UseJumpPower=true;Mock.qhum.JumpPower=50;c.SetThrow(true);t.steps(12)
  check(#t.requests==0 and (Mock.jumpCount or 0)==0,'fresh native veto blocks the visible jump itself')
  check(c.bad.current.PreJump and c.bad.current.PreJump.Status=='PREJUMP_BLOCKED','blocked preflight remains exportable')

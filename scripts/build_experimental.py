@@ -116,10 +116,26 @@ s=s[:a]+original+wrappers+s[b:]
 one("if not throwable(shot) then setGate(shot.safetyRead", "if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead")
 one('holdManual(best,best.shot.safetyRead', 'holdManual(best,best.shot.unified and best.shot.unified.Reason or best.shot.safetyRead')
 # Auto Jump owns only takeoff timing. Fresh native geometry owns throw permission.
+one('    if shot.softBullet or shot.screen then return false end -- softened close pass or deliberate stationary screen',
+    "    if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false end -- Bullet variants never request a QB jump")
+one('local function releaseNow(ball,selected,defenders,now)',r'''function controller.unified.AutoJumpAllowed(shot,receiver,hum)
+    if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false,'BULLET_OR_SCREEN' end
+    local u=shot.unified
+    if not u or not u.Allowed or not u.Guard or not u.Guard.Strict then return false,'NO_STRICT_CLEAR_WINDOW' end
+    if u.Developing or receiver.oscillation then return false,'DEVELOPING_OR_OSCILLATING_ROUTE' end
+    if (receiver.routeTurn or receiver.turn or 0)>riskPolicy.profiles.MOD.turn then return false,'ROUTE_TURNING' end
+    if not hum or not ascentTime(hum) then return false,'JUMP_PHYSICS_UNVERIFIED' end
+    if hum.Sit or hum.PlatformStand or not hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then return false,'NORMAL_JUMP_UNAVAILABLE' end
+    return true,'FRESH_STRICT_NATIVE_WINDOW'
+end
+local function releaseNow(ball,selected,defenders,now)''')
 one('local function releaseNow(ball,selected,defenders,now)','local function releaseNow(ball,selected,defenders,now,preJump)')
-one('    local unit=shot.velocity.Unit\n    -- Readable live InputBegan', '    if preJump then return true end\n    local unit=shot.velocity.Unit\n    -- Readable live InputBegan')
+one('    local unit=shot.velocity.Unit\n    -- Readable live InputBegan', '    if preJump then return true,shot end\n    local unit=shot.velocity.Unit\n    -- Readable live InputBegan')
 one('if timing.delay==0 or stopped or not auto', 'if stopped or not auto')
 block('    function timing.Wait(seq,ball,now)','local function deepThrow(shot,hum)',r'''    function timing.Wait(seq,ball,now)
+        if not seq.deep or seq.skipAutoJump then
+            timing.status='AUTO_JUMP_NOT_REQUIRED';return true
+        end
         local jump=timing.last
         local rising=ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y>0
         if jump and jump.model==ball.model and jump.hum==ball.hum then
@@ -153,13 +169,21 @@ block('    if seq.deep then\n        local _,root=body(seq.player)', '    if not
         local canRequest=grounded and ball.hum.Jump~=true and now>=(seq.nextJumpCheckAt or 0) and
             (assistance.jumpEpoch~=possession.epoch or now-assistance.jumpRequestedAt>=.25)
         if canRequest then
-            local passed=releaseNow(ball,seq.selected,{},now,true)
+            local passed,prepared=releaseNow(ball,seq.selected,{},now,true)
+            local jumpAllowed,jumpReason=false,'PREJUMP_WINDOW_CHANGED'
+            if passed and not stopped and sequence==seq then jumpAllowed,jumpReason=controller.unified.AutoJumpAllowed(prepared,seq.selected.sample,ball.hum) end
+            if controller.bad.current and controller.bad.current.Final then controller.bad.current.Final.AutoJump={Allowed=jumpAllowed,Reason=jumpReason} end
             controller.bad:prejump(passed==true)
             if stopped or sequence~=seq then return end
             if not passed then cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return end
-            seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
-            requestJump(ball,now)
-            return -- fresh final native solve after physics, on its own budget
+            if jumpAllowed then
+                seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
+                requestJump(ball,now)
+                return -- fresh final native solve after physics, on its own budget
+            end
+            -- Skipping an uncertain jump must not suppress an otherwise admitted
+            -- TRUST/MOD throw. Normal fresh final checks still authorize release.
+            seq.skipAutoJump=true;assistance.jumpStatus='SKIPPED_'..jumpReason
         end
     end''')
 # Once a normal jump has begun, changing a prediction cannot invalidate its
@@ -240,27 +264,27 @@ s=s.replace('if pass<3 then limited=true end','if pass<#plannerModes then limite
 one('function controller.Stop(reason)','function controller.Stop(reason)\n    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false\n    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or \"USER_END\"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status=\"STOPPED_BEFORE_REQUEST\";controller.bad.current.Final.Gate=clean(reason or \"USER_END\")end end')
 
 # Accurate active-policy labels; unsupported prototype controls are retired.
-s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.7): generated repair of V26.22.')
+s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.8): generated repair of V26.22.')
 for prefix,value in {
  'OPEN_COMFORT_POLICY':'NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
  'CLOSE_BULLET_POLICY':'ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
  'MAG_POLICY':'UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
  'JUMP_BULLET_POLICY':'CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
- 'AUTO_JUMP_POLICY':'GROUNDED_PREFLIGHT; OBSERVED_TAKEOFF_STATE_MACHINE; CURRENT_ROUTE_FINAL_SOLVE; RETRY_WITHOUT_POSSESSION_BAN',
+ 'AUTO_JUMP_POLICY':'NO_BULLET_JUMPS; FRESH_STRICT_NATIVE_WINDOW_ONLY; SKIP_UNCERTAIN_JUMP_WITHOUT_BLOCKING_ADMITTED_THROW; OBSERVED_TAKEOFF_OFFSET',
 }.items():
  import re
  s=re.sub(r"'"+prefix+r"\|[^']*'",repr(prefix+'|'+value),s)
 s=s.replace('FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED','ORDERED_COMFORT_COMPARISON; OVERLAP_MODEL_UNCALIBRATED')
 
 # Update controls and history without rewriting native calculations.
-one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.7'")
-s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.7'")
+one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.8'")
+s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.8'")
 s=s.replace("MagTrial=shot.magTrial,MagExtraY=","Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=")
 s=s.replace("Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,","Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,")
 one("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=","Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
 s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
-loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.7"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
+loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.8"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
 loader=loader.replace('"main"','"repair-unified-qb"').replace('/main/loader.lua','/repair-unified-qb/experimental/loader.lua')
 (root/'experimental/loader.lua').write_text(loader)
 print('Generated B3 repair; production V26.22 untouched')

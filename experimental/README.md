@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.7
+# Pelican Auto QB — repaired experiment B3.8
 
-B3.7 fixes a native-candidate ranking error demonstrated by a low deep Bullet report: existing modeled interception exposure now precedes catch-height comfort. Prior jump lifecycle, multi-flag files, readiness, TRUST startup and mobile controls remain. **Production main/V26.22 is unchanged.** Baseline: `c9cc9ea`; original B: `4a4689b`. Earlier repairs remain pinned at their original tags.
+B3.8 excludes every Bullet variant from automatic QB jumps and requires a freshly verified strict native window, stable observed route and available ordinary jump physics for other deep throws. Skipping a low-confidence jump does not block a normally admitted ground throw. Prior trajectory ranking, multi-flag files and mobile controls remain. **Production main/V26.22 is unchanged.**
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,15 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.7`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.7` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.8`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.8` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.8 conservative Auto Jump
+
+Ordinary, soft, quick, zigzag and raised/conditional receiver-Jump Bullet variants never request a QB jump. They also bypass the automatic takeoff-offset wait, including when the QB is manually airborne. This changes automatic QB movement, not the receiver's configured catch target or native throw type.
+
+For other deep trajectories, grounded preflight still runs the full current native solver, receive/reach, risk, possession and final-context checks. A new automatic jump additionally requires strict path/arrival clearance (the existing SAFE margin/lane thresholds), no active developing-route or oscillation classification, and a turn value within the existing MOD route-stability limit. Normal jump physics must be known, and ordinary jumping must be available. These are conservative current-evidence requirements, not a calibrated probability or certainty about future player movement.
+
+A TRUST/MOD throw admitted through contest allowance can still release without an automatic jump if this stronger jump test fails. Skipping jump cannot create a takeoff wait or suppress a valid ground pass; final fresh throw checks still run. Already-committed qualifying jumps retain the observed short release offset and recovery safeguards. BAD `PreJump.AutoJump` records the separate permission and reason, so `PREJUMP_VERIFIED` alone no longer implies a jump was requested.
 
 ## B3.7 contested trajectory ranking
 
@@ -123,7 +131,7 @@ Developing timing does not predict an unseen receiver input or promise that a di
 | EASE | OpenComfort ranking ON/OFF. Full-power comfort and HIGH safety proof remain independent. |
 | ARC AUTO / OLD | Existing verified native adaptive-angle request versus the native configured input; actual returned trajectory is still graded. |
 | HIGH | Conditional **receiver** native Jump type, using its own configured lead and fresh chest comparison. It does not toggle the QB's automatic deep jump. |
-| QB deep jump | Fresh native preflight, ordinary jump, then the short observed-takeoff offset; no apex wait. Known-physics deep throws cannot fall back to ground release after cancellation/cooldown. Unknown jump physics retain the explicit legacy fallback/report. Final rechecks still cancel lost windows. |
+| QB deep jump | Non-Bullet only; fresh strict native window, stable route and verified available normal jump. Otherwise skip auto jump and retain normal throw eligibility. Committed jumps keep observed timing/recovery. Final rechecks still cancel lost windows. |
 | WR list / ANY-FRIENDS | The WR list toggles NORMAL/BLOCKED; ANY-FRIENDS changes actual receiver eligibility. Friends are verified asynchronously. Manual mag-trust markings are preserved for production but are not an active setting in B3. League keeps ANY and hides casual friendship controls. |
 | SCREEN | League-only explicit teammate/current-possession stationary behind-LOS exception; strict native Bullet and final checks remain. Inside PLAY, not always on-screen. |
 | PROFILE | CASUAL/LEAGUE override; AUTO's VIP text remains a private-server hint, not proof of league identity. |
@@ -172,6 +180,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **951 assertions/scenes** and native Luau compilation of all **25** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **973 assertions/scenes** and native Luau compilation of all **26** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

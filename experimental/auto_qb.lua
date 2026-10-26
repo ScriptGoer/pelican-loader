@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.7): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.8): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -321,7 +321,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.7',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.8',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -338,7 +338,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('c125647579859d4dbee33bfaf134a624b9093d5c2a66a3d793c34c7d6b0a356a','3626267406c0c9b4ecb00134646d70f84ce022f8c61096f31ec7cc6957817edf')
+end)().new('0ad2bda75c6a7bf8f62aeb4deadfede9baa3fc17777348f759f9bd852060d311','3626267406c0c9b4ecb00134646d70f84ce022f8c61096f31ec7cc6957817edf')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -742,7 +742,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.7',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.8',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1794,7 +1794,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.7','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.8','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1827,7 +1827,7 @@ function controller.GetReport()
         'FULL_POWER_MIN_YARDS|'..(touch.full or 'ACTUAL_FLIGHT_ONLY'),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.comfort,
         'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
-        'AUTO_JUMP_POLICY|GROUNDED_PREFLIGHT; OBSERVED_TAKEOFF_STATE_MACHINE; CURRENT_ROUTE_FINAL_SOLVE; RETRY_WITHOUT_POSSESSION_BAN'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
+        'AUTO_JUMP_POLICY|NO_BULLET_JUMPS; FRESH_STRICT_NATIVE_WINDOW_ONLY; SKIP_UNCERTAIN_JUMP_WITHOUT_BLOCKING_ADMITTED_THROW; OBSERVED_TAKEOFF_OFFSET'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
         'JUMP_DELAY_TARGET_SECONDS|'..controller.jumpTiming.delay,'JUMP_TIMING_STATUS|'..controller.jumpTiming.status,
         'JUMP_OBSERVATIONS|'..controller.jumpTiming.observations,'JUMP_TIMING_CANCELLED|'..controller.jumpTiming.cancelled,
         'LAST_JUMP_RELEASE_DELAY_SECONDS|'..tostring(controller.jumpTiming.lastReleaseDelay),
@@ -3827,6 +3827,9 @@ do
         p.air=air
     end
     function timing.Wait(seq,ball,now)
+        if not seq.deep or seq.skipAutoJump then
+            timing.status='AUTO_JUMP_NOT_REQUIRED';return true
+        end
         local jump=timing.last
         local rising=ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y>0
         if jump and jump.model==ball.model and jump.hum==ball.hum then
@@ -3854,7 +3857,7 @@ do
     end
 end
 local function deepThrow(shot,hum)
-    if shot.softBullet or shot.screen then return false end -- softened close pass or deliberate stationary screen
+    if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false end -- Bullet variants never request a QB jump
     local ascent=ascentTime(hum)
     -- A timing policy relative to this character's normal jump, not an
     -- invented official FF3 yardage/catch threshold. Missing jump parameters
@@ -4508,6 +4511,16 @@ controller.receiverEvidence=(function()
 end)()
 -- END RECEIVER EVIDENCE
 
+function controller.unified.AutoJumpAllowed(shot,receiver,hum)
+    if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false,'BULLET_OR_SCREEN' end
+    local u=shot.unified
+    if not u or not u.Allowed or not u.Guard or not u.Guard.Strict then return false,'NO_STRICT_CLEAR_WINDOW' end
+    if u.Developing or receiver.oscillation then return false,'DEVELOPING_OR_OSCILLATING_ROUTE' end
+    if (receiver.routeTurn or receiver.turn or 0)>riskPolicy.profiles.MOD.turn then return false,'ROUTE_TURNING' end
+    if not hum or not ascentTime(hum) then return false,'JUMP_PHYSICS_UNVERIFIED' end
+    if hum.Sit or hum.PlatformStand or not hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then return false,'NORMAL_JUMP_UNAVAILABLE' end
+    return true,'FRESH_STRICT_NATIVE_WINDOW'
+end
 local function releaseNow(ball,selected,defenders,now,preJump)
     if not sequence or sequence.player~=selected.player or sequence.epoch~=possession.epoch then return end
     local _,qr,qh=body(me)
@@ -4591,7 +4604,7 @@ local function releaseNow(ball,selected,defenders,now,preJump)
     if current.model~=shot.qbModel or (current.head.Position-shot.launchHead).Magnitude>.5 then
         setGate('QB_LAUNCH_POSE_CHANGED_REPLAN');return
     end
-    if preJump then return true end
+    if preJump then return true,shot end
     local unit=shot.velocity.Unit
     -- Readable live InputBegan request, exactly: Vector3.new(70000000) is X only.
     -- No retry: FireServer acceptance does not confirm a throw or server state.
@@ -4673,13 +4686,21 @@ local function driveSequence(now)
         local canRequest=grounded and ball.hum.Jump~=true and now>=(seq.nextJumpCheckAt or 0) and
             (assistance.jumpEpoch~=possession.epoch or now-assistance.jumpRequestedAt>=.25)
         if canRequest then
-            local passed=releaseNow(ball,seq.selected,{},now,true)
+            local passed,prepared=releaseNow(ball,seq.selected,{},now,true)
+            local jumpAllowed,jumpReason=false,'PREJUMP_WINDOW_CHANGED'
+            if passed and not stopped and sequence==seq then jumpAllowed,jumpReason=controller.unified.AutoJumpAllowed(prepared,seq.selected.sample,ball.hum) end
+            if controller.bad.current and controller.bad.current.Final then controller.bad.current.Final.AutoJump={Allowed=jumpAllowed,Reason=jumpReason} end
             controller.bad:prejump(passed==true)
             if stopped or sequence~=seq then return end
             if not passed then cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return end
-            seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
-            requestJump(ball,now)
-            return -- fresh final native solve after physics, on its own budget
+            if jumpAllowed then
+                seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
+                requestJump(ball,now)
+                return -- fresh final native solve after physics, on its own budget
+            end
+            -- Skipping an uncertain jump must not suppress an otherwise admitted
+            -- TRUST/MOD throw. Normal fresh final checks still authorize release.
+            seq.skipAutoJump=true;assistance.jumpStatus='SKIPPED_'..jumpReason
         end
     end
     if not controller.jumpTiming.Wait(seq,ball,now) then return end

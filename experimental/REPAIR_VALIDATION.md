@@ -1,4 +1,4 @@
-# B3.7 repair validation
+# B3.8 repair validation
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.
@@ -22,9 +22,12 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 | Sparse replication and low placement comparisons | 17 |
 | Jump state machine and coverage-label regressions | 19 |
 | Native exposure versus catch-height ranking | 24 |
-| **Total asserted checks/scenes** | **951** |
+| Conservative Auto Jump policy | 22 |
+| **Total asserted checks/scenes** | **973** |
 
 Additional validation:
+
+- B3.8 adds 22 checks for a deep Bullet releasing without any jump/preflight/offset wait, an admitted contested Dime releasing from the ground, and a strict clear Dime retaining one rising jump/short offset. All Bullet/screen variants, oscillating/developing/turning routes, missing jump physics and disabled jumping are excluded from new jump authorization. BAD evidence preserves separate skip reasons. Existing failed-preflight fixture now explicitly uses a deep non-Bullet; native interception/throw admission logic is unchanged. These are local contracts, not guarantees about future player movement.
 
 - B3.7 reproduced 17 inputs from a private B3.6 low-deep gameplay capture against its exact historical source. A private counterfactual of the recorded candidates changes Bullet to Dime when the existing clearance-debt metric precedes height comfort. No native/server outcome is rerun, and raw telemetry is excluded from this repository.
 - Twenty-four new ranking checks include actual old/current controller release comparison, preserved configured/native Dime lead, EASE ON/OFF, unchanged wide-open flat preference, high-safety restrictions, SAFE refusal and admission-before-cost ordering. The underlying interception model remains uncalibrated; the unthrown Dime is not claimed to have succeeded.
@@ -44,7 +47,7 @@ Additional validation:
 - B3.1 reduced reproductions cover flattened Fit/Dime admission, strict lower-power passes, genuine elevated/native deep windows, the boundary-clamp continuation mismatch, inward turns, unchanged configured lead allowance, and an evaluator veto arising only during final release. Boundary evidence round-trips through replay and corruption fails. The supplied live originals became unavailable after a workspace reset, so their complete replay is explicitly outstanding.
 - Historical source selection through `--ref experimental-unified-b3` reproduces a synthetic model report against the original published B3 fingerprints without network access.
 
-- All 25 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
+- All 26 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
 - An actual controller-generated synthetic BAD JSON reproduces 29 evaluations and 29 analytic risk grades. Deliberately corrupted risk, missing replay inputs and wrong-build fingerprints fail with nonzero exit status.
 - The original Build B accepts five constructed no-trailing-advantage scenes that the preserved V26.22 guards reject. These demonstrate a code-level admission difference; they do not establish the cause of a specific live interception.
 - A real mocked sampler approaches six yards diagonally, briefly holds the proven developing opportunity, then releases after straightening before the continuation expires. A closing opportunity cancels the hold; this is not a universal release timer.
