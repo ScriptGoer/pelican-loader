@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.8
+# Pelican Auto QB — repaired experiment B3.9
 
-B3.8 excludes every Bullet variant from automatic QB jumps and requires a freshly verified strict native window, stable observed route and available ordinary jump physics for other deep throws. Skipping a low-confidence jump does not block a normally admitted ground throw. Prior trajectory ranking, multi-flag files and mobile controls remain. **Production main/V26.22 is unchanged.**
+B3.9 improves advisory movement-arrow scheduling and ground projection. Prior conservative non-Bullet Auto Jump, native risk ranking, report files and mobile controls remain. **Production main/V26.22 is unchanged.**
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,17 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.8`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.8` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.9`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.9` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.9 movement advice
+
+The guide previously ran only through one late covered-winner gate and abandoned Fit selections outright. Covered/manual selections now queue advice when the normal evaluator has a fresh matching possession/team/field scene. A Fit or unsupported primary selection can reuse that same receiver's current cached ordinary Bullet/Dime trajectory, including supported softened Bullet variants. Missing/stale tuples do not produce invented directions. The existing currently-open gate remains: the arrow is for estimated future room, not a reason to hold a pass that is already available.
+
+Forecasting remains after release work, with at most six continuation estimates and the existing 1-ms advisory budget. No native solves, player scans, character motion, packets or throw-delay gates are added. The inherited conservative future-path and QB-room checks still decide whether to suggest a direction. Forecasts are estimates using observed continuation, not proof of a future catch. Some covered scenes will correctly have no advice.
+
+The PlayerGui ground arrow tries its normal length, half length and quarter length before hiding for an invalid/off-screen footprint. Arrowhead dimensions scale with length; field/LOS constraints remain. If the camera cannot see the nearby field, no fake ground marker is drawn. No Workspace objects or new interactive HUD controls are introduced. Stale/changed-context advice and disabled guides remain hidden.
+
+Advisory future grades are excluded from BAD candidate/final-release capture, fixing a path where a forecast could overwrite release evidence. BAD settings now include movement-guide status, draw count and forecast-check count to distinguish missing forecasts from projection failures.
 
 ## B3.8 conservative Auto Jump
 
@@ -180,6 +190,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **973 assertions/scenes** and native Luau compilation of all **26** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **991 assertions/scenes** and native Luau compilation of all **27** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

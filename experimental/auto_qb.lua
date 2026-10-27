@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.8): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b3.9): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -321,7 +321,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.8',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.9',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
@@ -338,7 +338,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('0ad2bda75c6a7bf8f62aeb4deadfede9baa3fc17777348f759f9bd852060d311','3626267406c0c9b4ecb00134646d70f84ce022f8c61096f31ec7cc6957817edf')
+end)().new('616de4c30e223b2cccdb07c79ab2c3b11d35af49f97e3e1115f9cf8b4d23350e','3626267406c0c9b4ecb00134646d70f84ce022f8c61096f31ec7cc6957817edf')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -742,7 +742,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.8',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b3.9',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1794,7 +1794,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.8','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b3.9','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -3202,12 +3202,12 @@ local function coverage(shot,s,defenders)
         ComfortSeconds=touch.enabled and touch.comfort or 0,WorldGravity=workspace.Gravity,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,SafetyReads=controller.safety.enabled,CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,FullPowerYards=touch.full},GuardInputs=shot.guardInputs,Guard=controller.unified.Guard(shot)}
     shot.evidenceReceiver=s.name
     local begun=os.clock();controller.unified:evaluate(shot,s,defenders,inputs)
-    controller.bad:grade(shot,s,defenders,inputs,controller.unified.config,(shot.guardSeconds or 0)+os.clock()-begun)
+    if not shot.advisory then controller.bad:grade(shot,s,defenders,inputs,controller.unified.config,(shot.guardSeconds or 0)+os.clock()-begun) end
 end
 local function throwable(shot)
     local g=controller.unified.Guard(shot)
     local allowed=Unified.admit(shot,g)
-    if shot.unified then controller.bad:admit(shot,g) end
+    if shot.unified and not shot.advisory then controller.bad:admit(shot,g) end
     return allowed
 end
 controller.fit={}
@@ -3601,6 +3601,7 @@ function controller.unified.Settings()
         Profile=controller.league.mode,RequestedProfile=controller.league.requested,ReceiverFilter=controller.receiverFilter.mode,
         OpenComfort=controller.passPlan.openComfort,NativeJump=controller.nativeJump.enabled,AdaptiveAngle=controller.angle.enabled,
         SafetyReads=controller.safety.enabled,CoverageWindows=controller.coverageWindows.enabled,JumpDelaySeconds=controller.jumpTiming.delay,
+        MovementGuide={Enabled=ff3Options.MovementGuide~=false,Status=controller.groundGuide.status,Draws=controller.groundGuide.draws,Checks=assistance.guideChecks},
         MinDownfieldYards=CFG.MinDownfieldYards,WorldGravity=workspace.Gravity,Unified=controller.unified.config,
         CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,MinPower=touch.min,FullPowerYards=touch.full},
         Leads=controller.receiverEvidence.ReadSettings(),NativeContext=controller.receiverEvidence.NativeContext(),
@@ -3747,13 +3748,39 @@ local function ascentTime(hum)
     if hum.UseJumpPower==true and finite(hum.JumpPower) and hum.JumpPower>0 then return hum.JumpPower/gravity end
     if hum.UseJumpPower==false and finite(hum.JumpHeight) and hum.JumpHeight>0 then return math.sqrt(2*hum.JumpHeight/gravity) end
 end
+function controller.groundGuide.SelectShot(r,now)
+    local function usable(shot)
+        return shot and shot.time and shot.at and now-shot.at<=CFG.CacheAge
+            and (shot.mode=='Bullet' or shot.mode=='Dime') and not shot.jumpBullet
+            and not shot.nativeCoverageJump and not shot.magTrial and not shot.screen
+    end
+    if usable(r.shot) then return r.shot end
+    local cache=shotCache[r.player]
+    if not cache or cache.model~=r.sample.model or cache.epoch~=possession.epoch or cache.generation~=lines.generation then return end
+    local best
+    for _,mode in ipairs({'Bullet','Dime','SoftBullet','QuickBullet'})do
+        local shot=cache.shots[mode]
+        if usable(shot) and (not best or shot.at>best.at)then best=shot end
+    end
+    return best
+end
+function controller.groundGuide.Queue(r,now)
+    local scene=controller.angle.scene;local ball=ready()
+    if not ball or not scene or now-scene.at>CFG.CacheAge or scene.epoch~=possession.epoch
+        or scene.generation~=lines.generation or scene.team~=me.Team then
+        controller.groundGuide.status='WAIT_FRESH_GUIDE_SCENE';return
+    end
+    assistance.guidePending={r=r,ball=ball,defenders=scene.defenders}
+end
 forecastGuide=function(data,now)
     clearGuide()
-    if ff3Options.MovementGuide==false and ff3Options.PredictiveJump==false or not data or stopped or not auto or pending or usedTools[data.ball.tool]==possession.epoch
+    if ff3Options.MovementGuide==false or not data or stopped or not auto or pending or usedTools[data.ball.tool]==possession.epoch
         or receiverMenu and receiverMenu.Visible then return end
     local r,ball=data.r,data.ball
-    local shot,s=r.shot,r.sample
-    if not shot or not shot.time or throwable(shot) or not receiverReady(r.player,s,now) then return end
+    local shot,s=controller.groundGuide.SelectShot(r,now),r.sample
+    if not lines.forward or not shot then controller.groundGuide.status='WAIT_FRESH_GUIDE_TRAJECTORY';return end
+    if Unified.admit(shot,controller.unified.Guard(shot)) then controller.groundGuide.status='CURRENT_WINDOW_OPEN';return end
+    if not receiverReady(r.player,s,now) or s.oscillation then controller.groundGuide.status='WAIT_STABLE_GUIDE_ROUTE';return end
     local velocity=flat(s.v)
     if velocity.Magnitude<CFG.MinMoveSpeed or not finite(ball.hum.WalkSpeed) or ball.hum.WalkSpeed<=0 then return end
     if shot.jumpBullet or shot.nativeCoverageJump or shot.magTrial or shot.mode=='Fit' then return end -- no unproven counterfactual for an elevated trial/timing rescue
@@ -3771,7 +3798,7 @@ forecastGuide=function(data,now)
         local arrival=shot.arrival+velocity*lead
         if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=controller.field.QBLimit(ball.root))
             and (controller.field.BeyondMinimum(arrival)) then
-            local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,variant=shot.variant,softBullet=shot.softBullet,networkPing=shot.networkPing,
+            local future={advisory=true,appliedLead=shot.appliedLead,origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,variant=shot.variant,softBullet=shot.softBullet,networkPing=shot.networkPing,
                 velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
             -- This is an estimated continuation, not an extra native solve.
             -- Reject estimates exceeding the source's maximum release power.
@@ -3784,7 +3811,7 @@ forecastGuide=function(data,now)
                     room=math.min(room,flat(futureQB-p).Magnitude-runSpeed(d)*lead-(4.5+d.turn*3))
                     oldRoom=math.min(oldRoom,flat(ball.root.Position-p).Magnitude-runSpeed(d)*lead-(4.5+d.turn*3))
                 end
-                local receiver={p=predict(s,lead),v=s.v,turn=s.turn,routeTurn=s.routeTurn,depthEpoch=s.depthEpoch,depthGeneration=s.depthGeneration,depthPeakYards=s.depthPeakYards}
+                local receiver={name=s.name,hum=s.hum,head=s.head and {Position=s.head.Position+velocity*lead},p=predict(s,lead),v=s.v,turn=s.turn,routeTurn=s.routeTurn,depthEpoch=s.depthEpoch,depthGeneration=s.depthGeneration,depthPeakYards=s.depthPeakYards}
                 risk(future,receiver,defenders);coverage(future,receiver,defenders);assistance.guideChecks=assistance.guideChecks+1
                 if throwable(future) and room>0 then
                     local roomGain=finite(room) and finite(oldRoom) and clamp(room-oldRoom,-6,6) or 0
@@ -3910,7 +3937,13 @@ drawGuide=function(now)
     assistance.nextGuideDraw=now+1/30
     local _,root,_,hum=body(me)
     if not root or not hum or not finite(hum.WalkSpeed) then assistance.guideUI.Visible=false;return end
-    local ok=controller.groundGuide.Project(root.Position,g.direction,clamp(hum.WalkSpeed*g.lead,3,9))
+    local length=clamp(hum.WalkSpeed*g.lead,3,9)
+    local ok=false
+    for _=1,3 do
+        ok=controller.groundGuide.Project(root.Position,g.direction,length)
+        if ok then break end
+        length=length/2
+    end
     assistance.guideUI.Visible=ok
 end
 function controller.groundGuide.Project(position,direction,length)
@@ -3928,7 +3961,8 @@ function controller.groundGuide.Project(position,direction,length)
     local base=cf:PointToWorldSpace(V(localPoint.X,ground.Size.Y/2+.04,localPoint.Z))
     local right=V(-direction.Z,0,direction.X)
     local start=base+direction*.75;local tip=base+direction*length
-    local left=tip-direction*2+right*1.25;local wing=tip-direction*2-right*1.25
+    local headLength=math.min(2,length*.4);local halfWidth=math.min(1.25,length*.25)
+    local left=tip-direction*headLength+right*halfWidth;local wing=tip-direction*headLength-right*halfWidth
     local points={start,tip,left,wing};local projected={}
     for i,point in ipairs(points) do
         if not onField(point) or downfield(point)>qbLimit then
@@ -3974,6 +4008,7 @@ local function holdManual(r,reason,evidence)
     choice=r
     if not stable then log('MANUAL_SELECT',r.player.Name) end
     setGate(reason or 'MANUAL_LOCK_COVERED')
+    controller.groundGuide.Queue(r,os.clock())
 end
 local function fallbackReceiver(receivers)
     local best,incumbent
