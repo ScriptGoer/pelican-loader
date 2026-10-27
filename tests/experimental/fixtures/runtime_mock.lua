@@ -113,6 +113,7 @@ function Mock.makePlayer(name,team,p,v)
  local player=Instance.new('Player');player.Name=name;player.DisplayName=name;player.Team=team;player.Neutral=false
  local char=Instance.new('Model');char.Name=name;char.Parent=workspace;player.Character=char
  local hum=Instance.new('Humanoid');hum.DisplayName=name;hum.Parent=char
+ function hum:GetState()return self.State or (self.FloorMaterial==Enum.Material.Air and Enum.HumanoidStateType.Freefall or Enum.HumanoidStateType.Running)end
  local root=Instance.new('Part');root.Name='HumanoidRootPart';root.Position=p;root.AssemblyLinearVelocity=v or newv();root.Parent=char
  Mock.roster[#Mock.roster+1]=player;return player,root,hum
 end

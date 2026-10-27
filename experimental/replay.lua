@@ -29,7 +29,7 @@ return function(report,Engine,expectedEngineId,expectedCodeId,GuardReplay)
             for k in pairs(b)do if a[k]==nil then return false end end
             return true
         end
-        for _,field in ipairs({'Score','RiskScore','CatchDifficulty','ReceiverAdvantage','Allowed','Reason','FlatNative','Boundary'})do
+        for _,field in ipairs({'AdmissionKind','Score','RiskScore','CatchDifficulty','ReceiverAdvantage','Allowed','Reason','FlatNative','Boundary'})do
             if not equal(shot.unified[field],row.Result[field])then out.Mismatches[#out.Mismatches+1]=key..':'..field end
         end
         if GuardReplay and row.Input.Context.GuardInputs then

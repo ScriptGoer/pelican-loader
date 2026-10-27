@@ -1,25 +1,39 @@
--- B3 joint native-candidate ranking; fresh V26.22 guards authorize releases.
+-- Joint native-candidate ranking. Fresh native guards authorize releases;
+-- their optimistic pursuit clearances are distances, never probabilities.
 local E={defaults={DevelopingRoutes=true,DevelopmentHorizon=.18,DevelopmentMax=.35}}
 local function flat(v)return Vector3.new(v.X,0,v.Z)end
+local deliveryOrder={'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'}
 function E.new(options)
  local c={};for k,v in pairs(E.defaults)do c[k]=v end
  for k,v in pairs(options or {})do
-  assert(c[k]~=nil,'Unsupported B3 evaluator option: '..tostring(k))
+  assert(c[k]~=nil,'Unsupported evaluator option: '..tostring(k))
   if k=='DevelopingRoutes'then assert(type(v)=='boolean','DevelopingRoutes must be boolean')
   else assert(type(v)=='number'and v==v and v>=0 and v<=.5,'Development horizon must be 0..0.5 seconds')end;c[k]=v
  end
  assert(c.DevelopmentHorizon<=c.DevelopmentMax,'DevelopmentHorizon exceeds DevelopmentMax')
  return setmetatable({config=c,checks=0,maxSeconds=0,holds=setmetatable({},{__mode='k'})},{__index=E})
 end
-function E.admit(shot,g)
- local u=shot.unified;if not u then return g.Allowed end
+function E.certificate(shot,g)
+ local u=shot.unified
  -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
  -- A mode label must not grant the looser elevated-pass admission to that path.
- local policy=u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
-  or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
+ local policy=u and u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  -- A configured loft is an extra path to clear actual coverage, not a faster
+  -- ordinary Dime. The inherited trailing-burn allowance does not establish
+  -- that the receiver retains its advantage through this longer flight.
+  or shot.variant=='LoftDime' and not g.Strict and 'LOFT_REQUIRES_CLEAR_WINDOW'
+  or u and u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
   and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
- u.Guard=g;u.Allowed=g.Allowed==true and not policy
- u.Reason=policy or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
+ local allowed=g.Allowed==true and not policy
+ local kind=not allowed and 'REJECTED' or g.Strict and 'STRICT_CLEAR_WINDOW'
+  or g.TrustBurn and g.TrustBurn.Allowed and 'QUALIFIED_TRAILING_BURN' or 'QUALIFIED_CATCH_WINDOW'
+ return allowed,policy or g.Reason or (allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED'),kind
+end
+function E.admit(shot,g)
+ local allowed,reason,kind=E.certificate(shot,g)
+ local u=shot.unified
+ if u then u.Guard=g;u.Allowed=allowed;u.Reason=reason;u.AdmissionKind=kind end
+ return allowed
 end
 function E:evaluate(shot,wr,defenders,c)
  local begun=os.clock();self.checks=self.checks+1
@@ -68,10 +82,10 @@ function E:evaluate(shot,wr,defenders,c)
  u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
  for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
- -- Admitted contest paths can still have very different modeled exposure.
- -- Compare the existing clearance debt before comfort: an extra catch-height
- -- cost must not beat a less exposed native path. Zero-debt open passes retain
- -- the existing comfort ordering; this changes no release permission or lead.
+ -- Admission comes first. Configured loft must establish its own clear window;
+ -- it cannot win by borrowing the ordinary native Dime's trailing-burn policy.
+ -- Within the supported native families, keep modeled path clearance ahead of
+ -- cosmetic height so the repair does not restore the old low-Bullet bias.
  u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,RiskDebt=u.RiskScore,ComfortDeficit=math.max(0,comfort-t),
   CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
   RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
@@ -95,12 +109,21 @@ function E:evaluate(shot,wr,defenders,c)
  E.admit(shot,g);self.maxSeconds=math.max(self.maxSeconds,os.clock()-begun);return u
 end
 function E.allowed(s)return s and s.unified and s.unified.Allowed==true or false end
-function E.better(a,b)
- if not b then return true end
- local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar end
+local function compareFields(x,y,fields)
+ for _,k in ipairs(fields)do
+  if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k],k end
+ end
+end
+function E.compare(a,b)
+ if not b then return true,'ONLY_CANDIDATE' end
+ local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar,'RELEASE_PERMISSION' end
  local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
- for _,k in ipairs({'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
- return false
+ local better,field=compareFields(x,y,deliveryOrder)
+ if better~=nil then return better,field end
+ return false,'EQUIVALENT_DELIVERY'
+end
+function E.better(a,b)
+ local result=E.compare(a,b);return result
 end
 function E:wait(player,model,epoch,shot,now)
  local old=self.holds[player]

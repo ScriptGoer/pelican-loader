@@ -26,10 +26,38 @@ function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then
 function B:pos(epoch,now)
     if epoch<=0 then return end
     if self.current and self.current.Epoch==epoch then return self.current end
-    if self.current then self.lastClosed=self.current end
+    if self.current then self:archiveAttempt('POSSESSION_CLOSED');self.lastClosed=self.current end
     self.serial=self.serial+1
     local p={Id=self.serial,Epoch=epoch,Started=now,Frames={},Timeline={},TimelineDropped=0,TimelineScope='SCORES_AND_REASONS; FULL_INPUTS_IN_KEYFRAMES',Outcome={Status='UNKNOWN',RequiredMovement='UNKNOWN',Fault='UNRESOLVED'},DroppedFrames=0}
     self.ring[#self.ring+1]=p;if #self.ring>3 then table.remove(self.ring,1)end;self.current=p;return p
+end
+-- Root settings describe the released attempt once sent. Later UI changes remain
+-- visible separately and cannot relabel the risk mode used for that throw.
+function B:settings(settings,now)
+    local p=self.current;if not p then return end
+    local snapshot=copy(settings)
+    p.LatestSettings=snapshot;p.LatestSettingsAt=now
+    if not p.SentAt then p.Settings=snapshot;p.SettingsAt=now;p.SettingsScope='LATEST_POSSESSION_CONTEXT' end
+end
+-- Keep chronological failure receipts without duplicating every full scene.
+-- Full inputs remain in PreJump/Final and the critical planning keyframes.
+local function attemptReceipt(f,stage)
+    if not f then return end
+    return copy({AttemptAt=f.AttemptAt,FinishedAt=os.clock(),Stage=stage,SelectedVariant=f.SelectedVariant,
+        Status=f.Status,Gate=f.Gate,NativeFailure=f.NativeFailure,NativeFailureDetail=f.NativeFailureDetail,Native=f.Native,QB=f.QB,Settings=f.Settings,
+        AutoJump=f.AutoJump,Result=f.Result and {Allowed=f.Result.Allowed,Reason=f.Result.Reason,
+            AdmissionKind=f.Result.AdmissionKind,Score=f.Result.Score,Guard=f.Result.Guard},
+        Comparisons=f.Comparisons and #f.Comparisons or 0,Scope='ATTEMPT_RECEIPT; FULL_INPUTS_IN_FINAL_PREJUMP_AND_KEYFRAMES'})
+end
+local function appendAttempt(p,receipt)
+    p.FinalAttempts=p.FinalAttempts or {};p.FinalAttempts[#p.FinalAttempts+1]=receipt
+    p.AttemptCount=(p.AttemptCount or 0)+1
+    if #p.FinalAttempts>16 then table.remove(p.FinalAttempts,1);p.AttemptsDropped=(p.AttemptsDropped or 0)+1 end
+end
+function B:archiveAttempt(stage)
+    local p=self.current;local f=p and p.Final
+    if not f or f.ReceiptArchived then return end
+    appendAttempt(p,attemptReceipt(f,stage));f.ReceiptArchived=true
 end
 function B:eligibility(now)if self.current then self.current.Eligibility={At=now,Rows={}}end end
 function B:excluded(name,s,reason,role)
@@ -109,8 +137,13 @@ function B:finish(best,seconds)
     local finishedAt=os.clock()
     local f=self.frame;if not f then return end
     f.Selected=best and self:token(best.player.Name)..'/'..tostring(best.shot.variant or best.shot.mode) or nil
+    local winner=f.Selected and f.Rows[f.Selected]
     for key,row in pairs(f.Rows)do
         if row.Status=='EVALUATED' then
+            if self.compare and winner and winner.Result then
+                local preferred,field=self.compare({unified=winner.Result},{unified=row.Result})
+                row.SelectionComparison={Winner=f.Selected,Preferred=preferred,Field=field}
+            end
             row.Reason=row.Result.HardReason or row.PlanAllowed==false and 'EXPLICIT_DEPTH_PLAN'
                 or not row.Result.Allowed and row.Result.Reason or key==f.Selected and 'WINNER' or 'LOWER_ORDERED_SCORE'
         elseif row.Status=='NOT_EVALUATED' and row.NativeStatus=='SCHEDULED_NOT_ATTEMPTED' and row.Reason~='GRADING_BUDGET' then row.Reason=f.NativeLimited and 'PLANNING_BUDGET' or 'MODE_ROTATION'
@@ -121,7 +154,7 @@ function B:finish(best,seconds)
     if self.current then
         local p=self.current;local light={At=f.At,Mode=f.Mode,Plan=f.Plan,Selected=f.Selected,Rows={}}
         for key,row in pairs(f.Rows)do light.Rows[key]={Status=row.Status,Reason=row.Reason,NativeStatus=row.NativeStatus,NativeReason=row.NativeReason,
-            Score=row.Result and copy(row.Result.Score),GuardReason=row.Result and row.Result.Reason,Flight=row.Input and row.Input.Shot.time,Power=row.Input and row.Input.Shot.power}end
+            Comparison=copy(row.SelectionComparison),Score=row.Result and copy(row.Result.Score),GuardReason=row.Result and row.Result.Reason,Flight=row.Input and row.Input.Shot.time,Power=row.Input and row.Input.Shot.power}end
         p.Timeline[#p.Timeline+1]=light
         if #p.Timeline>64 then table.remove(p.Timeline,1);p.TimelineDropped=p.TimelineDropped+1 end
         if not p.FirstPlan then p.FirstPlan=copy(f)end
@@ -132,6 +165,7 @@ function B:finish(best,seconds)
     self.open=false
 end
 function B:final(epoch,now,qb,settings,variant)
+    self:archiveAttempt('SUPERSEDED_FINAL_ATTEMPT')
     local p=self:pos(epoch,now);self.open=false;self.finalActive=true
     p.Final={AttemptAt=now,QB=self:actor(qb),Settings=copy(settings),Status='RECALCULATING',SelectedVariant=variant}
 end
@@ -148,12 +182,18 @@ end
 function B:sent(id,api,now)
     if not self.current then return end
     self.current.ThrowId=id or ('local:'..self.current.Id);self.current.SentAt=now;self.current.Final.Status=api
+    self.current.Settings=copy(self.current.Final.Settings or self.current.Settings)
+    self.current.SettingsAt=self.current.Final.AttemptAt or now;self.current.SettingsScope='FINAL_RELEASE_CONTEXT'
+    self:archiveAttempt('REQUEST_ATTEMPTED')
     self.lastSent=self.current;self.finalActive=false
 end
 function B:prejump(allowed)
     if not self.current or not self.current.Final then return end
     self.current.PreJump=copy(self.current.Final)
     self.current.PreJump.Status=allowed and 'PREJUMP_VERIFIED' or 'PREJUMP_BLOCKED'
+    local gate=self.current.Final.Gate
+    if not allowed and (gate=='NATIVE_FRAME_BUDGET' or gate=='QB_LAUNCH_POSE_CHANGED_REPLAN' or gate=='DECISION_STALE_AFTER_NATIVE_SOLVER') then self.current.PreJump.Status='PREJUMP_DEFERRED' end
+    self.current.Final.Status=self.current.PreJump.Status;self:archiveAttempt(self.current.PreJump.Status)
     self.current.Final=nil;self.finalActive=false
 end
 function B:observe(id,value)
@@ -162,11 +202,19 @@ function B:observe(id,value)
     if self.pinned and self.pinned.Possession.ThrowId==id then self.pinned.Possession.Observation=copy(value);self.pinned.Possession.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end
 end
 function B:flag(now,current)
-    local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
-    if current then p=self.current end
+    local p,selection
+    if current then p=self.current;selection='CURRENT_POSSESSION'
+    elseif self.lastSent and now-(self.lastSent.SentAt or 0)<=45 then p=self.lastSent;selection='LAST_SENT_WITHIN_45S'
+    elseif self.lastClosed then p=self.lastClosed;selection='LAST_CLOSED_FALLBACK'
+    else p=self.current;selection='CURRENT_FALLBACK' end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.10',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
-        Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
+    self.flagSerial=(self.flagSerial or 0)+1;local wall=os.time()
+    local snapshot=copy(p)
+    if p.Final and not p.Final.ReceiptArchived then appendAttempt(snapshot,attemptReceipt(p.Final,'FLAGGED_CURRENT_ATTEMPT')) end
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
+        Flag={Kind=current and 'MISSED' or 'BAD_THROW',At=now,WallTime=wall,Sequence=self.flagSerial,Selection=selection,
+            PossessionId=p.Id,Epoch=p.Epoch,HasReleasedThrow=p.SentAt~=nil,SecondsSinceRelease=p.SentAt and now-p.SentAt or nil},
+        Possession=snapshot,Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
 end

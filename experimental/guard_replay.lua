@@ -60,18 +60,19 @@ local function lane(shot,d,direct,both,earlyUntil)
     if d.hum and finite(d.hum.JumpPower) then reach=clamp(d.hum.JumpPower^2/(2*workspace.Gravity)+5,12.2,24) end
     local bottom,top=d.p.Y-2,d.p.Y+reach
     local disc=v.Y*v.Y-2*CFG.Gravity*(bottom-o.Y)
-    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
     local r=math.sqrt(disc); local lo,hi=math.max(0,(v.Y-r)/CFG.Gravity),math.min(t,(v.Y+r)/CFG.Gravity)
-    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
     local bodyRadius=4.5+d.turn*3
     local function interval(a,b)
-        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
         local vx,vz=v.X,v.Z
         if direct then vx,vz=vx-d.v.X,vz-d.v.Z end
         local first=linearMinimum(o.X-d.p.X,o.Z-d.p.Z,vx,vz,a,b,direct and 0 or runSpeed(d))-bodyRadius
         if both then
             local early=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,math.min(b,earlyUntil),0)-bodyRadius or 45)
-            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early
+            local pursuit=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X,v.Z,a,math.min(b,earlyUntil),runSpeed(d))-bodyRadius or 45)
+            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early,pursuit
         end
         return first
     end
@@ -79,10 +80,11 @@ local function lane(shot,d,direct,both,earlyUntil)
     if high<=0 then return interval(lo,hi) end
     r=math.sqrt(high)
     local enter,leave=(v.Y-r)/CFG.Gravity,(v.Y+r)/CFG.Gravity
-    local early,earlyDirect,earlyContest=interval(lo,math.min(hi,enter))
-    local late,lateDirect,lateContest=interval(math.max(lo,leave),hi)
+    local early,earlyDirect,earlyContest,earlyPursuit=interval(lo,math.min(hi,enter))
+    local late,lateDirect,lateContest,latePursuit=interval(math.max(lo,leave),hi)
     return math.min(early,late),both and math.min(earlyDirect,lateDirect) or nil,
-        earlyUntil and math.min(earlyContest,lateContest) or nil
+        earlyUntil and math.min(earlyContest,lateContest) or nil,
+        earlyUntil and math.min(earlyPursuit,latePursuit) or nil
 end
 function riskPolicy.BurnStart(shot,receiver)
     shot.trustBurn=nil
@@ -105,10 +107,19 @@ function riskPolicy.BurnEarlyUntil(shot,receiver,d)
     -- the same contest boundary back so a bigger burn cannot grade worse.
     return math.max(0,b.EarlyUntil-math.max(0,gap-riskPolicy.burn.gap)/closing)
 end
-function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect)
+function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect,earlyPursuit,earlyUntil,defenderIndex)
     local b=shot.trustBurn
     if not b or clearance>=CFG.ThrowMargin and path>=CFG.ThrowLane then return end
     b.Threats=b.Threats+1
+    -- Diagnostic certificate only: current-direction and optimistic pursuit
+    -- envelopes intentionally remain separate, with their actual time window.
+    b.EarlyPursuit=math.min(b.EarlyPursuit or math.huge,earlyPursuit or -math.huge)
+    b.Certificates=b.Certificates or {}
+    if #b.Certificates<16 then
+        b.Certificates[#b.Certificates+1]={DefenderIndex=defenderIndex,EarlyUntil=earlyUntil,
+            EarlyDirect=earlyDirect,EarlyPursuit=earlyPursuit,ArrivalClearance=clearance,WholeFlightPursuit=path}
+    else b.CertificatesOmitted=(b.CertificatesOmitted or 0)+1 end
+    b.CertificateScope='SAME_VERTICAL_BANDS; CURRENT_DIRECTION_AND_INSTANT_TURN; UNCALIBRATED; DIAGNOSTIC_ONLY'
     local relative=flat(receiver.p-d.p)
     local future=flat(predict(receiver,b.Horizon)-predict(d,b.Horizon))
     local gap,futureGap=relative:Dot(b.Route),future:Dot(b.Route)
@@ -138,6 +149,8 @@ function riskPolicy.BurnFinish(shot)
 end
 local function risk(shot,receiver,defenders)
     controller.coverageMath.grades=controller.coverageMath.grades+1
+    shot.receiverETA=nil;shot.raceAdvantage=nil;shot.directLane=nil;shot.routeLateral=nil;shot.receiverTurn=nil
+    shot.minimumFlight=nil;shot.powerReason=nil
     local margin,laneMargin,wideMargin,wideLane=45,45,45,45; local t=shot.time
     local pingBudget=finite(shot.networkPing) and math.max(0,shot.networkPing) or 0
     local firstDB,directLane=math.huge,45
@@ -163,7 +176,7 @@ local function risk(shot,receiver,defenders)
     shot.safetyOverTop,shot.safetyName=false,nil
     shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
     riskPolicy.BurnStart(shot,receiver)
-    for _,d in ipairs(defenders) do
+    for defenderIndex,d in ipairs(defenders) do
         -- Instant turning at observed/normal run speed is optimistic for the DB.
         -- A trailing defender must cover the actual distance before arrival;
         -- a stationary prevent defender can move instead of staying frozen.
@@ -173,11 +186,12 @@ local function risk(shot,receiver,defenders)
         local clearance=baseClearance-(enhanced and speed*pingBudget or 0)
         local eta=speed>0 and math.max(0,distance-(4.5+d.turn*3))/speed or (distance<=4.5+d.turn*3 and 0 or math.huge)
         firstDB=math.min(firstDB,eta)
-        local basePath,directPath,earlyDirect=lane(shot,d,false,riskPolicy.mode~='SAFE',riskPolicy.BurnEarlyUntil(shot,receiver,d))
+        local earlyUntil=riskPolicy.BurnEarlyUntil(shot,receiver,d)
+        local basePath,directPath,earlyDirect,earlyPursuit=lane(shot,d,false,riskPolicy.mode~='SAFE',earlyUntil)
         if directPath then directLane=math.min(directLane,directPath-(enhanced and speed*pingBudget or 0)) end
         if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
         local pathClearance=basePath-(enhanced and speed*pingBudget or 0)
-        riskPolicy.BurnGrade(shot,receiver,d,clearance,pathClearance,earlyDirect)
+        riskPolicy.BurnGrade(shot,receiver,d,clearance,pathClearance,earlyDirect,earlyPursuit,earlyUntil,defenderIndex)
         if read then
             local relative=flat(d.p-receiver.p);local depth=relative:Dot(lines.forward)
             local later=relative+flat(d.v-receiver.v)*(read.Horizon+pingBudget)

@@ -1,9 +1,12 @@
-"""B3 repair: derive only experimental files from unchanged production V26.22."""
+"""B4 repair: derive only experimental files from unchanged production V26.22."""
 import sys
 sys.dont_write_bytecode=True
 from pathlib import Path
 from instrument_bad_play import instrument
 from repair_throw_policy import repair as repair_throw_policy
+from repair_release_pipeline import repair as repair_release_pipeline
+from repair_coverage_certificate import repair as repair_coverage_certificate
+from repair_native_schedule import repair as repair_native_schedule
 from repair_guide import repair as repair_guide
 from repair_coverage import repair as repair_coverage
 from build_guard_replay import build as build_guard_replay
@@ -266,12 +269,13 @@ s=s.replace('if pass<3 then limited=true end','if pass<#plannerModes then limite
 one('function controller.Stop(reason)','function controller.Stop(reason)\n    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false\n    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or \"USER_END\"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status=\"STOPPED_BEFORE_REQUEST\";controller.bad.current.Final.Gate=clean(reason or \"USER_END\")end end')
 
 # Accurate active-policy labels; unsupported prototype controls are retired.
-s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b3.10): generated repair of V26.22.')
+s=s.replace(s.splitlines()[0],'-- PELICAN_FF3_V26 (experimental-unified-b4): generated repair of V26.22.')
 for prefix,value in {
  'OPEN_COMFORT_POLICY':'NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
  'CLOSE_BULLET_POLICY':'ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
  'MAG_POLICY':'UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
  'JUMP_BULLET_POLICY':'CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
+ 'TRUST_BURN_POLICY':'ORDINARY_NATIVE_BULLET_DIME; CONFIGURED_LOFT_REQUIRES_STRICT; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR',
  'AUTO_JUMP_POLICY':'NO_BULLET_QB_JUMPS; FRESH_ADMITTED_NATIVE_WINDOW; VERIFIED_NORMAL_JUMP; OBSERVED_TAKEOFF_OFFSET',
  'SAFETY_POLICY':'ACTUAL_PATH_AND_ARRIVAL_THREATS; HIGH_SAFETY_LABEL_IS_ADVISORY; STRICT_CONDITIONAL_NATIVE_JUMP; CATCH_REACH_UNCALIBRATED',
 }.items():
@@ -280,16 +284,19 @@ for prefix,value in {
 s=s.replace('FASTEST_ALLOWED_FLIGHT; OVERLAP_MODEL_UNCALIBRATED','ORDERED_COMFORT_COMPARISON; OVERLAP_MODEL_UNCALIBRATED')
 
 # Update controls and history without rewriting native calculations.
-one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b3.10'")
-s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b3.10'")
+one("'RELEASE_VERSION|ff3-v26.22'","'RELEASE_VERSION|experimental-unified-b4'")
+s=s.replace("Release='ff3-v26.21'","Release='experimental-unified-b4'")
 s=s.replace("MagTrial=shot.magTrial,MagExtraY=","Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=")
 s=s.replace("Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,","Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,")
 one("Source='QUALIFIED_SHARED_NATIVE_SETTINGS',SafetyReads=","Source='QUALIFIED_SHARED_NATIVE_SETTINGS',UnifiedParameters=controller.unified.config,SafetyReads=")
 s=repair_throw_policy(s)
+s=repair_release_pipeline(s)
+s=repair_coverage_certificate(s)
+s=repair_native_schedule(s,root)
 s=repair_guide(s)
 s=instrument(s,root)
 (root/'experimental/auto_qb.lua').write_text(s)
-loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b3.10"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
+loader=(root/'loader.lua').read_text().replace('Ref = "93832398e74edb83743bf0bcacc81aa8a5f8bd57"','Ref = "experimental-unified-b4"').replace('Path = "games/ff3/auto_qb.lua"','Path = "experimental/auto_qb.lua"')
 loader=loader.replace('"main"','"repair-unified-qb"').replace('/main/loader.lua','/repair-unified-qb/experimental/loader.lua')
 (root/'experimental/loader.lua').write_text(loader)
-print('Generated B3 repair; production V26.22 untouched')
+print('Generated B4 experiment; production V26.22 untouched')

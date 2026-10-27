@@ -30,14 +30,14 @@ repair=repair.replace(';shot.maxThreatSpeed=math.max(shot.maxThreatSpeed,speed)'
 sys.path.insert(0,str(R/'scripts'))
 from repair_coverage import repair as coverage_labels
 from repair_throw_policy import risk_rules
+from repair_coverage_certificate import repair as certificates
 check(risk_rules(block(b,'function riskPolicy.BurnFinish(shot)','local function risk(shot,receiver,defenders)'))==block(e,'function riskPolicy.BurnFinish(shot)','local function risk(shot,receiver,defenders)'),'burn policy changes only the role-label veto; measured threat/advantage checks retained')
-expected=coverage_labels(original)
-for rule in ["    if shot.safetyRead and shot.safetyRead.High and (shot.mode~='Bullet' or shot.jumpBullet or shot.nativeCoverageJump) then return false end\n","    if controller.safety.enabled and (shot.jumpBullet or shot.nativeCoverageJump) and (not shot.safetyRead or shot.safetyRead.State~='DROPPING_SLANT_CONTEST') then return false end\n"]: expected=expected.replace(rule,'')
-expected=expected.replace("read.High and 'SAFETY_HIGH_BULLET_ONLY'","read.High and 'HIGH_SAFETY_OBSERVED'")
+full=certificates(risk_rules(coverage_labels(block(b,'local function predict(s,t)','local lastNativeInputs'))))
+expected=full[full.index('local function risk(shot,receiver,defenders)'):]
 check(expected==repair,'original interception math retained; safety-role vetoes and coverage labels explicitly repaired')
 expected=block(b,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.').replace('if shot.softBullet or shot.screen then return false end -- softened close pass or deliberate stationary screen',"if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false end -- Bullet variants never request a QB jump")
 check(expected==block(e,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.'),'native deep timing classification preserved outside explicit Bullet jump exclusion')
-for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b3.10"']:
+for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b4"']:
  check(token in loader,'isolated loader ownership/ref '+token)
 for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","local fitVariant=selected.shot.fitAlternativeVariant","shot.powerAllowed=touch.fullAllowed(shot)","controller.bad:released(shot)","DEVELOPING_ROUTE_CONTINUATION"]:
  check(token in e,'preserved live contract '+token)

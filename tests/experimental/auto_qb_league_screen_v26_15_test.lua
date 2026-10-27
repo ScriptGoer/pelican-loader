@@ -101,6 +101,7 @@ for _,kind in ipairs({'AUTO_OFF','THROW_OFF','BETWEEN_PLAYS','TEAM','QB_RESPAWN'
     elseif kind=='BALL_LOST' then t.tool.Parent=nil elseif kind=='BLACKLIST' then c.SetBlacklisted(t.a,true)
     else c.Stop('STOP') end
     t.steps(4);check(not c.league.screen and #t.requests==0,'selection invalidated without stale throw: '..kind)
+    if kind~='STOP' then check(not c.IsStopped,'a normal context transition cannot pass by crashing the controller: '..kind)end
     check(c.Stop(kind),'lifecycle cleanup '..kind)
 end
 -- New UI actions also obey stop-and-preserve when a real action errors.

@@ -1,4 +1,44 @@
-# B3.10 repair validation
+# B4 validation
+
+Production `main` is V26.22 at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95`. Every production-tree file remains byte-identical. Changes are confined to experimental runtime/modules, generation/replay tooling, documentation and experimental tests.
+
+The uploaded B3.10 report reproduces **44 evaluator inputs and 44 analytic-risk inputs** against its actual immutable B3.10 tag. With the B4 admission logic and the same captured tuples/guards, its contested LoftDime is rejected and its admitted 1.75-second Dime wins. This counterfactual does not rerun the native solver or establish a successful catch.
+
+| Validation | Result / scope |
+| --- | --- |
+| Full controller, comparative model and existing regressions | Passed: native settings restoration, wrong-state/yield failures, one packet, comfortable native Bullet, strict elevated window, developing diagonal/urgent routes, qualified burns, AFK/sparse replication, pass plans, presentation, oscillation, guide and cleanup. |
+| Admission certificates | 24 assertions including a rounded reproduction of the uploaded loft conflict, strict elevated passes, lower low-Bullet exposure preference and comparator consistency. |
+| Release pipeline | 47 assertions: all three transient preflight failures defer and recover with one ascending jump/packet; real coverage refusal blocks and invalidates optimistic cache; intra-callback clock progress cannot erase a jump; auto Bullet uses one fresh final solve; normal-jump restrictions have explicit receipts. |
+| Work scheduling | 752 assertions across steady two-WR/five-call workloads and availability transitions. Core maximum refresh gap is 0.24 seconds in that constructed workload, within the existing 0.36-second cache life. This is capacity/fairness, not measured iPhone latency. |
+| Temporal coverage receipts | 376 checks including 60 constructed scenes compared against B3.10 metrics/permission, bounded per-threat evidence, real early blocker rejection and clearing TRUST-only metadata when a cached tuple is regraded in SAFE. |
+| BAD report retention and replay | 43 assertions: MISSED/BAD_THROW provenance, frozen release settings, unique bounded attempt history, immutable pins, late observation, privacy, historical/source mismatch and corrupted-input failure. |
+| Existing feature suites | Passed adaptive angles, friends, native receiver Jump, shared coverage and league screens/profiles. Context-transition tests additionally require the controller remain alive; a cancellation must not pass merely because the mock crashed. |
+| Original production checks | 51 TRUST coverage/eligibility checks plus 144 SAFE/MOD differential scenes; no production edits. |
+| Native Luau compiler | 32 runtime/test modules compile with compiler source `74f768309c380d40601b28c4c4cdda27da415cef`. |
+| Isolation/build | 70 source/isolation contracts, deterministic regeneration, publication/privacy scan and `git diff --check`. |
+
+Current synthetic controller captures replay all their recorded evaluator/analytic-risk inputs. Wrong-build IDs, missing inputs and deliberately corrupted guard values fail explicitly. Historical reports remain replayable only against their actual source tag.
+
+The most important new reproduction advances the clock inside the same Heartbeat. Earlier mocks froze it, concealing that the guide tail could clear a just-requested normal jump before physics. Another test confirms the native budget is scheduling evidence rather than a coverage veto. These establish software mechanisms; none measures actual FF3 catch success.
+
+Commands:
+
+```sh
+python3 scripts/build_experimental.py
+python3 tests/experimental/test_engine.py
+python3 tests/experimental/test_bad_play.py
+python3 tests/experimental/test_coverage_certificate.py
+python3 tests/experimental/test_integration.py
+python3 tests/test_trust_burn.py
+```
+
+Run all five `tests/experimental/auto_qb_*_test.lua` suites with `python3 tests/experimental/run_lua.py FILE`, and compile `experimental/*.lua`, `tests/experimental/*.lua`, and their fixture modules with native `luau-compile`.
+
+**Live status: unverified B4.** No Roblox runtime, chat, currency or private history service test was performed. Native Power/SmartPass endpoint coherence, actual catch/reach/lead mechanics, receiver intent, game replication and iPhone frame time remain uncertain. The source and limitations are documented in [REWRITE_AUDIT.md](REWRITE_AUDIT.md). No claim that every bug is removed or that a higher synthetic check count implies better gameplay.
+
+---
+
+# Historical B3.10 validation (superseded by B4 above)
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.

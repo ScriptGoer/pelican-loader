@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b3.10): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b4): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -6,28 +6,42 @@
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
 local Unified=(function()
--- B3 joint native-candidate ranking; fresh V26.22 guards authorize releases.
+-- Joint native-candidate ranking. Fresh native guards authorize releases;
+-- their optimistic pursuit clearances are distances, never probabilities.
 local E={defaults={DevelopingRoutes=true,DevelopmentHorizon=.18,DevelopmentMax=.35}}
 local function flat(v)return Vector3.new(v.X,0,v.Z)end
+local deliveryOrder={'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'}
 function E.new(options)
  local c={};for k,v in pairs(E.defaults)do c[k]=v end
  for k,v in pairs(options or {})do
-  assert(c[k]~=nil,'Unsupported B3 evaluator option: '..tostring(k))
+  assert(c[k]~=nil,'Unsupported evaluator option: '..tostring(k))
   if k=='DevelopingRoutes'then assert(type(v)=='boolean','DevelopingRoutes must be boolean')
   else assert(type(v)=='number'and v==v and v>=0 and v<=.5,'Development horizon must be 0..0.5 seconds')end;c[k]=v
  end
  assert(c.DevelopmentHorizon<=c.DevelopmentMax,'DevelopmentHorizon exceeds DevelopmentMax')
  return setmetatable({config=c,checks=0,maxSeconds=0,holds=setmetatable({},{__mode='k'})},{__index=E})
 end
-function E.admit(shot,g)
- local u=shot.unified;if not u then return g.Allowed end
+function E.certificate(shot,g)
+ local u=shot.unified
  -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
  -- A mode label must not grant the looser elevated-pass admission to that path.
- local policy=u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
-  or u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
+ local policy=u and u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  -- A configured loft is an extra path to clear actual coverage, not a faster
+  -- ordinary Dime. The inherited trailing-burn allowance does not establish
+  -- that the receiver retains its advantage through this longer flight.
+  or shot.variant=='LoftDime' and not g.Strict and 'LOFT_REQUIRES_CLEAR_WINDOW'
+  or u and u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
   and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
- u.Guard=g;u.Allowed=g.Allowed==true and not policy
- u.Reason=policy or g.Reason or (u.Allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED');return u.Allowed
+ local allowed=g.Allowed==true and not policy
+ local kind=not allowed and 'REJECTED' or g.Strict and 'STRICT_CLEAR_WINDOW'
+  or g.TrustBurn and g.TrustBurn.Allowed and 'QUALIFIED_TRAILING_BURN' or 'QUALIFIED_CATCH_WINDOW'
+ return allowed,policy or g.Reason or (allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED'),kind
+end
+function E.admit(shot,g)
+ local allowed,reason,kind=E.certificate(shot,g)
+ local u=shot.unified
+ if u then u.Guard=g;u.Allowed=allowed;u.Reason=reason;u.AdmissionKind=kind end
+ return allowed
 end
 function E:evaluate(shot,wr,defenders,c)
  local begun=os.clock();self.checks=self.checks+1
@@ -76,10 +90,10 @@ function E:evaluate(shot,wr,defenders,c)
  u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
  for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
  local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
- -- Admitted contest paths can still have very different modeled exposure.
- -- Compare the existing clearance debt before comfort: an extra catch-height
- -- cost must not beat a less exposed native path. Zero-debt open passes retain
- -- the existing comfort ordering; this changes no release permission or lead.
+ -- Admission comes first. Configured loft must establish its own clear window;
+ -- it cannot win by borrowing the ordinary native Dime's trailing-burn policy.
+ -- Within the supported native families, keep modeled path clearance ahead of
+ -- cosmetic height so the repair does not restore the old low-Bullet bias.
  u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,RiskDebt=u.RiskScore,ComfortDeficit=math.max(0,comfort-t),
   CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
   RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
@@ -103,12 +117,21 @@ function E:evaluate(shot,wr,defenders,c)
  E.admit(shot,g);self.maxSeconds=math.max(self.maxSeconds,os.clock()-begun);return u
 end
 function E.allowed(s)return s and s.unified and s.unified.Allowed==true or false end
-function E.better(a,b)
- if not b then return true end
- local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar end
+local function compareFields(x,y,fields)
+ for _,k in ipairs(fields)do
+  if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k],k end
+ end
+end
+function E.compare(a,b)
+ if not b then return true,'ONLY_CANDIDATE' end
+ local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar,'RELEASE_PERMISSION' end
  local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
- for _,k in ipairs({'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'})do if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k]end end
- return false
+ local better,field=compareFields(x,y,deliveryOrder)
+ if better~=nil then return better,field end
+ return false,'EQUIVALENT_DELIVERY'
+end
+function E.better(a,b)
+ local result=E.compare(a,b);return result
 end
 function E:wait(player,model,epoch,shot,now)
  local old=self.holds[player]
@@ -182,10 +205,38 @@ function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then
 function B:pos(epoch,now)
     if epoch<=0 then return end
     if self.current and self.current.Epoch==epoch then return self.current end
-    if self.current then self.lastClosed=self.current end
+    if self.current then self:archiveAttempt('POSSESSION_CLOSED');self.lastClosed=self.current end
     self.serial=self.serial+1
     local p={Id=self.serial,Epoch=epoch,Started=now,Frames={},Timeline={},TimelineDropped=0,TimelineScope='SCORES_AND_REASONS; FULL_INPUTS_IN_KEYFRAMES',Outcome={Status='UNKNOWN',RequiredMovement='UNKNOWN',Fault='UNRESOLVED'},DroppedFrames=0}
     self.ring[#self.ring+1]=p;if #self.ring>3 then table.remove(self.ring,1)end;self.current=p;return p
+end
+-- Root settings describe the released attempt once sent. Later UI changes remain
+-- visible separately and cannot relabel the risk mode used for that throw.
+function B:settings(settings,now)
+    local p=self.current;if not p then return end
+    local snapshot=copy(settings)
+    p.LatestSettings=snapshot;p.LatestSettingsAt=now
+    if not p.SentAt then p.Settings=snapshot;p.SettingsAt=now;p.SettingsScope='LATEST_POSSESSION_CONTEXT' end
+end
+-- Keep chronological failure receipts without duplicating every full scene.
+-- Full inputs remain in PreJump/Final and the critical planning keyframes.
+local function attemptReceipt(f,stage)
+    if not f then return end
+    return copy({AttemptAt=f.AttemptAt,FinishedAt=os.clock(),Stage=stage,SelectedVariant=f.SelectedVariant,
+        Status=f.Status,Gate=f.Gate,NativeFailure=f.NativeFailure,NativeFailureDetail=f.NativeFailureDetail,Native=f.Native,QB=f.QB,Settings=f.Settings,
+        AutoJump=f.AutoJump,Result=f.Result and {Allowed=f.Result.Allowed,Reason=f.Result.Reason,
+            AdmissionKind=f.Result.AdmissionKind,Score=f.Result.Score,Guard=f.Result.Guard},
+        Comparisons=f.Comparisons and #f.Comparisons or 0,Scope='ATTEMPT_RECEIPT; FULL_INPUTS_IN_FINAL_PREJUMP_AND_KEYFRAMES'})
+end
+local function appendAttempt(p,receipt)
+    p.FinalAttempts=p.FinalAttempts or {};p.FinalAttempts[#p.FinalAttempts+1]=receipt
+    p.AttemptCount=(p.AttemptCount or 0)+1
+    if #p.FinalAttempts>16 then table.remove(p.FinalAttempts,1);p.AttemptsDropped=(p.AttemptsDropped or 0)+1 end
+end
+function B:archiveAttempt(stage)
+    local p=self.current;local f=p and p.Final
+    if not f or f.ReceiptArchived then return end
+    appendAttempt(p,attemptReceipt(f,stage));f.ReceiptArchived=true
 end
 function B:eligibility(now)if self.current then self.current.Eligibility={At=now,Rows={}}end end
 function B:excluded(name,s,reason,role)
@@ -265,8 +316,13 @@ function B:finish(best,seconds)
     local finishedAt=os.clock()
     local f=self.frame;if not f then return end
     f.Selected=best and self:token(best.player.Name)..'/'..tostring(best.shot.variant or best.shot.mode) or nil
+    local winner=f.Selected and f.Rows[f.Selected]
     for key,row in pairs(f.Rows)do
         if row.Status=='EVALUATED' then
+            if self.compare and winner and winner.Result then
+                local preferred,field=self.compare({unified=winner.Result},{unified=row.Result})
+                row.SelectionComparison={Winner=f.Selected,Preferred=preferred,Field=field}
+            end
             row.Reason=row.Result.HardReason or row.PlanAllowed==false and 'EXPLICIT_DEPTH_PLAN'
                 or not row.Result.Allowed and row.Result.Reason or key==f.Selected and 'WINNER' or 'LOWER_ORDERED_SCORE'
         elseif row.Status=='NOT_EVALUATED' and row.NativeStatus=='SCHEDULED_NOT_ATTEMPTED' and row.Reason~='GRADING_BUDGET' then row.Reason=f.NativeLimited and 'PLANNING_BUDGET' or 'MODE_ROTATION'
@@ -277,7 +333,7 @@ function B:finish(best,seconds)
     if self.current then
         local p=self.current;local light={At=f.At,Mode=f.Mode,Plan=f.Plan,Selected=f.Selected,Rows={}}
         for key,row in pairs(f.Rows)do light.Rows[key]={Status=row.Status,Reason=row.Reason,NativeStatus=row.NativeStatus,NativeReason=row.NativeReason,
-            Score=row.Result and copy(row.Result.Score),GuardReason=row.Result and row.Result.Reason,Flight=row.Input and row.Input.Shot.time,Power=row.Input and row.Input.Shot.power}end
+            Comparison=copy(row.SelectionComparison),Score=row.Result and copy(row.Result.Score),GuardReason=row.Result and row.Result.Reason,Flight=row.Input and row.Input.Shot.time,Power=row.Input and row.Input.Shot.power}end
         p.Timeline[#p.Timeline+1]=light
         if #p.Timeline>64 then table.remove(p.Timeline,1);p.TimelineDropped=p.TimelineDropped+1 end
         if not p.FirstPlan then p.FirstPlan=copy(f)end
@@ -288,6 +344,7 @@ function B:finish(best,seconds)
     self.open=false
 end
 function B:final(epoch,now,qb,settings,variant)
+    self:archiveAttempt('SUPERSEDED_FINAL_ATTEMPT')
     local p=self:pos(epoch,now);self.open=false;self.finalActive=true
     p.Final={AttemptAt=now,QB=self:actor(qb),Settings=copy(settings),Status='RECALCULATING',SelectedVariant=variant}
 end
@@ -304,12 +361,18 @@ end
 function B:sent(id,api,now)
     if not self.current then return end
     self.current.ThrowId=id or ('local:'..self.current.Id);self.current.SentAt=now;self.current.Final.Status=api
+    self.current.Settings=copy(self.current.Final.Settings or self.current.Settings)
+    self.current.SettingsAt=self.current.Final.AttemptAt or now;self.current.SettingsScope='FINAL_RELEASE_CONTEXT'
+    self:archiveAttempt('REQUEST_ATTEMPTED')
     self.lastSent=self.current;self.finalActive=false
 end
 function B:prejump(allowed)
     if not self.current or not self.current.Final then return end
     self.current.PreJump=copy(self.current.Final)
     self.current.PreJump.Status=allowed and 'PREJUMP_VERIFIED' or 'PREJUMP_BLOCKED'
+    local gate=self.current.Final.Gate
+    if not allowed and (gate=='NATIVE_FRAME_BUDGET' or gate=='QB_LAUNCH_POSE_CHANGED_REPLAN' or gate=='DECISION_STALE_AFTER_NATIVE_SOLVER') then self.current.PreJump.Status='PREJUMP_DEFERRED' end
+    self.current.Final.Status=self.current.PreJump.Status;self:archiveAttempt(self.current.PreJump.Status)
     self.current.Final=nil;self.finalActive=false
 end
 function B:observe(id,value)
@@ -318,11 +381,19 @@ function B:observe(id,value)
     if self.pinned and self.pinned.Possession.ThrowId==id then self.pinned.Possession.Observation=copy(value);self.pinned.Possession.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end
 end
 function B:flag(now,current)
-    local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
-    if current then p=self.current end
+    local p,selection
+    if current then p=self.current;selection='CURRENT_POSSESSION'
+    elseif self.lastSent and now-(self.lastSent.SentAt or 0)<=45 then p=self.lastSent;selection='LAST_SENT_WITHIN_45S'
+    elseif self.lastClosed then p=self.lastClosed;selection='LAST_CLOSED_FALLBACK'
+    else p=self.current;selection='CURRENT_FALLBACK' end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.10',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
-        Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
+    self.flagSerial=(self.flagSerial or 0)+1;local wall=os.time()
+    local snapshot=copy(p)
+    if p.Final and not p.Final.ReceiptArchived then appendAttempt(snapshot,attemptReceipt(p.Final,'FLAGGED_CURRENT_ATTEMPT')) end
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
+        Flag={Kind=current and 'MISSED' or 'BAD_THROW',At=now,WallTime=wall,Sequence=self.flagSerial,Selection=selection,
+            PossessionId=p.Id,Epoch=p.Epoch,HasReleasedThrow=p.SentAt~=nil,SecondsSinceRelease=p.SentAt and now-p.SentAt or nil},
+        Possession=snapshot,Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
 end
@@ -338,7 +409,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('c4a3480970f6eebd855ea0feb17ee2799955224cc17ab3ebdd35e000f4f70955','3626267406c0c9b4ecb00134646d70f84ce022f8c61096f31ec7cc6957817edf')
+end)().new('2994f7daf728e9b5c9afa05fa6ad1b1b1b3b4f91323e2e73bee7998c9ff1851a','c4a2ae99e26c2c9da968df748754d1e1b11f2625fd75c22ed614a4a6e63d0c8a')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -361,6 +432,7 @@ end
 return H
 
 end)().new(pg,env)
+controller.bad.compare=Unified.compare
 controller.unified.oscillation=(function()
 -- Observed bounded lateral reversals. No remote inputs or inferred route intent.
 local O={}
@@ -742,7 +814,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b3.10',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b4',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1794,7 +1866,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b3.10','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b4','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|EXPLICIT_ADMISSION_CERTIFICATES; CONFIGURED_LOFT_STRICT; NATIVE_EXPOSURE_AND_COMFORT_ORDER; NO_SIMULATED_CONTEST_RELIEF','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1803,7 +1875,7 @@ function controller.GetReport()
         'MAG_POLICY|UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
         'BULLET_RISK_POLICY|SAFE_MOD_STRICT; TRUST_ORDINARY_TRAILING_CORNER_BURN_EXCEPTION; CUSTOM_JUMP_STRICT',
-        'TRUST_BURN_POLICY|ORDINARY_BULLET_DIME; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR; FINAL_CONTEST_ALLOWED',
+        'TRUST_BURN_POLICY|ORDINARY_NATIVE_BULLET_DIME; CONFIGURED_LOFT_REQUIRES_STRICT; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR',
         'TRUST_BURN_CONTEST_FRACTION|'..riskPolicy.burn.contestFraction,'TRUST_BURN_MAX_CONTEST_SECONDS|'..riskPolicy.burn.contestSeconds,
         'SAFETY_READS|'..tostring(controller.safety.enabled),'SAFETY_POLICY|ACTUAL_PATH_AND_ARRIVAL_THREATS; HIGH_SAFETY_LABEL_IS_ADVISORY; STRICT_CONDITIONAL_NATIVE_JUMP; CATCH_REACH_UNCALIBRATED',
         'OPPORTUNITY_POLICY|MOD_TRUST_ROUTE_INDEPENDENT; FRESH_CACHED_RECEIVERS_REGRADED; SHORTER_READY_COMPLETIONS_PREFERRED; CANCEL_PENDING_NOT_RECEIVER',
@@ -1914,7 +1986,7 @@ local function preserve(copy)
     env.PELICAN_FF3_LAST_REPORT=controller.GetReport()
 end
 function controller.Stop(reason)
-    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad.open=false;controller.bad.finalActive=false;if controller.presentation then controller.presentation:stop()end;controller.unified.helperHUD:stop()
+    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad:archiveAttempt('STOPPED');controller.bad.open=false;controller.bad.finalActive=false;if controller.presentation then controller.presentation:stop()end;controller.unified.helperHUD:stop()
     if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or "USER_END"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status="STOPPED_BEFORE_REQUEST";controller.bad.current.Final.Gate=clean(reason or "USER_END")end end
     controller.reactivity.watch=nil
     if controller.league.ClearScreen then controller.league.ClearScreen('STOPPED') end
@@ -2893,18 +2965,19 @@ local function lane(shot,d,direct,both,earlyUntil)
     if d.hum and finite(d.hum.JumpPower) then reach=clamp(d.hum.JumpPower^2/(2*workspace.Gravity)+5,12.2,24) end
     local bottom,top=d.p.Y-2,d.p.Y+reach
     local disc=v.Y*v.Y-2*CFG.Gravity*(bottom-o.Y)
-    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
     local r=math.sqrt(disc); local lo,hi=math.max(0,(v.Y-r)/CFG.Gravity),math.min(t,(v.Y+r)/CFG.Gravity)
-    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
     local bodyRadius=4.5+d.turn*3
     local function interval(a,b)
-        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
         local vx,vz=v.X,v.Z
         if direct then vx,vz=vx-d.v.X,vz-d.v.Z end
         local first=linearMinimum(o.X-d.p.X,o.Z-d.p.Z,vx,vz,a,b,direct and 0 or runSpeed(d))-bodyRadius
         if both then
             local early=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,math.min(b,earlyUntil),0)-bodyRadius or 45)
-            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early
+            local pursuit=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X,v.Z,a,math.min(b,earlyUntil),runSpeed(d))-bodyRadius or 45)
+            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early,pursuit
         end
         return first
     end
@@ -2912,10 +2985,11 @@ local function lane(shot,d,direct,both,earlyUntil)
     if high<=0 then return interval(lo,hi) end
     r=math.sqrt(high)
     local enter,leave=(v.Y-r)/CFG.Gravity,(v.Y+r)/CFG.Gravity
-    local early,earlyDirect,earlyContest=interval(lo,math.min(hi,enter))
-    local late,lateDirect,lateContest=interval(math.max(lo,leave),hi)
+    local early,earlyDirect,earlyContest,earlyPursuit=interval(lo,math.min(hi,enter))
+    local late,lateDirect,lateContest,latePursuit=interval(math.max(lo,leave),hi)
     return math.min(early,late),both and math.min(earlyDirect,lateDirect) or nil,
-        earlyUntil and math.min(earlyContest,lateContest) or nil
+        earlyUntil and math.min(earlyContest,lateContest) or nil,
+        earlyUntil and math.min(earlyPursuit,latePursuit) or nil
 end
 function riskPolicy.BurnStart(shot,receiver)
     shot.trustBurn=nil
@@ -2938,10 +3012,19 @@ function riskPolicy.BurnEarlyUntil(shot,receiver,d)
     -- the same contest boundary back so a bigger burn cannot grade worse.
     return math.max(0,b.EarlyUntil-math.max(0,gap-riskPolicy.burn.gap)/closing)
 end
-function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect)
+function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect,earlyPursuit,earlyUntil,defenderIndex)
     local b=shot.trustBurn
     if not b or clearance>=CFG.ThrowMargin and path>=CFG.ThrowLane then return end
     b.Threats=b.Threats+1
+    -- Diagnostic certificate only: current-direction and optimistic pursuit
+    -- envelopes intentionally remain separate, with their actual time window.
+    b.EarlyPursuit=math.min(b.EarlyPursuit or math.huge,earlyPursuit or -math.huge)
+    b.Certificates=b.Certificates or {}
+    if #b.Certificates<16 then
+        b.Certificates[#b.Certificates+1]={DefenderIndex=defenderIndex,EarlyUntil=earlyUntil,
+            EarlyDirect=earlyDirect,EarlyPursuit=earlyPursuit,ArrivalClearance=clearance,WholeFlightPursuit=path}
+    else b.CertificatesOmitted=(b.CertificatesOmitted or 0)+1 end
+    b.CertificateScope='SAME_VERTICAL_BANDS; CURRENT_DIRECTION_AND_INSTANT_TURN; UNCALIBRATED; DIAGNOSTIC_ONLY'
     local relative=flat(receiver.p-d.p)
     local future=flat(predict(receiver,b.Horizon)-predict(d,b.Horizon))
     local gap,futureGap=relative:Dot(b.Route),future:Dot(b.Route)
@@ -2974,6 +3057,8 @@ local function risk(shot,receiver,defenders)
     shot.guardInputs={Clock=gradeStarted,Drops={}}
     local ref=receiver.chestReference;if ref then shot.guardInputs.ChestReference={time=ref.time,at=ref.at}end
     controller.coverageMath.grades=controller.coverageMath.grades+1
+    shot.receiverETA=nil;shot.raceAdvantage=nil;shot.directLane=nil;shot.routeLateral=nil;shot.receiverTurn=nil
+    shot.minimumFlight=nil;shot.powerReason=nil
     local margin,laneMargin,wideMargin,wideLane=45,45,45,45; local t=shot.time
     local pingBudget=finite(shot.networkPing) and math.max(0,shot.networkPing) or 0
     local firstDB,directLane=math.huge,45
@@ -2999,7 +3084,7 @@ local function risk(shot,receiver,defenders)
     shot.safetyOverTop,shot.safetyName=false,nil
     shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
     riskPolicy.BurnStart(shot,receiver)
-    for _,d in ipairs(defenders) do
+    for defenderIndex,d in ipairs(defenders) do
         -- Instant turning at observed/normal run speed is optimistic for the DB.
         -- A trailing defender must cover the actual distance before arrival;
         -- a stationary prevent defender can move instead of staying frozen.
@@ -3009,11 +3094,12 @@ local function risk(shot,receiver,defenders)
         local clearance=baseClearance-(enhanced and speed*pingBudget or 0)
         local eta=speed>0 and math.max(0,distance-(4.5+d.turn*3))/speed or (distance<=4.5+d.turn*3 and 0 or math.huge)
         firstDB=math.min(firstDB,eta)
-        local basePath,directPath,earlyDirect=lane(shot,d,false,riskPolicy.mode~='SAFE',riskPolicy.BurnEarlyUntil(shot,receiver,d))
+        local earlyUntil=riskPolicy.BurnEarlyUntil(shot,receiver,d)
+        local basePath,directPath,earlyDirect,earlyPursuit=lane(shot,d,false,riskPolicy.mode~='SAFE',earlyUntil)
         if directPath then directLane=math.min(directLane,directPath-(enhanced and speed*pingBudget or 0)) end
         if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
         local pathClearance=basePath-(enhanced and speed*pingBudget or 0)
-        riskPolicy.BurnGrade(shot,receiver,d,clearance,pathClearance,earlyDirect)
+        riskPolicy.BurnGrade(shot,receiver,d,clearance,pathClearance,earlyDirect,earlyPursuit,earlyUntil,defenderIndex)
         if read then
             local relative=flat(d.p-receiver.p);local depth=relative:Dot(lines.forward)
             local later=relative+flat(d.v-receiver.v)*(read.Horizon+pingBudget)
@@ -3609,6 +3695,60 @@ function controller.fit.alternatives(player,s,defenders,now,fresh,fresh2,include
     if includeFit then for _,other in ipairs(result) do if other.mode=='Fit' then controller.fit.assess(other,result) end end end
     return result
 end
+controller.unified.nativeSchedule=(function()
+-- Pure native-work selection. This never grades or authorizes a throw.
+local S={}
+local core={ZigzagBullet=0,Bullet=1,Dime=2,SoftBullet=3}
+local optional={QuickBullet=1,Fit=2,CoverageJump=3,LoftDime=4}
+function S.next(modes,modeAt,tried,now,cacheAge,unavailable)
+    local best,oldest,priority,reason
+    local refresh=cacheAge/2 -- leave half the existing tuple lifetime to refresh
+    for index,mode in ipairs(modes) do
+        if not tried[mode] and not (unavailable and unavailable[mode]) then
+            local at=modeAt and modeAt[mode] or -math.huge
+            local rank=core[mode]
+            if rank and now-at>=refresh then
+                if reason~='DUE_CORE' or at<oldest or at==oldest and rank<priority then
+                    best,oldest,priority,reason=mode,at,rank,'DUE_CORE'
+                end
+            elseif reason~='DUE_CORE' and not rank then
+                rank=optional[mode] or #modes+index
+                if not best or at<oldest or at==oldest and rank<priority then
+                    best,oldest,priority,reason=mode,at,rank,'FAIR_OPTIONAL'
+                end
+            end
+        end
+    end
+    -- Refreshed cores need no duplicate probing when optional work is absent.
+    return best,reason
+end
+return S
+
+end)()
+function controller.unified.ScheduleUnavailable(r,now)
+    local missing={}
+    if not touch.enabled then
+        missing.SoftBullet='CLOSE_BULLET_NOT_NEEDED'
+        missing.QuickBullet='CLOSE_BULLET_NOT_NEEDED'
+        missing.ZigzagBullet='CLOSE_BULLET_NOT_NEEDED'
+    else
+        if not closePower(r.player,false) then missing.SoftBullet='CLOSE_BULLET_NOT_NEEDED' end
+        if not closePower(r.player,true) then missing.QuickBullet='CLOSE_BULLET_NOT_NEEDED' end
+    end
+    if not r.sample.oscillation then missing.ZigzagBullet='NO_OBSERVED_ZIGZAG' end
+    if not controller.nativeJump.enabled then missing.CoverageJump='NATIVE_JUMP_OFF' end
+    local q=profile and profile.q
+    if not controller.angle.enabled or not q or not finite(q.Angle) or q.Angle<=0 or q.Angle>=89
+        or not finite(q.Power) or q.Power<=0 or q.Power>95 then
+        missing.LoftDime='CONFIGURED_LOFT_UNAVAILABLE'
+    end
+    if controller.league.ScreenEligible and controller.league.ScreenEligible(r.player,r.sample,now) then
+        for _,mode in ipairs(plannerModes)do
+            if mode~='SoftBullet' and mode~='QuickBullet' and mode~='Bullet' then missing[mode]='SCREEN_BULLET_ONLY' end
+        end
+    end
+    return missing
+end
 function controller.unified.Settings()
     return {Auto=auto,AutomaticThrow=throwing,Risk=riskPolicy.mode,Plan=controller.passPlan.mode,
         Profile=controller.league.mode,RequestedProfile=controller.league.requested,ReceiverFilter=controller.receiverFilter.mode,
@@ -3632,7 +3772,7 @@ local function evaluate(receivers,indices,defenders,now)
             cache={model=r.sample.model,epoch=possession.epoch,generation=lines.generation,shots={},rotation=0}
             shotCache[r.player]=cache
         end
-        groups[#groups+1]={r=r,cache=cache,tried={}}
+        groups[#groups+1]={r=r,cache=cache,tried={},unavailable=controller.unified.ScheduleUnavailable(r,now)}
     end
     for _,g in ipairs(groups)do controller.bad:schedule(g.r.player.Name,plannerModes)end
     local calls,started,limited=0,os.clock(),false
@@ -3645,19 +3785,28 @@ local function evaluate(receivers,indices,defenders,now)
             local index=(offset+planRound-1)%#groups+1
             local g=groups[index]
             if calls>=callLimit or attempts>=attemptLimit or os.clock()-started>=CFG.PlanSeconds then limited=true; break end
-            -- Advance only after an actual solve. Even if a single native
-            -- call consumes the whole time allowance, every mode gets a turn.
-            local mode
-            for _=1,#plannerModes do
-                g.cache.rotation=g.cache.rotation%#plannerModes+1
-                local nextMode=plannerModes[g.cache.rotation]
-                if not g.tried[nextMode] then mode=nextMode; break end
+            -- A core tuple gets a refresh opportunity at half its existing
+            -- cache lifetime. Remaining native work goes to the oldest option.
+            -- Unavailable generators consume no native-call slot and are still
+            -- explicit in BAD PLAY rather than silently becoming safe paths.
+            if not g.skipsLogged then
+                g.skipsLogged=true
+                for _,skipped in ipairs(plannerModes)do
+                    local reason=g.unavailable[skipped]
+                    if reason then
+                        g.tried[skipped]=true;g.cache.shots[skipped]=nil
+                        receiverRejects[g.r.player.Name..'/'..skipped]=reason
+                        controller.bad:native(g.r.player.Name,skipped,nil,reason,false)
+                    end
+                end
             end
+            local mode=controller.unified.nativeSchedule.next(plannerModes,g.cache.modeAt,g.tried,now,CFG.CacheAge,g.unavailable)
+            if mode then
             g.tried[mode]=true
             local beforeCalls=frameCalls
             local shot,why,nativeFailure=solve(g.r.player,mode);calls=calls+(frameCalls-beforeCalls);attempts=attempts+1
             controller.bad:native(g.r.player.Name,mode,shot,why,frameCalls>beforeCalls,nativeFailure)
-            g.cache.plannedAt=now;g.cache.modeAt=g.cache.modeAt or {};g.cache.modeAt[mode]=now
+            g.cache.plannedAt=now;g.cache.modeAt=g.cache.modeAt or {};if why~='NATIVE_FRAME_BUDGET' then g.cache.modeAt[mode]=now end
             if stopped then return end
             if shot then g.cache.shots[mode]=shot
             else
@@ -3665,6 +3814,7 @@ local function evaluate(receivers,indices,defenders,now)
                 receiverRejects[g.r.player.Name..'/'..mode]=why
                 if why=='NATIVE_SETTINGS_CHANGED_DURING_SOLVE' then return end
             end
+            end -- an exhausted/fully refreshed group needs no additional probe
         end
         if calls>=callLimit or attempts>=attemptLimit or os.clock()-started>=CFG.PlanSeconds then
             if pass<#plannerModes then limited=true end
@@ -3918,7 +4068,7 @@ requestJump=function(ball,now)
         assistance.jumpStatus='NORMAL_JUMP_UNAVAILABLE; RELEASE_IMMEDIATE';return
     end
     assistance.jumpEpoch=possession.epoch;assistance.jumpRequestedAt=now;assistance.jumpRequestObserved=false;assistance.jumpCount=assistance.jumpCount+1
-    assistance.jumpPlan={hum=hum,model=ball.model,epoch=possession.epoch,before=hum.Jump,owned=true,requested=now}
+    assistance.jumpPlan={hum=hum,model=ball.model,epoch=possession.epoch,before=hum.Jump,owned=true,requested=now,requestedFrame=motionFrame}
     if sequence then sequence.jumpAwaitAt=now end
     hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'
     if type(hum.ChangeState)=='function' then
@@ -3934,7 +4084,9 @@ updateJump=function(now)
     -- Leave the normal Jump flag available for one physics turn. This cleanup
     -- never authorizes, delays or retries a throw, even if no ascent occurs.
     if plan.hum.Jump~=true then plan.owned=false;assistance.jumpPlan=nil
-    elseif now>plan.requested or me.Character~=plan.model or stopped then cancelJump('JUMP_REQUEST_FINISHED') end
+    -- os.clock() advances within a Heartbeat: the later guide callback
+    -- must not clear a jump requested earlier in that same physics turn.
+    elseif motionFrame>plan.requestedFrame or me.Character~=plan.model or stopped then cancelJump('JUMP_REQUEST_FINISHED') end
 end
 
 drawGuide=function(now)
@@ -4563,9 +4715,21 @@ function controller.unified.AutoJumpAllowed(shot,receiver,hum)
     if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false,'BULLET_OR_SCREEN' end
     local u=shot.unified
     if not u or not u.Allowed or not u.Guard or not u.Guard.Allowed then return false,'NO_ADMITTED_NATIVE_WINDOW' end
-    if not hum or not ascentTime(hum) then return false,'JUMP_PHYSICS_UNVERIFIED' end
-    if hum.Sit or hum.PlatformStand or not hum:GetStateEnabled(Enum.HumanoidStateType.Jumping) then return false,'NORMAL_JUMP_UNAVAILABLE' end
-    return true,'FRESH_ADMITTED_NATIVE_WINDOW'
+    local _,root=body(me)
+    local ascent=hum and ascentTime(hum)
+    local detail={PhysicsKnown=ascent~=nil,AscentSeconds=ascent,Gravity=workspace.Gravity,
+        VerticalVelocity=root and root.AssemblyLinearVelocity.Y or nil}
+    if hum then
+        detail.Sit=hum.Sit;detail.PlatformStand=hum.PlatformStand;detail.Jump=hum.Jump
+        detail.JumpingEnabled=hum:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+        detail.FloorMaterial=tostring(hum.FloorMaterial)
+        local stateOK,state=pcall(function()return hum:GetState()end)
+        detail.State=stateOK and tostring(state) or 'UNAVAILABLE'
+        detail.UseJumpPower=hum.UseJumpPower;detail.JumpPower=hum.JumpPower;detail.JumpHeight=hum.JumpHeight
+    end
+    if not hum or not ascent then return false,'JUMP_PHYSICS_UNVERIFIED',detail end
+    if detail.Sit or detail.PlatformStand or not detail.JumpingEnabled then return false,'NORMAL_JUMP_UNAVAILABLE',detail end
+    return true,'FRESH_ADMITTED_NATIVE_WINDOW',detail
 end
 local function releaseNow(ball,selected,defenders,now,preJump)
     if not sequence or sequence.player~=selected.player or sequence.epoch~=possession.epoch then return end
@@ -4604,7 +4768,7 @@ local function releaseNow(ball,selected,defenders,now,preJump)
     local shot;shot,why,receipt.failure=solve(selected.player,selected.shot.variant or selected.shot.mode)
     if shot then receipt.shot=shot;receipt.stage='FINAL_TUPLE_NOT_GRADED';controller.bad.current.Final.Native=controller.bad:trajectory(shot) end
     if stopped or sequence~=activeSequence then return end
-    if not shot then controller.bad.current.Final.NativeFailure=why;setGate(why);return end
+    if not shot then controller.bad.current.Final.NativeFailure=why;controller.bad.current.Final.NativeFailureDetail=receipt.failure;setGate(why);return end
     if os.clock()-now>.28 then setGate('DECISION_STALE_AFTER_NATIVE_SOLVER'); return end
     if not readLines(os.clock()) then releaseChoice(); setGate(lines.status); return end
     local receiver,freshDefenders,changed=currentDefenders(selected.player,os.clock())
@@ -4714,6 +4878,12 @@ local function abortPreparedBurn(seq,reason)
     log('BURN_CANCEL',seq.player.Name..' '..reason..'; REPLAN_ALLOWED')
     cancelSequence(reason);releaseChoice();setGate(reason)
 end
+-- BEGIN RELEASE PIPELINE REPAIR
+function controller.unified.ReleaseDeferred(reason)
+    return reason=='NATIVE_FRAME_BUDGET' or reason=='QB_LAUNCH_POSE_CHANGED_REPLAN'
+        or reason=='DECISION_STALE_AFTER_NATIVE_SOLVER'
+end
+-- END RELEASE PIPELINE REPAIR
 local function driveSequence(now)
     local seq=sequence
     if not seq then return end
@@ -4733,12 +4903,26 @@ local function driveSequence(now)
             (assistance.jumpEpoch~=possession.epoch or now-assistance.jumpRequestedAt>=.25)
         if canRequest then
             local passed,prepared=releaseNow(ball,seq.selected,{},now,true)
-            local jumpAllowed,jumpReason=false,'PREJUMP_WINDOW_CHANGED'
-            if passed and not stopped and sequence==seq then jumpAllowed,jumpReason=controller.unified.AutoJumpAllowed(prepared,seq.selected.sample,ball.hum) end
-            if controller.bad.current and controller.bad.current.Final then controller.bad.current.Final.AutoJump={Allowed=jumpAllowed,Reason=jumpReason} end
+            local jumpAllowed,jumpReason,jumpDetails=false,'PREJUMP_WINDOW_CHANGED',nil
+            if passed and not stopped and sequence==seq then jumpAllowed,jumpReason,jumpDetails=controller.unified.AutoJumpAllowed(prepared,seq.selected.sample,ball.hum) end
+            if controller.bad.current and controller.bad.current.Final then controller.bad.current.Final.AutoJump={Allowed=jumpAllowed,Reason=jumpReason,Readiness=jumpDetails} end
             controller.bad:prejump(passed==true)
             if stopped or sequence~=seq then return end
-            if not passed then cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return end
+            if not passed then
+                if controller.unified.ReleaseDeferred(gate) then
+                    seq.preJumpDeferred=gate
+                    if controller.bad.current and controller.bad.current.PreJump then
+                        controller.bad.current.PreJump.Deferred=gate
+                        controller.bad.current.PreJump.Status='PREJUMP_DEFERRED'
+                    end
+                    setGate('PREJUMP_REPLAN')
+                    return -- no jump and no packet; retry fresh on the next callback
+                end
+                -- A fresh refusal invalidates this receiver's optimistic cache;
+                -- it must not repeatedly beat other current opportunities.
+                shotCache[seq.player]=nil;opportunities[seq.player]=nil
+                cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return
+            end
             if jumpAllowed then
                 seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
                 requestJump(ball,now)
@@ -4758,7 +4942,7 @@ local function driveSequence(now)
     releaseNow(ball,seq.selected,defenders,now)
     if stopped or sequence~=seq then return end
     if usedTools[ball.tool]==possession.epoch then sequence=nil;lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
-    elseif gate=='NATIVE_FRAME_BUDGET' or gate=='QB_LAUNCH_POSE_CHANGED_REPLAN' or gate=='DECISION_STALE_AFTER_NATIVE_SOLVER' then
+    elseif controller.unified.ReleaseDeferred(gate) then
         setGate('JUMP_FINAL_REPLAN') -- no request was sent; keep observed takeoff
     else
         local evidence=seq.blockEvidence
@@ -4899,7 +5083,7 @@ local function tick(now,cachedOnly)
         -- A later authoritative play transition or actual change of equipped
         -- ball/character permits a new attempt, including reuse of the same Tool.
         observePossession(now)
-        local evidence=controller.bad:pos(possession.epoch,now);if evidence then evidence.Settings=controller.unified.Settings()end
+        local evidence=controller.bad:pos(possession.epoch,now);if evidence then controller.bad:settings(controller.unified.Settings(),now)end
         local ball,why=ready()
         if not ball then resetFieldWait(); releaseChoice(); setGate(why); return end
         if not refreshNativeInputs() then resetFieldWait(); releaseChoice(); setGate('NATIVE_LEAD_CHANGED'); return end
@@ -5017,9 +5201,12 @@ local function tick(now,cachedOnly)
         -- The last candidate may differ from the winner; settle the actual shared
         -- native lock and final preview on the winner before any release.
         local final,failed,failure
-        if best.shot.mode=='Fit' or (best.shot.jumpBullet or best.shot.nativeCoverageJump) then
-            -- Reserve final calls for the candidate and fresh counterfactuals
-            -- (three for a league layer-window Fit). Avoid a redundant preview.
+        if throwing or best.shot.mode=='Fit' or (best.shot.jumpBullet or best.shot.nativeCoverageJump) then
+            -- The bounded cached tuple chooses/locks a candidate only. Automatic
+            -- releaseNow still solves the actual throw after current readiness,
+            -- context and possession checks; it never sends this cached tuple.
+            -- Save the duplicate native preview call for that fresh transaction.
+            -- Selection-only mode retains its native preview below.
             if lock(best.player) then final=best.shot else failed='NATIVE_LOCK_BUSY' end
         else final,failed,failure=solve(best.player,best.shot.variant or best.shot.mode) end
         if not final then

@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory() as folder:
     code=pre+'\nVector3={new=vec}\nlocal E=(function()\n'+engine+'\nend)()\nlocal B=(function()\n'+(R/'experimental/bad_play.lua').read_text()+'\nend)()\nlocal replay=(function()\n'+(R/'experimental/replay.lua').read_text()+'\nend)()\n'+r'''
 local count=0
 local function check(ok,label)count=count+1;assert(ok,label)end
-local b=B.new('CODEID','DIGEST');local e=E.new()
+local b=B.new('CODEID','DIGEST');b.compare=E.compare;local e=E.new()
 local wr={name='private_receiver_name',p=vec(0,3,40),v=vec(0,0,20),hum={WalkSpeed=20},observedSpeed=20}
 local function shot(t,variant)return{origin=vec(0,5,0),velocity=vec(0,14*t,(40+20*t)/t),arrival=vec(0,5,40+20*t),time=t,power=80,variant=variant,mode='Bullet',networkPing=.02,at=1}end
 local context={gravity=28,mode='TRUST',gain=20,endzone=false,OpenComfort=true,ComfortSeconds=.9,Guard={Allowed=true,Strict=true,Reason='CLEAR_NATIVE_WINDOW',Margin=45,Lane=45}}
@@ -26,6 +26,8 @@ end
 b:status(wr.name,'Fit','NOT_EVALUATED','GRADING_BUDGET')
 b:finish({player={Name=wr.name},shot=gentle},.009)
 check(b.profile.OverBudget==2,'per-grade soft budget overruns counted')
+local comparison=b.frame.Rows[b:token(wr.name)..'/QuickBullet'].SelectionComparison
+check(comparison.Preferred and comparison.Field=='ComfortDeficit','candidate comparison preserves the actual deciding score field')
 local row=b.frame.Rows[b:token(wr.name)..'/Fit'];check(row.Reason=='GRADING_BUDGET','budget skip remains unevaluated')
 check(row.Input==nil and row.Status=='NOT_EVALUATED','skip never fabricated into rejection')
 local snap=b.frame.Rows[b:token(wr.name)..'/SoftBullet']
@@ -33,14 +35,27 @@ check(snap.Input.Receiver.p[3]==40,'initial snapshot geometry')
 wr.p=vec(0,3,42)
 check(snap.Input.Receiver.p[3]==40,'snapshot independent of later actor movement')
 wr.p=vec(0,3,40)
-b:final(1,1.1,wr,{Plan='NORMAL'})
+b:settings({Risk='SAFE',Plan='NORMAL'},1)
+b:final(1,1.1,wr,{Risk='TRUST',Plan='NORMAL'})
 local final=shot(.9,'SoftBullet');e:evaluate(final,wr,{},context);b:grade(final,wr,{},context,e.config,.001)
 b.current.Final.Native=b:trajectory(final);b.current.Final.PlanAllowed=true
 b:sent('throw-1','API_ACCEPTED_UNCONFIRMED',1.2)
+b:settings({Risk='SAFE',Plan='SHORT'},1.3)
+check(b.current.Settings.Risk=='TRUST' and b.current.Settings.Plan=='NORMAL','release settings remain frozen after later UI changes')
+check(b.current.LatestSettings.Risk=='SAFE' and b.current.LatestSettings.Plan=='SHORT','post-release settings are retained with separate scope')
+check(b.current.SettingsScope=='FINAL_RELEASE_CONTEXT' and b.current.SettingsAt==1.1,'settings identify actual final attempt context')
+b:flag(1.4,true)
+local missed=b:report()
+check(missed.Flag.Kind=='MISSED' and missed.Flag.Selection=='CURRENT_POSSESSION','MISSED button provenance is explicit')
+check(missed.Flag.HasReleasedThrow and missed.Flag.PossessionId==b.current.Id,'MISSED after a release does not falsely imply no throw')
 b:begin(2,2,receivers,{'SoftBullet'},{},e.config,'TRUST','NORMAL')
 check(b:flag(2.1),'flag succeeds after planner advanced')
 local report=b:report();report.Version='MODEL_ONLY_TEST'
 check(report.Possession.Epoch==1,'flags prior attempted possession')
+check(#report.Possession.FinalAttempts==1 and report.Possession.AttemptCount==1,'flagging a closed released possession cannot duplicate its attempt')
+check(report.Flag.Kind=='BAD_THROW' and report.Flag.Selection=='LAST_SENT_WITHIN_45S','BAD THROW button and selected scope are explicit')
+check(report.Flag.Sequence==missed.Flag.Sequence+1 and missed.Flag.Kind=='MISSED','each flag is independent of later flags')
+check(report.Possession.Settings.Risk==report.Possession.Final.Settings.Risk,'export root settings agree with actual released attempt')
 check(report.Possession.Final.Input.Shot.time==.9,'actual final recalculation retained')
 check(report.Possession.Frames[1].Rows[b:token(wr.name)..'/SoftBullet'].Input.Shot.time==1,'planner tuple remains separate')
 check(report.CodeId=='CODEID' and report.EngineId=='DIGEST','code identity survives serialization copy')
@@ -78,6 +93,26 @@ local edgeReport=edge:report();edgeReport.Version='MODEL_ONLY_TEST'
 check(replay(edgeReport,E,'DIGEST').Complete,'boundary/flat classification and veto reproduce from actual serialized fields')
 for _,row in pairs(edgeReport.Possession.FirstPlan.Rows)do row.Result.Boundary.Projected=row.Result.Boundary.Projected+1 end
 check(not replay(edgeReport,E,'DIGEST').Complete,'corrupt boundary evidence is rejected by replay')
+-- Chronological attempts remain bounded; flagging doesn't freeze a live attempt.
+local attempts=B.new('CODEID','DIGEST')
+attempts:pos(1,1)
+for i=1,20 do
+ attempts:final(1,i,wr,{Risk='TRUST'},'Dime')
+ attempts:gate(i%2==0 and 'NATIVE_FRAME_BUDGET' or 'DEFENDER_INTERCEPTION_RISK')
+ attempts:prejump(false)
+end
+check(#attempts.current.FinalAttempts==16 and attempts.current.AttemptsDropped==4,'attempt history is bounded with explicit omissions')
+check(attempts.current.FinalAttempts[1].AttemptAt==5 and attempts.current.FinalAttempts[16].AttemptAt==20,'failed attempts remain chronological')
+check(attempts.current.FinalAttempts[16].Stage=='PREJUMP_DEFERRED','budget failure is recorded as scheduling rather than unsafe coverage')
+check(attempts.current.FinalAttempts[15].Gate=='DEFENDER_INTERCEPTION_RISK','actual safety refusal retains its reason')
+check(attempts.current.FinalAttempts[1].Input==nil,'attempt receipts avoid duplicating full scene histories')
+attempts:final(1,21,wr,{Risk='TRUST'},'Dime');attempts:gate('NATIVE_SOLVER_INVALID')
+attempts:flag(21.1,true)
+check(attempts:report().Possession.FinalAttempts[16].Stage=='FLAGGED_CURRENT_ATTEMPT','flag captures an uncompleted failed final attempt')
+check(attempts.current.AttemptCount==20,'flagging does not close or mutate the active attempt')
+attempts:sent('later','API_ACCEPTED_UNCONFIRMED',22)
+check(attempts.current.FinalAttempts[16].Stage=='REQUEST_ATTEMPTED','later actual send keeps its own completed attempt receipt')
+check(attempts:report().Possession.FinalAttempts[16].Stage=='FLAGGED_CURRENT_ATTEMPT','later activity does not rewrite pinned attempt history')
 -- Minimal test-only JSON encoder; runtime uses HttpService outside throw work.
 local function json(v)
  if v==nil then return 'null' end
