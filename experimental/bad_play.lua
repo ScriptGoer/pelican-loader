@@ -70,8 +70,8 @@ function B:status(name,variant,status,reason,shot)
     local row=self:row(name,variant);if row then row.Status=status;row.Reason=reason;if shot then row.Native=self:trajectory(shot)end;self.profile[reason or status]=(self.profile[reason or status] or 0)+1;self.profile.Skipped=self.profile.Skipped+1 end
 end
 function B:schedule(name,modes)for _,v in ipairs(modes)do local r=self:row(name,v);if r then r.NativeStatus='SCHEDULED_NOT_ATTEMPTED' end end end
-function B:native(name,variant,shot,why,invoked)
-    local row=self:row(name,variant);if row then row.NativeStatus=shot and 'SOLVED' or invoked==false and 'GENERATOR_REJECTED' or 'SOLVER_REJECTED';row.NativeReason=why;row.NativeInvoked=invoked;if shot then row.Native=self:trajectory(shot)end end
+function B:native(name,variant,shot,why,invoked,failure)
+    local row=self:row(name,variant);if row then row.NativeStatus=shot and 'SOLVED' or invoked==false and 'GENERATOR_REJECTED' or 'SOLVER_REJECTED';row.NativeReason=why;row.NativeInvoked=invoked;row.NativeFailure=copy(failure);if shot then row.Native=self:trajectory(shot)end end
 end
 function B:trajectory(shot)
     return {origin=vector(shot.origin),velocity=vector(shot.velocity),arrival=vector(shot.arrival),time=shot.time,
@@ -165,7 +165,7 @@ function B:flag(now,current)
     local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
     if current then p=self.current end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.9',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b3.10',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
         Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id

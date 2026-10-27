@@ -1,6 +1,6 @@
-# Pelican Auto QB — repaired experiment B3.9
+# Pelican Auto QB — repaired experiment B3.10
 
-B3.9 improves advisory movement-arrow scheduling and ground projection. Prior conservative non-Bullet Auto Jump, native risk ranking, report files and mobile controls remain. **Production main/V26.22 is unchanged.**
+B3.10 repairs rejected soft-Power fallback, restores trajectory-based elevated admission, compares a configured native loft option, and aligns non-Bullet deep QB jumps with actual throw permission. Prior diagnostics, movement advice and mobile controls remain. **Production main/V26.22 is unchanged.**
 
 Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 
@@ -8,7 +8,23 @@ Start Yuna with QB Aimbot ON, Mouse Aimbot OFF and Auto Throw Type ON. Run:
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-The loader pins `experimental-unified-b3.9`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.9` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+The loader pins `experimental-unified-b3.10`. X reloads the repair loader. Confirm `RELEASE_VERSION|experimental-unified-b3.10` in COPY. The existing confirmed-cleanup protocol prevents stacking with production/B. If auto-execute subsequently launches main, it replaces the experiment; update that auto-execute line or launch the experiment afterward. Execute the normal main loader to return to production.
+
+## B3.10 throw delivery and layered coverage
+
+The supplied B3.9 report replayed 37 captured evaluator/analytic-risk inputs. It records a 95-power Dime honoring +7.1 Y, an explicit `NO_STRICT_CLEAR_WINDOW` QB-jump skip, and opponent possession observed after receiver-route changes. It also repeatedly rejects soft Power candidates with `NATIVE_ARRIVAL_AIMPOINT_MISMATCH`. It is not a direct captured Bullet-miss calibration and does not establish receiver/QB fault or optimal lead changes.
+
+Soft native Power output that fails endpoint consistency now requests one bounded retry through the existing native Angle path, after the protected native controls have been restored. The rejected tuple never authorizes a packet; the retry must satisfy all original endpoint, power, flight, reach and interception checks. The global eight-native-calls-per-frame cap still applies. This closes an early-return path that previously prevented the Angle fallback from being tried. A synthetic inconsistent Power tuple now produces a checked roughly 63-power SoftBullet; live executor support remains unverified.
+
+`HIGH_SAFETY_OBSERVED` is a geometry label, not an unconditional Bullet-only command. A holding safety or an underneath linebacker must threaten the actual flight/arrival to veto a higher option. Conditional native receiver Jump still requires strict whole-path/arrival clearance and a current threatened ordinary-Bullet comparison. A genuinely strict safe Bullet still vetoes unnecessary receiver Jump. The old dropping-slant-only permission is removed; no additional catch-height offset is introduced. Native over-top interception, team/readiness, field/LOS and receiver-reach guards remain.
+
+ARC AUTO now also generates `LoftDime`, using the player's configured native Angle and configured Dime lead through the existing owned Angle transaction. The native solver derives its actual power/flight and its returned trajectory must pass all checks; configured angle is not assumed equal to returned angle. ARC OLD disables this additional candidate. This makes an actual higher native option available instead of requiring every Dime to use only the lowest derived angle. It is not a mandate to float passes to open players.
+
+For a contested or blocked ordinary candidate, missing current native Jump/configured-loft comparisons receive bounded same-receiver solve attempts before commitment. Existing native budgets apply; unavailable/unsafe options are recorded, never invented as safe. A strict currently admitted completion is not held for these comparisons. Native Jump still cannot be released without its real chest counterfactual. Fit remains a timing rescue or strict between-layers option; a late unsafe loft can provide a real timing-rescue comparison, solved freshly before final Fit release.
+
+Automatic **QB** jumps for admitted deep non-Bullets now use the same fresh native throw permission, including qualified TRUST/MOD windows. The extra strict-clearance/turn-only jump veto no longer turns an admitted deep pass into an immediate ground release. Normal jump availability/physics and the observed short offset still apply. Bullet variants still do not request QB jumps. Actual final safety checks may cancel a lost window; no promise about future receiver intent or game jump cooldown is made.
+
+BAD captures now retain native planner failure details plus the active soft control method and rejected-Power fallback evidence. For another issue: after a bad release use **QB → TOOLS → BAD THROW** before another throw; for a missed window use **MISSED while still holding the ball**. Send the new unique JSON (or COPY text) with a short label such as `Bullet miss`, `No QB jump`, or `Missed elevated window`. No manual measurements or lead guesses are needed. Every file is one flagged snapshot, and the plain filename remains only the latest alias.
 
 ## B3.9 movement advice
 
@@ -21,6 +37,8 @@ The PlayerGui ground arrow tries its normal length, half length and quarter leng
 Advisory future grades are excluded from BAD candidate/final-release capture, fixing a path where a forecast could overwrite release evidence. BAD settings now include movement-guide status, draw count and forecast-check count to distinguish missing forecasts from projection failures.
 
 ## B3.8 conservative Auto Jump
+
+**Historical policy, superseded by B3.10’s shared throw/jump permission.**
 
 Ordinary, soft, quick, zigzag and raised/conditional receiver-Jump Bullet variants never request a QB jump. They also bypass the automatic takeoff-offset wait, including when the QB is manually airborne. This changes automatic QB movement, not the receiver's configured catch target or native throw type.
 
@@ -141,7 +159,7 @@ Developing timing does not predict an unseen receiver input or promise that a di
 | EASE | OpenComfort ranking ON/OFF. Full-power comfort and HIGH safety proof remain independent. |
 | ARC AUTO / OLD | Existing verified native adaptive-angle request versus the native configured input; actual returned trajectory is still graded. |
 | HIGH | Conditional **receiver** native Jump type, using its own configured lead and fresh chest comparison. It does not toggle the QB's automatic deep jump. |
-| QB deep jump | Non-Bullet only; fresh strict native window, stable route and verified available normal jump. Otherwise skip auto jump and retain normal throw eligibility. Committed jumps keep observed timing/recovery. Final rechecks still cancel lost windows. |
+| QB deep jump | Deep non-Bullet: fresh admitted native throw window plus verified available normal jump. Qualified TRUST/MOD admission can jump too. Bullet variants stay grounded; final rechecks and observed timing/recovery remain. |
 | WR list / ANY-FRIENDS | The WR list toggles NORMAL/BLOCKED; ANY-FRIENDS changes actual receiver eligibility. Friends are verified asynchronously. Manual mag-trust markings are preserved for production but are not an active setting in B3. League keeps ANY and hides casual friendship controls. |
 | SCREEN | League-only explicit teammate/current-possession stationary behind-LOS exception; strict native Bullet and final checks remain. Inside PLAY, not always on-screen. |
 | PROFILE | CASUAL/LEAGUE override; AUTO's VIP text remains a private-server hint, not proof of league identity. |
@@ -190,6 +208,6 @@ The regression set compares B3 with real V26.22 and original B. It covers comfor
 
 Historical replay uses the explicitly selected local Git ref, checks its original fingerprints and performs no network fetch or report-supplied code execution. The historical CLI test reproduces a synthetic B3 model report against the original source; it is not a replay claim about the missing live uploads.
 
-The completed validation run passed **991 assertions/scenes** and native Luau compilation of all **27** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
+The completed validation run passed **1,026 assertions/scenes** and native Luau compilation of all **28** experimental/test Lua modules. [REPAIR_VALIDATION.md](REPAIR_VALIDATION.md) records the suite breakdown and replay checks.
 
 **Remaining uncertainty:** live completion/interception rates, correct inherited catch/reach boundaries, current paid-build match, actual server ball agreement, human route intent, and iPhone latency/thermals. No live throw, chat, currency action or private cloud-data write was performed. Passing automated tests establishes these local contracts, not gameplay improvement.

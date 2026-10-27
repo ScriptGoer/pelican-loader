@@ -36,7 +36,7 @@ local low=request(c,t)
 check(low and low.reason=='LOW_CLEAR_LANE' and low.requested<45,'clear lane chooses computed lower angle instead of repeating 45')
 local varied=false;local first
 for _,r in ipairs(Mock.nativeSolveHistory or {}) do
-    if r.mode=='Dime' then
+    if r.mode=='Dime' and r.input<45 then -- configured-angle alternative is tested separately
         local angle=math.deg(math.atan(r.velocity.Y/Vector3.new(r.velocity.X,0,r.velocity.Z).Magnitude))
         check(angle<45 and r.manualType=='Angle','actual native Dime velocity follows lower requested angle')
         varied=varied or first and math.abs(angle-first)>.01;first=first or angle
@@ -79,7 +79,9 @@ for _,kind in ipairs({'PREVENT','CLOSE_CB','AFK','BLACKLIST','NO_SAFE_WINDOW'}) 
     elseif kind=='NO_SAFE_WINDOW' then t.dr.Position=t.ar.Position;t.dr.AssemblyLinearVelocity=t.ar.AssemblyLinearVelocity
     end
     c=t.run();if kind=='BLACKLIST' then c.SetBlacklisted(t.a,true) end;t.steps(20)
-    check(#t.requests==0,'adaptive angle never forces an unsafe/unqualified request: '..kind)
+    if kind=='CLOSE_CB' then
+        check(#t.requests==1 and c.bad.current.Final.Result.Guard.Strict,'a configured-angle native alternative can clear underneath coverage under strict guards')
+    else check(#t.requests==0,'adaptive angle never forces an unsafe/unqualified request: '..kind)end
     check(c.Stop('TEST'),'safety cleanup '..kind)
 end
 

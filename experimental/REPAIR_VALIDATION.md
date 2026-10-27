@@ -1,4 +1,4 @@
-# B3.9 repair validation
+# B3.10 repair validation
 
 Production comparison: `main` at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95` (V26.22).
 Original engine comparison: `4a4689b`; diagnostics-only B2: `614550d`.
@@ -7,13 +7,13 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 
 | Suite | Checks passed |
 | --- | ---: |
-| Actual repaired-controller/native-shaped runtime contracts | 144 |
+| Actual repaired-controller/native-shaped runtime contracts | 146 |
 | Comparative V26.22 / Build B / B3 constructed scenes | 77 |
-| Source isolation, solver preservation and deterministic generation | 69 |
+| Source isolation, solver preservation and deterministic generation | 70 |
 | BAD report retention, privacy and replay | 24 |
-| Adaptive native angle and error cleanup | 95 |
+| Adaptive native angle and error cleanup | 96 |
 | Friends filter | 67 |
-| Conditional native receiver Jump | 42 |
+| Conditional native receiver Jump | 43 |
 | Shared casual/league coverage | 42 |
 | League screens, profiles, UI and cleanup | 106 |
 | Unchanged production TRUST burn regression | 51 |
@@ -22,11 +22,16 @@ The repair modifies only `experimental/`, its build/replay scripts, and `tests/e
 | Sparse replication and low placement comparisons | 17 |
 | Jump state machine and coverage-label regressions | 19 |
 | Native exposure versus catch-height ranking | 24 |
-| Conservative Auto Jump policy | 22 |
+| Admitted Auto Jump policy | 22 |
 | Movement-guide scheduling, projection and evidence | 18 |
-| **Total asserted checks/scenes** | **991** |
+| Soft Power fallback, native loft and layered coverage | 30 |
+| **Total asserted checks/scenes** | **1,026** |
 
 Additional validation:
+
+- B3.10 reproduced 37 captured B3.9 evaluator/analytic-risk inputs from the private supplied report. No raw telemetry is published. The report identifies a Dime ground-release skip and rejected soft candidates; it does not prove causes of uncaptured Bullet misses or establish an optimal lead.
+- Thirty new checks compare old/current controllers in a layered coverage case with real safety reads enabled (old refuses; current releases a strict elevated native path), exercise an inconsistent Power tuple recovering to a checked lower-power Bullet, validate native configured-angle/lead preservation and restoration, and require actual chest-threat proof for strict receiver Jump across SAFE/MOD/TRUST. Existing jump tests now require an admitted contested deep Dime to jump rather than take the old ground fallback.
+- Angle tests distinguish adaptive native requests from the new configured-angle alternative. The old CLOSE_CB fixture now legitimately clears via a strict elevated native path instead of requiring zero requests. The Fit fixture now proves a fresh late configured-loft timing rescue; direct two-counterfactual layered admission remains tested separately. This changes scenario expectations to the explicit new policy, not a claim of live completion.
 
 - B3.9 compares the actual B3.8/current controllers: covered manual paths now queue advice; a Fit selection can reuse a valid fresh blocked Bullet to forecast clear lateral room. Projection shortens near the LOS, stale/disabled advice hides, no native solve or packet is added, and advisory grades preserve sentinel final-release evidence. Eighteen assertions cover these contracts. Actual iPhone camera visibility and prediction usefulness remain unverified.
 
@@ -50,8 +55,8 @@ Additional validation:
 - B3.1 reduced reproductions cover flattened Fit/Dime admission, strict lower-power passes, genuine elevated/native deep windows, the boundary-clamp continuation mismatch, inward turns, unchanged configured lead allowance, and an evaluator veto arising only during final release. Boundary evidence round-trips through replay and corruption fails. The supplied live originals became unavailable after a workspace reset, so their complete replay is explicitly outstanding.
 - Historical source selection through `--ref experimental-unified-b3` reproduces a synthetic model report against the original published B3 fingerprints without network access.
 
-- All 27 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
-- An actual controller-generated synthetic BAD JSON reproduces 29 evaluations and 29 analytic risk grades. Deliberately corrupted risk, missing replay inputs and wrong-build fingerprints fail with nonzero exit status.
+- All 28 experimental/test Lua modules compile with native Luau compiler source `74f768309c380d40601b28c4c4cdda27da415cef`.
+- An actual controller-generated synthetic BAD JSON reproduces 32 evaluations and 32 analytic risk grades. Deliberately corrupted risk, missing replay inputs and wrong-build fingerprints fail with nonzero exit status.
 - The original Build B accepts five constructed no-trailing-advantage scenes that the preserved V26.22 guards reject. These demonstrate a code-level admission difference; they do not establish the cause of a specific live interception.
 - A real mocked sampler approaches six yards diagonally, briefly holds the proven developing opportunity, then releases after straightening before the continuation expires. A closing opportunity cancels the hold; this is not a universal release timer.
 - Deliberately slow grading still examines all fresh cached alternatives. Native planning remains capped by the existing time/count limits. Local Lua-table-vector measurements for a three-defender grade were about 1.7–3.2 ms in original B versus 0.1–0.4 ms in B3, including its analytic grade, ranking and capture. Native solver and iPhone costs remain unverified.

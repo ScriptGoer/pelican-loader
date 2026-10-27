@@ -203,13 +203,14 @@ local function setup(options)
             power=shot.power or velocity.Magnitude
             aim=shot.aimpoint or origin+velocity*t-Vector3.new(0,14*t*t,0)
         end
+        if options.powerEndpointMismatch and q.ManualType=='Power' then aim=aim+Vector3.new(8,0,0) end -- synthetic inconsistent native Power tuple
         if options.badTuple then velocity=Vector3.new(0/0,0,0) end
         if options.preVerticalAimpoint and options.nativePower and not options.modeShots then aim=aim-Vector3.new(0,lift,0) end
         Mock.lastMode,Mock.lastVelocity,Mock.lastOrigin,Mock.lastTime=mode,velocity,origin,t
         Mock.lastAimpoint,Mock.lastPower=aim,power
         if not Mock.inNativePreview then
             Mock.nativeSolveHistory=Mock.nativeSolveHistory or {}
-            Mock.nativeSolveHistory[#Mock.nativeSolveHistory+1]={mode=mode,target=model,at=Mock.time,time=t,power=power,
+            Mock.nativeSolveHistory[#Mock.nativeSolveHistory+1]={mode=mode,target=model,at=Mock.time,time=t,power=power,input=angle,
                 origin=origin,velocity=velocity,aimpoint=aim,lead=selectedLead,manualType=q.ManualType}
         end
         if options.duringSolve then options.duringSolve() end

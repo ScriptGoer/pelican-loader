@@ -21,27 +21,27 @@ check((Mock.jumpCount or 0)==0,'no automatic QB jump for deep Bullet')
 check(not p.JumpObservedDelay and not c.bad.current.PreJump,'Bullet has no jump preflight or takeoff wait')
 check(c.Stop('BULLET_TEST'),'Bullet cleanup')
 t,c,p=scene('Dime',true)
-check(p and p.Mode=='Dime' and #t.requests==1,'admitted TRUST Dime releases when jump confidence is insufficient')
-check((Mock.jumpCount or 0)==0 and t.requests[1].qbVy==0,'contested Dime does not auto jump or wait for takeoff')
-check(c.bad.current.PreJump.AutoJump.Allowed==false and c.bad.current.PreJump.AutoJump.Reason=='NO_STRICT_CLEAR_WINDOW','BAD evidence records why jump was skipped separately from throw permission')
+check(p and p.Mode=='Dime' and #t.requests==1,'admitted TRUST Dime remains eligible through ordinary jump preparation')
+check((Mock.jumpCount or 0)==1 and t.requests[1].qbVy>0,'admitted contested Dime jumps before releasing instead of taking the ground fallback')
+check(c.bad.current.PreJump.AutoJump.Allowed==true and c.bad.current.PreJump.AutoJump.Reason=='FRESH_ADMITTED_NATIVE_WINDOW','BAD evidence records why jump was skipped separately from throw permission')
 check(c.Stop('CONTEST_TEST'),'contest cleanup')
 t,c,p=scene('Dime',false)
 check(p and p.Mode=='Dime' and (Mock.jumpCount or 0)==1,'strict clear native Dime keeps one ordinary auto jump')
 check(p.JumpObservedDelay>=.075 and p.JumpObservedDelay<.12 and t.requests[1].qbVy>0,'eligible non-Bullet keeps observed short-offset ascending release')
-check(c.bad.current.PreJump.AutoJump.Allowed and c.bad.current.PreJump.AutoJump.Reason=='FRESH_STRICT_NATIVE_WINDOW','jump authorization proof recorded')
+check(c.bad.current.PreJump.AutoJump.Allowed and c.bad.current.PreJump.AutoJump.Reason=='FRESH_ADMITTED_NATIVE_WINDOW','jump authorization proof recorded')
 local policy=c.unified.AutoJumpAllowed
 for _,shot in ipairs({{mode='Bullet'},{mode='Bullet',softBullet=true},{mode='Bullet',jumpBullet=true},{mode='Jump',nativeCoverageJump=true},{mode='Dime',screen=true}})do
  shot.unified={Allowed=true,Guard={Strict=true}}
  check(not policy(shot,{}),'all Bullet and screen variants excluded even with a strict window')
 end
-local shot={mode='Dime',unified={Allowed=true,Guard={Strict=true}}}
-check(not policy(shot,{oscillation=true}),'oscillating receiver cannot authorize a fresh auto jump')
-check(not policy(shot,{routeTurn=.5}),'turning receiver cannot authorize a fresh auto jump')
+local shot={mode='Dime',unified={Allowed=true,Guard={Allowed=true,Strict=true}}}
+check(policy(shot,{oscillation=true},Mock.qhum),'jump-only oscillation veto cannot contradict an admitted actual throw')
+check(policy(shot,{routeTurn=.5},Mock.qhum),'jump-only turn limit cannot contradict an admitted actual throw')
 shot.unified.Developing={Seconds=.18}
-check(not policy(shot,{}),'developing prediction cannot authorize a fresh auto jump')
+check(policy(shot,{},Mock.qhum),'a fully admitted actual throw is not confused with forecast-only permission')
 shot.unified.Developing=nil
 check(not policy(shot,{},nil),'unverified normal jump physics cannot authorize auto jump')
 t.options.jumpDisabled=true
 check(not policy(shot,{},Mock.qhum),'disabled normal jump skips auto jump')
 check(c.Stop('CLEAR_TEST'),'clear-window cleanup')
-print('PASS conservative Auto Jump policy checks',checks,'(synthetic; no certainty about future gameplay)')
+print('PASS admitted Auto Jump policy checks',checks,'(synthetic; no certainty about future gameplay)')

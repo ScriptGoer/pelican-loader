@@ -200,7 +200,7 @@ do
  end
  check(readfile(firstFile)==firstContents,'four flags do not overwrite the first report')
  check(#t.env.PELICAN_FF3_BAD_PLAY_ARCHIVE==4,'session archive retains all four flags')
- check(c.bad:report().Version=='experimental-unified-b3.9','report version matches actual published build')
+ check(c.bad:report().Version=='experimental-unified-b3.10','report version matches actual published build')
  setclipboard=savedCopy
 
  check(c.Stop('CAPTURE'),'capture cleanup')

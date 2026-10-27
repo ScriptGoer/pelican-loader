@@ -6,7 +6,7 @@ def instrument(s,root):
         nonlocal s
         assert s.count(old)==1,(old[:90],s.count(old));s=s.replace(old,new,1)
     module=(root/'experimental/bad_play.lua').read_text()
-    inputs=['experimental/decision_engine.lua','experimental/bad_play.lua','experimental/compact_hud.lua','experimental/oscillation.lua','experimental/presentation.lua','scripts/build_experimental.py','scripts/instrument_bad_play.py','scripts/build_guard_replay.py','scripts/repair_coverage.py','scripts/repair_guide.py','games/ff3/auto_qb.lua']
+    inputs=['experimental/decision_engine.lua','experimental/bad_play.lua','experimental/compact_hud.lua','experimental/oscillation.lua','experimental/presentation.lua','scripts/build_experimental.py','scripts/instrument_bad_play.py','scripts/build_guard_replay.py','scripts/repair_coverage.py','scripts/repair_guide.py','scripts/repair_throw_policy.py','games/ff3/auto_qb.lua']
     code=hashlib.sha256(b''.join((root/p).read_bytes() for p in inputs)).hexdigest()
     engine_id=hashlib.sha256((root/'experimental/decision_engine.lua').read_bytes()).hexdigest()
     one('controller.unified=Unified.new((context.FF3Options or {}).Unified)',f"controller.unified=Unified.new((context.FF3Options or {{}}).Unified)\ncontroller.bad=(function()\n{module}\nend)().new('{code}','{engine_id}')\ncontroller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT")
@@ -23,14 +23,14 @@ def instrument(s,root):
         SafetyReads=controller.safety.enabled,CoverageWindows=controller.coverageWindows.enabled,JumpDelaySeconds=controller.jumpTiming.delay,
         MovementGuide={Enabled=ff3Options.MovementGuide~=false,Status=controller.groundGuide.status,Draws=controller.groundGuide.draws,Checks=assistance.guideChecks},
         MinDownfieldYards=CFG.MinDownfieldYards,WorldGravity=workspace.Gravity,Unified=controller.unified.config,
-        CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,MinPower=touch.min,FullPowerYards=touch.full},
+        CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,MinPower=touch.min,FullPowerYards=touch.full,Method=touch.method,MethodReason=touch.methodReason,PowerFallback=touch.powerFallback},
         Leads=controller.receiverEvidence.ReadSettings(),NativeContext=controller.receiverEvidence.NativeContext(),
         Field={LOS=controller.history.Vector(lines.los),Forward=controller.history.Vector(lines.forward),GoalToGo=lines.goalToGo,Generation=lines.generation,Status=lines.status}}
 end
 '''
     one('local function evaluate(receivers,indices,defenders,now)', settings+'local function evaluate(receivers,indices,defenders,now)\n    controller.bad:begin(possession.epoch,now,receivers,plannerModes,defenders,controller.unified.config,riskPolicy.mode,controller.passPlan.mode)\n    controller.bad.frame.Settings=controller.unified.Settings()')
     one('    local calls,started,limited=0,os.clock(),false','    for _,g in ipairs(groups)do controller.bad:schedule(g.r.player.Name,plannerModes)end\n    local calls,started,limited=0,os.clock(),false')
-    one('local shot,why=solve(g.r.player,mode);calls=calls+(frameCalls-beforeCalls);attempts=attempts+1','local shot,why=solve(g.r.player,mode);calls=calls+(frameCalls-beforeCalls);attempts=attempts+1\n            controller.bad:native(g.r.player.Name,mode,shot,why,frameCalls>beforeCalls)')
+    one('local shot,why=solve(g.r.player,mode);calls=calls+(frameCalls-beforeCalls);attempts=attempts+1','local shot,why,nativeFailure=solve(g.r.player,mode);calls=calls+(frameCalls-beforeCalls);attempts=attempts+1\n            controller.bad:native(g.r.player.Name,mode,shot,why,frameCalls>beforeCalls,nativeFailure)')
     one('if limited then planDeferred=planDeferred+1 end','controller.bad.frame.NativeLimited=limited\n    if limited then planDeferred=planDeferred+1 end')
     one("else receiverRejects[r.player.Name..'/'..mode]=rejection end\n            end\n        end", "else controller.bad:status(r.player.Name,mode,'READINESS_REJECTED',rejection,shot);receiverRejects[r.player.Name..'/'..mode]=rejection end\n            else controller.bad:status(r.player.Name,mode,'NOT_EVALUATED',shot and 'STALE_NATIVE_TUPLE' or 'NO_NATIVE_TUPLE',shot)\n            end\n        end")
     one('    return best\nend\n-- Advisory only:', '    controller.bad:finish(best,os.clock()-started)\n    return best\nend\n-- Advisory only:')
@@ -117,7 +117,7 @@ controller.presentation:start(me)
     one('        receiverButton.Visible=expanded and not league;awayButton.Visible=not league', '        receiverButton.Visible=expanded and not league;awayButton.Visible=expanded and not league')
     one('        controller.league.screenButton.Visible=league;controller.league.profileButton.Visible=expanded','        controller.league.screenButton.Visible=expanded and league;controller.league.profileButton.Visible=expanded')
     one("        if not expanded or league then controller.receiverEvidence.panel.Visible=false end", "        controller.badButton.Visible=expanded;controller.badCurrentButton.Visible=expanded;controller.unified.easeButton.Visible=expanded\n        controller.mag.button.Visible=false\n        controller.jumpBullet.button.Visible=expanded and controller.nativeJump.supported and not league\n        controller.jumpBullet.button.Text=controller.nativeJump.enabled and 'HIGH ON' or 'HIGH OFF'\n        status.Text=expanded and gate:gsub('_',' '):sub(1,24) or 'QB'\n        if expanded then status.Size=UDim2.fromOffset(166,22);status.Position=UDim2.new(1,-194,0,40)else status.Size=UDim2.fromOffset(54,22);status.Position=UDim2.new(1,-82,0,40)end\n        if not expanded or league then controller.receiverEvidence.panel.Visible=false end")
-    one("'RELEASE_VERSION|experimental-unified-b3.9'", "'RELEASE_VERSION|experimental-unified-b3.9','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS'")
+    one("'RELEASE_VERSION|experimental-unified-b3.10'", "'RELEASE_VERSION|experimental-unified-b3.10','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|FRESH_V26_22_ADMISSION; ORDERED_COMFORT_COMPONENTS; NO_SIMULATED_CONTEST_RELIEF; NO_THREE_MS_GRADING_OMISSIONS'")
 
     one("'BAD_PLAY_CODE_ID|'..controller.bad.CodeId", "'BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus)")
 

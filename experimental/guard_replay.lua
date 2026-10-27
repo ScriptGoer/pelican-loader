@@ -128,7 +128,7 @@ function riskPolicy.BurnFinish(shot)
     local b=shot.trustBurn
     if not b then return end
     local p=riskPolicy.profiles.TRUST
-    b.Reason=b.Blocked or (shot.safetyOverTop or shot.safetyRead and shot.safetyRead.High) and 'SAFETY_OVER_TOP'
+    b.Reason=b.Blocked or shot.safetyOverTop and 'SAFETY_OVER_TOP'
         or (shot.routeLateral or math.huge)>p.lateral and 'ROUTE_CORRECTION'
         or (shot.receiverTurn or 1)>p.turn and 'ROUTE_UNSTABLE'
         or (shot.receiverETA or math.huge)>shot.time+p.arrivalSlack and 'RECEIVER_LATE'
@@ -221,7 +221,7 @@ local function risk(shot,receiver,defenders)
         if pathClearance<laneMargin then laneMargin=pathClearance;shot.laneDB=d.name;shot.laneActor=d end
     end
     if read then
-        read.State=read.High and 'SAFETY_HIGH_BULLET_ONLY' or read.Contested and 'DROPPING_SLANT_CONTEST'
+        read.State=read.High and 'HIGH_SAFETY_OBSERVED' or read.Contested and 'DROPPING_SLANT_CONTEST'
             or read.Dropping and 'SAFETY_FLOATING_AUTO_ARC' or 'NO_HIGH_SAFETY'
     end
     shot.coverageLayers=layers

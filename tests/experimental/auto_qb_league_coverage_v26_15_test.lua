@@ -13,14 +13,14 @@ local function scene(profile)
 end
 local t=scene();local c=t.run();local max=t.steps(20);local p=t.payload()
 if not p then print(c.GetReport()) end
-check(p and p.Mode=='Fit' and p.FitReason=='COVERAGE_WINDOW_BETWEEN_LAYERS','actual native Fit can thread under/deep layers when its own trajectory is safe')
-check(p.FitComparison=='Bullet' and p.FitSecondComparison=='Dime','actual release retains two separate alternative-path proofs')
+check(p and p.Mode=='Fit' and p.FitReason=='TIMING_RESCUE','actual native Fit threads the strict window before the configured loft alternative is intercepted')
+check(p.FitComparison=='LoftDime' and p.FitSecondComparison==nil,'actual release retains the proven late native loft counterfactual')
 check(p.Margin>=6 and p.Lane>=4 and p.CoverageLayers.Underneath==0 and p.CoverageLayers.Deeper>=2,'safe Fit clears underneath threats; opponent depth alone does not label active coverage')
 check(math.abs(p.Power-95)<1e-7 and p.Lead[1]==6 and p.Lead[2]==8,'native Fit keeps its real low-branch power and configured lead')
-check(max<=8 and #t.requests==1,'three final native calls stay within eight per frame')
+check(max<=8 and #t.requests==1,'fresh comparison and final native calls stay within eight per frame')
 local n=#Mock.nativeSolveHistory
-check(Mock.nativeSolveHistory[n].mode=='Fit' and Mock.nativeSolveHistory[n-1].mode=='Dime' and Mock.nativeSolveHistory[n-2].mode=='Bullet','fresh Bullet then Dime then actual Fit solve in final release')
-check(Mock.nativeSolveHistory[n].at==Mock.nativeSolveHistory[n-2].at,'all three final comparisons share the same modeled physics frame')
+check(Mock.nativeSolveHistory[n].mode=='Fit' and Mock.nativeSolveHistory[n-1].mode=='Dime','fresh configured Dime comparison then actual Fit solve in final release')
+check(Mock.nativeSolveHistory[n].at==Mock.nativeSolveHistory[n-1].at,'final comparison and actual Fit share the same modeled physics frame')
 check(c.Stop('WINDOW'),'coverage-window cleanup')
 -- This broadened Fit reason is league-only; previous casual timing rule remains.
 t=scene('CASUAL');c=t.run();t.steps(20);p=t.payload()
@@ -43,7 +43,7 @@ for _,kind in ipairs({'SAFETY_CLOSES','LANE_DEFENDER','ALTERNATIVES_OPEN','RECEI
     t=scene();c=t.run();local changed=false
     if kind=='DIME_UNSUPPORTED' then t.options.nativeModes={Bullet=true,Fit=true,Jump=true} end
     t.options.duringSolve=function()
-        if not changed and not Mock.inNativePreview and Mock.lastMode=='Bullet' and c.GetReport():find('RELEASE_PREPARED|true',1,true) then
+        if not changed and not Mock.inNativePreview and Mock.lastMode=='Dime' and c.GetReport():find('RELEASE_PREPARED|true',1,true) then
             changed=true
             if kind=='SAFETY_CLOSES' then t.s1.Position=t.ar.Position
             elseif kind=='LANE_DEFENDER' then t.dr.Position=Vector3.new(0,6,60)
