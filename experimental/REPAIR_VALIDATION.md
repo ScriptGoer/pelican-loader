@@ -1,4 +1,16 @@
-# B4.1 validation
+# B4.2 validation
+
+**Passed:** the retained experimental/feature/replay/privacy/production differential suites, 27 new QB-acquisition guide-readiness checks, 70 source/isolation contracts, deterministic generation and native compilation of 35 modules.
+
+`guide_readiness.lua` uses actual source-shaped native output and the complete controller. Published B4.1 crashes at the reported numeric coverage comparison after the player equips the ball, with zero graded trajectories/packets. B4.2 refuses those raw guide candidates without fabricated coverage, stays alive, recovers in the same possession and sends one freshly validated request when output becomes reachable. It checks current reach, raw primary/cache refusal, the explicit missing-grade guard reason, no-defender/infinite-ETA behavior, native cap, settings restoration and cleanup. The existing 18 guide checks still validate usable advice, projection, current evidence isolation, no extra native solves/packets and cleanup.
+
+The warning from the immutable B4.1 comparison is an intentional reproduction. Current-build crash/stop is an assertion failure. Tests do not simulate a server safety or prove live catch success. All previous strict Bullet/flat-path rules and deep elevated-Dime behavior remain; production main files are byte-identical. Live B4.2 is unverified.
+
+Run the B4 commands below; `test_engine.py` includes the new `guide_readiness.lua` suite. See [REWRITE_AUDIT.md](REWRITE_AUDIT.md) for the exact causal chain and limits.
+
+---
+
+# Historical B4.1 validation
 
 The new B4 report matches its immutable B4 source: 35 evaluator and 35 analytic-risk replays. It establishes an admitted threatened Bullet and a missing ordinary-Dime comparison, not the success of an unthrown Dime.
 

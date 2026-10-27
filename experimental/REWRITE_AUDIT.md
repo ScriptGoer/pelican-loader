@@ -1,4 +1,18 @@
-# B4.1 Bullet/Dime follow-up
+# B4.2 QB-acquisition guide crash
+
+The supplied B4.1 text report identifies `STOP_REASON|GUIDE_RUNTIME_ERROR`, a missing-number comparison in `BaselineThrowable`, zero coverage grades and zero automatic attempts. Its cached native Bullet/Dime/Fit tuples had failed receiver reach before risk grading. With no valid candidate, the manual fallback queued movement advice. The guide selected a raw cached Bullet/Dime using only its mode/time/age and called the coverage guard without numeric margin/lane values. That advisory error stopped the controller. LOS and ground readiness had already succeeded.
+
+B4.2 fixes the data boundary. Guide sources require a complete graded receipt, matching character/possession/field cache and current receiver reach. The reach probe does not mutate actual cached release evidence. Both the baseline coverage predicate and public guard explicitly refuse incomplete numeric coverage. They do not insert zero/safe values. A legitimate infinite defender ETA remains valid. Advisory continuation preserves effective native vertical lead, including a flattened Dime’s strict-flat classification.
+
+The existing stop-and-preserve policy for actual unexpected errors is retained. This fix does not suppress errors or loosen receiver reach, coverage, native consistency or throw admission. Movement advice adds no native solve or release authority.
+
+A full-controller test starts before QB acquisition, equips the ball with finite native tuples outside the receiver’s modeled reach and reproduces the immutable B4.1 crash. The repair remains alive, produces no unsafe packet/advice and later releases one freshly checked throw from the same possession when supported output becomes reachable. It also verifies no-defender/infinite-ETA behavior, restored native controls and cleanup. All 27 new checks and the retained suites pass; 35 modules compile natively.
+
+The report does not include enough geometry to establish why every reach check failed, or whether a completed pass would have prevented the user-reported safety. Live B4.2 behavior remains unverified. Production main/V26.22 is unchanged.
+
+---
+
+# Historical B4.1 Bullet/Dime follow-up
 
 The supplied B4 BAD_THROW report reproduces 35 evaluator inputs and 35 analytic-risk inputs against the exact B4 tag. It records a 95-power ordinary Bullet at approximately 8.98 degrees and 1.057 seconds, followed by observed opponent possession. The intended target was a teammate.
 

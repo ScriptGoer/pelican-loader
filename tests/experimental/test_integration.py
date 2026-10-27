@@ -37,7 +37,7 @@ expected=full[full.index('local function risk(shot,receiver,defenders)'):]
 check(expected==repair,'original interception math retained; safety-role vetoes and coverage labels explicitly repaired')
 expected=block(b,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.').replace('if shot.softBullet or shot.screen then return false end -- softened close pass or deliberate stationary screen',"if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false end -- Bullet variants never request a QB jump")
 check(expected==block(e,'local function deepThrow(shot,hum)','-- Request the ordinary jump only.'),'native deep timing classification preserved outside explicit Bullet jump exclusion')
-for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b4.1"']:
+for token in ['local KEY = "PELICAN_LOADER_SESSION"','/repair-unified-qb/experimental/loader.lua','Path = "experimental/auto_qb.lua"','Ref = "experimental-unified-b4.2"']:
  check(token in loader,'isolated loader ownership/ref '+token)
 for token in ["'NATIVE_SETTINGS_CHANGED_DURING_SOLVE'","'DECISION_STALE_AFTER_NATIVE_SOLVER'","'QB_LAUNCH_POSE_CHANGED_REPLAN'","'REQUEST_ALREADY_ATTEMPTED'","usedTools[ball.tool]=possession.epoch; attempts=attempts+1","risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)","if frameCalls>=8 then","local fitVariant=selected.shot.fitAlternativeVariant","shot.powerAllowed=touch.fullAllowed(shot)","controller.bad:released(shot)","DEVELOPING_ROUTE_CONTINUATION"]:
  check(token in e,'preserved live contract '+token)

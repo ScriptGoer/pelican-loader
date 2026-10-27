@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b4.1): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b4.2): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -394,7 +394,7 @@ function B:flag(now,current)
     self.flagSerial=(self.flagSerial or 0)+1;local wall=os.time()
     local snapshot=copy(p)
     if p.Final and not p.Final.ReceiptArchived then appendAttempt(snapshot,attemptReceipt(p.Final,'FLAGGED_CURRENT_ATTEMPT')) end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4.1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4.2',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
         Flag={Kind=current and 'MISSED' or 'BAD_THROW',At=now,WallTime=wall,Sequence=self.flagSerial,Selection=selection,
             PossessionId=p.Id,Epoch=p.Epoch,HasReleasedThrow=p.SentAt~=nil,SecondsSinceRelease=p.SentAt and now-p.SentAt or nil},
         Possession=snapshot,Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
@@ -413,7 +413,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('cd60e181d4204cbb15c21dcbe5246fd3f7cc620da3444c62a5a9f405fec3c246','0d7caab82a69230ad7bb03f4777a4b97180162cfa89b46eaa275ba4139f40e3d')
+end)().new('2b48cea50eb0cb9bc8f6f10ea59da858173906c6d40666679246203628616895','0d7caab82a69230ad7bb03f4777a4b97180162cfa89b46eaa275ba4139f40e3d')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -818,7 +818,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b4.1',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b4.2',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1870,7 +1870,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b4.1','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|EXPLICIT_ADMISSION_CERTIFICATES; CONFIGURED_LOFT_STRICT; NATIVE_EXPOSURE_AND_COMFORT_ORDER; NO_SIMULATED_CONTEST_RELIEF','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b4.2','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|EXPLICIT_ADMISSION_CERTIFICATES; CONFIGURED_LOFT_STRICT; NATIVE_EXPOSURE_AND_COMFORT_ORDER; NO_SIMULATED_CONTEST_RELIEF','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -3238,7 +3238,12 @@ function controller.unified.BaselineCoverage(shot,s,defenders)
         and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane or false
     controller.passPlan.assess(shot,s)
 end
+function controller.unified.CoverageReady(shot)
+    return type(shot)=='table' and finite(shot.margin) and finite(shot.lane)
+        and finite(shot.time) and shot.time>0
+end
 function controller.unified.BaselineThrowable(shot)
+    if not controller.unified.CoverageReady(shot) then return false end
     if shot.planAllowed==false then return false end
     if shot.releaseBlocked then return false end
     if shot.powerAllowed==false then return false end
@@ -3262,6 +3267,9 @@ function controller.unified.BaselineThrowable(shot)
 end
 
 function controller.unified.Guard(shot)
+    if not controller.unified.CoverageReady(shot) then
+        return {Allowed=false,Strict=false,Reason='COVERAGE_GRADE_MISSING'}
+    end
     local allowed=controller.unified.BaselineThrowable(shot)
     if shot.oscillationBullet and not (shot.wideOpen and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane) then allowed=false end
     local reason=shot.planAllowed==false and shot.planReason or shot.releaseBlocked and 'RELEASE_BLOCKED'
@@ -3916,14 +3924,22 @@ local function ascentTime(hum)
     if hum.UseJumpPower==false and finite(hum.JumpHeight) and hum.JumpHeight>0 then return math.sqrt(2*hum.JumpHeight/gravity) end
 end
 function controller.groundGuide.SelectShot(r,now)
-    local function usable(shot)
-        return shot and shot.time and shot.at and now-shot.at<=CFG.CacheAge
-            and (shot.mode=='Bullet' or shot.mode=='Dime') and not shot.jumpBullet
-            and not shot.nativeCoverageJump and not shot.magTrial and not shot.screen
-    end
-    if usable(r.shot) then return r.shot end
+    if type(r)~='table' or not r.sample then return end
     local cache=shotCache[r.player]
     if not cache or cache.model~=r.sample.model or cache.epoch~=possession.epoch or cache.generation~=lines.generation then return end
+    local function usable(shot)
+        if not controller.unified.CoverageReady(shot) or not finite(shot.at) or now<shot.at or now-shot.at>CFG.CacheAge
+            or not vector(shot.origin) or not vector(shot.velocity) or not vector(shot.arrival)
+            or type(shot.powerAllowed)~='boolean' or type(shot.planAllowed)~='boolean'
+            or type(shot.unified)~='table' or type(shot.unified.Guard)~='table'
+            or (shot.mode~='Bullet' and shot.mode~='Dime') or shot.jumpBullet
+            or shot.nativeCoverageJump or shot.magTrial or shot.screen then return false end
+        -- Reach checking writes telemetry: validate a probe so advice cannot
+        -- mutate the actual cached/native-release evidence.
+        local probe={mode=shot.mode,time=shot.time,arrival=shot.arrival}
+        return receivePossible(probe,r.sample)
+    end
+    if usable(r.shot) then return r.shot end
     local best
     for _,mode in ipairs({'Bullet','Dime','SoftBullet','QuickBullet'})do
         local shot=cache.shots[mode]
@@ -3965,7 +3981,7 @@ forecastGuide=function(data,now)
         local arrival=shot.arrival+velocity*lead
         if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=controller.field.QBLimit(ball.root))
             and (controller.field.BeyondMinimum(arrival)) then
-            local future={advisory=true,appliedLead=shot.appliedLead,origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,variant=shot.variant,softBullet=shot.softBullet,networkPing=shot.networkPing,
+            local future={advisory=true,appliedLead=shot.appliedLead,effectiveYLead=shot.effectiveYLead,origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,variant=shot.variant,softBullet=shot.softBullet,networkPing=shot.networkPing,
                 velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
             -- This is an estimated continuation, not an extra native solve.
             -- Reject estimates exceeding the source's maximum release power.

@@ -1,16 +1,18 @@
-# Pelican experimental Auto QB — B4.1
+# Pelican experimental Auto QB — B4.2
 
-B4.1 corrects unsafe flat-pass admission and completes missing ordinary-Dime comparisons on top of B4’s planning/release repairs. Production `main` / V26.22 is untouched. See [the audit](REWRITE_AUDIT.md) for established causes, preserved behavior and unresolved mechanics. [Validation](REPAIR_VALIDATION.md) separates automated checks from live evidence.
+B4.2 fixes a movement-guide crash during QB acquisition; it retains B4.1’s strict flat-pass admission and ordinary-Dime comparisons. Production `main` / V26.22 is untouched. See [the audit](REWRITE_AUDIT.md) for established causes, preserved behavior and unresolved mechanics. [Validation](REPAIR_VALIDATION.md) separates automated checks from live evidence.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-This loader pins `experimental-unified-b4.1`. Confirm `RELEASE_VERSION|experimental-unified-b4.1` in COPY. X reloads the experiment. Launching the normal main loader returns to V26.22; an auto-execute entry pointing at main can also replace the experiment. The existing confirmed-cleanup protocol prevents stacking.
+This loader pins `experimental-unified-b4.2`. Confirm `RELEASE_VERSION|experimental-unified-b4.2` in COPY. X reloads the experiment. Launching the normal main loader returns to V26.22; an auto-execute entry pointing at main can also replace the experiment. The existing confirmed-cleanup protocol prevents stacking.
 
 Enable Yuna QB Aimbot and Auto Throw Type; leave Mouse Aimbot off. Pelican discovers the supported native profile, temporarily owns settings only during synchronous native calculations and restores them. Starting before Yuna remains supported. No new anti-cheat modification, camera hook or input bypass is added.
 
 ## What changes
+
+- The guide rejects ungraded native cache entries, including tuples that failed current receiver reach. It validates cache ownership and uses a read-only reach probe. The central coverage guard explicitly refuses missing grades instead of comparing absent numbers or inventing safe defaults. Valid guide forecasts retain actual effective lead classification. Strict throwing policy is unchanged.
 
 - Ordinary/soft Bullets require strict modeled path and arrival clearance in SAFE, MOD and TRUST. A flat native Dime/Fit/Jump cannot borrow elevated-pass permission. TRUST still permits qualified genuinely elevated native Dime burns.
 - When the best candidate is rejected or contested and its ordinary Dime is missing, compare that native Dime before optional Jump/Loft paths. A failed attempt can retry at the existing planning cadence. Existing fresh valid tuples remain reusable; a fully admitted strict completion receives no mandatory Dime delay. Invalid or unavailable alternatives never authorize a forced Bullet.
@@ -68,7 +70,7 @@ Reports are bounded to 1.5 MB; timeline trimming and omitted-row/attempt counts 
 Replay a report locally with the exact matching tag:
 
 ```sh
-python3 scripts/replay_bad_play.py report.json --ref experimental-unified-b4.1
+python3 scripts/replay_bad_play.py report.json --ref experimental-unified-b4.2
 ```
 
 For reports saved by B4 use `--ref experimental-unified-b4`; for B3.10 use `--ref experimental-unified-b3.10`. Historical tags remain available. Replay checks recorded evaluator selection and analytic risk, not native execution, replicated game timing or server catches. Wrong versions, corrupted inputs or truncated critical rows fail explicitly.
