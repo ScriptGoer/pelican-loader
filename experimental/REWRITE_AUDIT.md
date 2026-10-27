@@ -1,4 +1,18 @@
-# B4 audit and scope
+# B4.1 Bullet/Dime follow-up
+
+The supplied B4 BAD_THROW report reproduces 35 evaluator inputs and 35 analytic-risk inputs against the exact B4 tag. It records a 95-power ordinary Bullet at approximately 8.98 degrees and 1.057 seconds, followed by observed opponent possession. The intended target was a teammate.
+
+The Bullet failed strict modeled path and arrival clearance (lane about -16.34 versus required 4, arrival margin about 2.45 versus required 6). TRUST’s trailing-corner exception nonetheless admitted it using a 4.91-stud current lead and 18.35-stud projected lead. The defender was moving mostly across the receiver’s route; freezing that heading created an optimistic future gap while the same model’s early reachable pursuit envelope intersected the low trajectory. This does not establish the defender’s actual future intent or uniquely attribute the interception.
+
+The intended receiver’s ordinary Dime was missing at release (`PLANNING_BUDGET`). The preceding native Dime attempt, about 0.133 seconds earlier, had failed the existing endpoint consistency check (approximately 0.0618 studs versus 0.05). Conditional receiver Jump and configured Loft also failed endpoint checks. Therefore this report does **not** prove that a Dime was valid or would have been caught.
+
+B4.1 keeps Bullet coverage strict in every risk mode and applies the same rule to a native non-Bullet flattened to body height. Qualified genuinely elevated ordinary Dime burns remain available in TRUST. It also completes a missing ordinary Dime comparison before optional Jump/Loft probes, bounded by the existing planning cadence and global native cap. Current valid tuples are reused. An actual invalid/missing result is preserved as unavailable; it cannot force a low pass. No score weights, defender reaction/acceleration constants, lead offsets or endpoint tolerances were changed.
+
+The same captured Bullet is now refused. A successful future Dime must still be generated and pass its actual native/current checks. If none qualifies, Auto QB holds. Normal strict open Bullets, comfortable lower-power paths, deep Dime jumping, possession guards and cleanup remain covered by regression tests. Production V26.22 remains unchanged. Live B4.1 gameplay remains unverified.
+
+---
+
+# Historical B4 audit and scope
 
 B4 repairs the experimental branch. Production `main` / V26.22 is unchanged. This is a deterministic native-trajectory controller, not a trained model. Local validation cannot establish Roblox catch success.
 

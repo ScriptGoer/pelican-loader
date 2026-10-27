@@ -2,7 +2,7 @@
 from pathlib import Path
 import subprocess,sys,json,tempfile
 ROOT=Path(__file__).resolve().parents[2]
-for name in ['repair_runtime.lua','comparative_model.lua','presentation_oscillation.lua','replication_readiness.lua','jump_coverage.lua','trajectory_ranking.lua','jump_policy.lua','movement_guide.lua','throw_policy_repair.lua','admission_certificates.lua','release_pipeline.lua','native_schedule.lua']:
+for name in ['repair_runtime.lua','comparative_model.lua','presentation_oscillation.lua','replication_readiness.lua','jump_coverage.lua','trajectory_ranking.lua','jump_policy.lua','movement_guide.lua','throw_policy_repair.lua','admission_certificates.lua','release_pipeline.lua','native_schedule.lua','bullet_coverage.lua','contested_comparison.lua']:
  subprocess.run([sys.executable,str(ROOT/'tests/experimental/run_lua.py'),str(ROOT/'tests/experimental'/name)],cwd=ROOT,check=True)
 subprocess.run([sys.executable,str(ROOT/'scripts/replay_bad_play.py'),'/tmp/pelican-b3-runtime-report.json'],cwd=ROOT,check=True)
 subprocess.run([sys.executable,str(ROOT/'scripts/replay_bad_play.py'),'/tmp/pelican-zigzag-runtime-report.json'],cwd=ROOT,check=True)

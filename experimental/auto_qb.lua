@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (experimental-unified-b4): generated repair of V26.22.
+-- PELICAN_FF3_V26 (experimental-unified-b4.1): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -26,12 +26,16 @@ function E.certificate(shot,g)
  -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
  -- A mode label must not grant the looser elevated-pass admission to that path.
  local policy=u and u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  -- A low/ordinary Bullet cannot clear a trailing defender vertically. A
+  -- longitudinal gap and frozen defender heading do not waive its whole-path
+  -- guard. Risk mode remains aggressive for qualified elevated native Dimes.
+  or (shot.mode=='Bullet' or shot.softBullet) and not g.Strict and 'BULLET_REQUIRES_STRICT_COVERAGE'
   -- A configured loft is an extra path to clear actual coverage, not a faster
   -- ordinary Dime. The inherited trailing-burn allowance does not establish
   -- that the receiver retains its advantage through this longer flight.
   or shot.variant=='LoftDime' and not g.Strict and 'LOFT_REQUIRES_CLEAR_WINDOW'
-  or u and u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
-  and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
+  or u and u.FlatNative and shot.mode~='Bullet' and not g.Strict
+  and 'FLAT_NATIVE_REQUIRES_STRICT_COVERAGE'
  local allowed=g.Allowed==true and not policy
  local kind=not allowed and 'REJECTED' or g.Strict and 'STRICT_CLEAR_WINDOW'
   or g.TrustBurn and g.TrustBurn.Allowed and 'QUALIFIED_TRAILING_BURN' or 'QUALIFIED_CATCH_WINDOW'
@@ -390,7 +394,7 @@ function B:flag(now,current)
     self.flagSerial=(self.flagSerial or 0)+1;local wall=os.time()
     local snapshot=copy(p)
     if p.Final and not p.Final.ReceiptArchived then appendAttempt(snapshot,attemptReceipt(p.Final,'FLAGGED_CURRENT_ATTEMPT')) end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4.1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
         Flag={Kind=current and 'MISSED' or 'BAD_THROW',At=now,WallTime=wall,Sequence=self.flagSerial,Selection=selection,
             PossessionId=p.Id,Epoch=p.Epoch,HasReleasedThrow=p.SentAt~=nil,SecondsSinceRelease=p.SentAt and now-p.SentAt or nil},
         Possession=snapshot,Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
@@ -409,7 +413,7 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('2994f7daf728e9b5c9afa05fa6ad1b1b1b3b4f91323e2e73bee7998c9ff1851a','c4a2ae99e26c2c9da968df748754d1e1b11f2625fd75c22ed614a4a6e63d0c8a')
+end)().new('cd60e181d4204cbb15c21dcbe5246fd3f7cc620da3444c62a5a9f405fec3c246','0d7caab82a69230ad7bb03f4777a4b97180162cfa89b46eaa275ba4139f40e3d')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
 controller.unified.helperHUD=(function()
 -- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
@@ -814,7 +818,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release='experimental-unified-b4',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b4.1',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -1866,7 +1870,7 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b4','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|EXPLICIT_ADMISSION_CERTIFICATES; CONFIGURED_LOFT_STRICT; NATIVE_EXPOSURE_AND_COMFORT_ORDER; NO_SIMULATED_CONTEST_RELIEF','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b4.1','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|EXPLICIT_ADMISSION_CERTIFICATES; CONFIGURED_LOFT_STRICT; NATIVE_EXPOSURE_AND_COMFORT_ORDER; NO_SIMULATED_CONTEST_RELIEF','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
@@ -1874,8 +1878,8 @@ function controller.GetReport()
         'ANGLE_POLICY|COVERAGE_DERIVED_NATIVE_DIME_JUMP; FOUR_BOUNDED_ESTIMATES; NO_EXTRA_NATIVE_SOLVES; FIT_BULLET_LOW_BRANCH_UNCHANGED; NATIVE_OUTPUT_AND_SAFETY_RECHECK_REQUIRED',
         'MAG_POLICY|UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
         'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
-        'BULLET_RISK_POLICY|SAFE_MOD_STRICT; TRUST_ORDINARY_TRAILING_CORNER_BURN_EXCEPTION; CUSTOM_JUMP_STRICT',
-        'TRUST_BURN_POLICY|ORDINARY_NATIVE_BULLET_DIME; CONFIGURED_LOFT_REQUIRES_STRICT; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR',
+        'BULLET_RISK_POLICY|STRICT_PATH_AND_ARRIVAL_IN_SAFE_MOD_TRUST; NO_LOW_PATH_BURN_WAIVER',
+        'TRUST_BURN_POLICY|ELEVATED_NATIVE_DIME; BULLET_AND_FLAT_NATIVE_STRICT; CONFIGURED_LOFT_STRICT; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR',
         'TRUST_BURN_CONTEST_FRACTION|'..riskPolicy.burn.contestFraction,'TRUST_BURN_MAX_CONTEST_SECONDS|'..riskPolicy.burn.contestSeconds,
         'SAFETY_READS|'..tostring(controller.safety.enabled),'SAFETY_POLICY|ACTUAL_PATH_AND_ARRIVAL_THREATS; HIGH_SAFETY_LABEL_IS_ADVISORY; STRICT_CONDITIONAL_NATIVE_JUMP; CATCH_REACH_UNCALIBRATED',
         'OPPORTUNITY_POLICY|MOD_TRUST_ROUTE_INDEPENDENT; FRESH_CACHED_RECEIVERS_REGRADED; SHORTER_READY_COMPLETIONS_PREFERRED; CANCEL_PENDING_NOT_RECEIVER',
@@ -1890,7 +1894,7 @@ function controller.GetReport()
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
         'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
-        'RISK_POLICY|SAFE=STRICT; MOD=COMFORTABLE_NON_BULLET_BURN_RACE; TRUST=TIGHTER_RACE_OR_TRAILING_CORNER_BURN; EARLY_DIRECT_PATH_AND_PREVENT_BLOCKED',
+        'RISK_POLICY|SAFE=STRICT; MOD=QUALIFIED_ELEVATED_WINDOWS; TRUST=QUALIFIED_ELEVATED_DIME_BURNS; BULLET_AND_FLAT_PATHS_STRICT',
         'RISK_LIMITS|margin='..selectedRisk.margin..' lane='..selectedRisk.lane..' race='..tostring(selectedRisk.race)..' lateral='..tostring(selectedRisk.lateral)..' turn='..tostring(selectedRisk.turn),
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
         'CLOSE_BULLET_POLICY|ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
@@ -5013,23 +5017,46 @@ do
     end
 end
 function controller.unified.CompareLoft(best,now,defenders)
-    if not best or not best.shot or best.shot.variant=='LoftDime'
-        or best.shot.mode~='Bullet' and best.shot.mode~='Dime'
-        or best.shot.unified.Guard.Strict then return true end
+    if not best or not best.shot then return true end
+    local permission=best.shot.unified
+    if permission and permission.Allowed and permission.Guard and permission.Guard.Strict then return true end
     local cache=shotCache[best.player]
     if not cache then return true end
     cache.modeAt=cache.modeAt or {}
-    for _,mode in ipairs({'CoverageJump','LoftDime'})do
-        local enabled=mode=='CoverageJump' and controller.nativeJump.enabled or mode=='LoftDime' and controller.angle.enabled
+    -- Core Dime precedes the optional receiver-Jump/configured-loft paths.
+    -- A fresh existing core tuple was already regraded with this scene. Only
+    -- missing/stale core work is supplemented. A failed attempt may retry at
+    -- the existing planning cadence,
+    -- rather than hiding a changing window for the whole native-cache lifetime.
+    -- modeAt and the global native cap bound retries, including reactive ticks.
+    for _,mode in ipairs({'Dime','CoverageJump','LoftDime'})do
+        local enabled=mode=='Dime' or mode=='CoverageJump' and controller.nativeJump.enabled
+            or mode=='LoftDime' and controller.angle.enabled
         local tried=cache.modeAt[mode]
-        if enabled and (not tried or now-tried>CFG.CacheAge) then
-            if frameCalls>=8 then setGate('WAIT_NATIVE_MODE_COMPARISON_BUDGET');return false end
+        local horizon=mode=='Dime' and CFG.Interval or CFG.CacheAge
+        local cached=cache.shots[mode]
+        local missingCore=mode~='Dime' or not cached or now-cached.at>CFG.CacheAge
+        if enabled and missingCore and (not tried or now-tried>=horizon) then
+            if frameCalls>=8 then
+                controller.bad.open=true
+                controller.bad:status(best.player.Name,mode,'NOT_EVALUATED','NATIVE_FRAME_BUDGET')
+                local omitted=controller.bad:row(best.player.Name,mode)
+                if omitted then omitted.NativeStatus='BUDGET_NOT_ATTEMPTED';omitted.NativeReason='NATIVE_FRAME_BUDGET';omitted.NativeInvoked=false end
+                controller.bad:finish(best,0)
+                setGate('WAIT_NATIVE_MODE_COMPARISON_BUDGET');return false
+            end
             local before=frameCalls;local begun=os.clock();local shot,why,failure=solve(best.player,mode)
             if stopped then return false end
-            if why=='NATIVE_FRAME_BUDGET' then setGate('WAIT_NATIVE_MODE_COMPARISON_BUDGET');return false end
-            cache.modeAt[mode]=now
             controller.bad.open=true
             controller.bad:native(best.player.Name,mode,shot,why,frameCalls>before,failure)
+            if why=='NATIVE_FRAME_BUDGET' then
+                controller.bad:status(best.player.Name,mode,'NOT_EVALUATED','NATIVE_FRAME_BUDGET')
+                local omitted=controller.bad:row(best.player.Name,mode)
+                if omitted then omitted.NativeStatus='BUDGET_NOT_ATTEMPTED';omitted.NativeReason='NATIVE_FRAME_BUDGET';omitted.NativeInvoked=false end
+                controller.bad:finish(best,os.clock()-begun)
+                setGate('WAIT_NATIVE_MODE_COMPARISON_BUDGET');return false
+            end
+            cache.modeAt[mode]=now
             cache.shots[mode]=shot
             if shot then
                 local eligible,reason=receiverReady(best.player,best.sample,now,shot.arrival)
@@ -5047,6 +5074,9 @@ function controller.unified.CompareLoft(best,now,defenders)
                 else controller.bad:status(best.player.Name,mode,'READINESS_REJECTED',reason,shot) end
             end
             controller.bad:finish(best,os.clock()-begun)
+            -- A newly strict ordinary completion needs no optional loft probes.
+            local u=best.shot.unified
+            if u and u.Allowed and u.Guard and u.Guard.Strict then return true end
         end
     end
     return true

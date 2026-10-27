@@ -11,7 +11,7 @@ local function score(values)
  return s
 end
 local function candidate(variant,guard,values)
- local s={mode='Dime',variant=variant,unified={Score=score(values)}}
+ local s={mode=(variant=='Bullet' or variant=='SoftBullet' or variant=='QuickBullet') and 'Bullet' or 'Dime',variant=variant,unified={Score=score(values)}}
  E.admit(s,guard);return s
 end
 -- Rounded fields reproduce the *policy conflict* in the captured B3.10 scene.
@@ -43,7 +43,8 @@ E.admit(clear,{Allowed=true,Strict=true})
 check(not clear.unified.Allowed and clear.unified.Reason=='NATIVE_BOUNDARY_ROUTE_ADJUSTMENT','explicit invalid placement always vetoes strict loft')
 local low=candidate('Bullet',contest,{Flight=1.76,RiskDebt=20,CatchHeight=0})
 local elevated=candidate('Dime',contest,{Flight=1.80,RiskDebt=9,CatchHeight=7.1})
-check(E.better(elevated,low),'supported native Dime retains less-exposed-path preference over a low Bullet')
+check(not low.unified.Allowed and low.unified.Reason=='BULLET_REQUIRES_STRICT_COVERAGE','qualified trailing gap cannot authorize a non-strict ordinary Bullet')
+check(E.better(elevated,low),'admitted elevated native Dime wins over a refused low Bullet')
 local slower=candidate('Dime',contest,{Flight=2,RiskDebt=9,CatchHeight=7.1})
 check(E.better(elevated,slower),'equivalent native catch trajectories prefer earlier arrival')
 local open={Allowed=true,Strict=true}

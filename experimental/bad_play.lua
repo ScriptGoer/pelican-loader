@@ -211,7 +211,7 @@ function B:flag(now,current)
     self.flagSerial=(self.flagSerial or 0)+1;local wall=os.time()
     local snapshot=copy(p)
     if p.Final and not p.Final.ReceiptArchived then appendAttempt(snapshot,attemptReceipt(p.Final,'FLAGGED_CURRENT_ATTEMPT')) end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4.1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
         Flag={Kind=current and 'MISSED' or 'BAD_THROW',At=now,WallTime=wall,Sequence=self.flagSerial,Selection=selection,
             PossessionId=p.Id,Epoch=p.Epoch,HasReleasedThrow=p.SentAt~=nil,SecondsSinceRelease=p.SentAt and now-p.SentAt or nil},
         Possession=snapshot,Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',

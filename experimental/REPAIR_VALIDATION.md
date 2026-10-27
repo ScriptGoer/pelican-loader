@@ -1,4 +1,20 @@
-# B4 validation
+# B4.1 validation
+
+The new B4 report matches its immutable B4 source: 35 evaluator and 35 analytic-risk replays. It establishes an admitted threatened Bullet and a missing ordinary-Dime comparison, not the success of an unthrown Dime.
+
+**Passed:** all existing suites, 34 new Bullet-coverage checks, 45 missing-Dime comparison checks, and native compilation of 34 modules. Source/isolation checks confirm every production file remains unchanged.
+
+New regressions compare the published B4 controller with the repair on rounded report-shaped geometry: B4 admits the Bullet through its trailing-burn waiver; B4.1 refuses it. All risk modes require strict ordinary/soft Bullet and flattened native-path clearance. Genuine elevated native Dime burns and strict comfortable open Bullets still release through the actual controller.
+
+The ordinary-Dime comparison tests exercise rejected Bullet/Fit/Loft finalists, supported native Dime selection before optional probes, unchanged configured lead, no packet during comparison, current valid cache reuse, failed-result retry cadence, fully admitted strict completion without added comparison delay, and the global native cap with explicit omission evidence. No invented safe result or broadened endpoint tolerance is accepted.
+
+Existing runtime, mode/comfort/depth/readiness, jump, presentation, league/friends, diagnostics/replay/privacy and cleanup suites remain required. The comparative matrix intentionally retires the old non-strict Bullet exception while preserving baseline vetoes. Production source/isolation remains unchanged.
+
+Run the commands in the B4 section below; `test_engine.py` now also runs `bullet_coverage.lua` and `contested_comparison.lua`. Live B4.1 behavior is unverified. Native Dime/Jump endpoint coherence, server catch mechanics and human route changes remain unresolved as described in [REWRITE_AUDIT.md](REWRITE_AUDIT.md).
+
+---
+
+# Historical B4 validation
 
 Production `main` is V26.22 at `c9cc9ea5350d6b49dfe9d3282432d9b0ecc7ef95`. Every production-tree file remains byte-identical. Changes are confined to experimental runtime/modules, generation/replay tooling, documentation and experimental tests.
 

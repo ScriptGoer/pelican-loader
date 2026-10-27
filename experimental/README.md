@@ -1,16 +1,19 @@
-# Pelican experimental Auto QB — B4
+# Pelican experimental Auto QB — B4.1
 
-B4 replaces the experimental admission/work scheduling and repairs release/jump ownership. Production `main` / V26.22 is untouched. See [the audit](REWRITE_AUDIT.md) for established causes, preserved behavior and unresolved mechanics. [Validation](REPAIR_VALIDATION.md) separates automated checks from live evidence.
+B4.1 corrects unsafe flat-pass admission and completes missing ordinary-Dime comparisons on top of B4’s planning/release repairs. Production `main` / V26.22 is untouched. See [the audit](REWRITE_AUDIT.md) for established causes, preserved behavior and unresolved mechanics. [Validation](REPAIR_VALIDATION.md) separates automated checks from live evidence.
 
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/ScriptGoer/pelican-loader/repair-unified-qb/experimental/loader.lua"))()
 ```
 
-This loader pins `experimental-unified-b4`. Confirm `RELEASE_VERSION|experimental-unified-b4` in COPY. X reloads the experiment. Launching the normal main loader returns to V26.22; an auto-execute entry pointing at main can also replace the experiment. The existing confirmed-cleanup protocol prevents stacking.
+This loader pins `experimental-unified-b4.1`. Confirm `RELEASE_VERSION|experimental-unified-b4.1` in COPY. X reloads the experiment. Launching the normal main loader returns to V26.22; an auto-execute entry pointing at main can also replace the experiment. The existing confirmed-cleanup protocol prevents stacking.
 
 Enable Yuna QB Aimbot and Auto Throw Type; leave Mouse Aimbot off. Pelican discovers the supported native profile, temporarily owns settings only during synchronous native calculations and restores them. Starting before Yuna remains supported. No new anti-cheat modification, camera hook or input bypass is added.
 
 ## What changes
+
+- Ordinary/soft Bullets require strict modeled path and arrival clearance in SAFE, MOD and TRUST. A flat native Dime/Fit/Jump cannot borrow elevated-pass permission. TRUST still permits qualified genuinely elevated native Dime burns.
+- When the best candidate is rejected or contested and its ordinary Dime is missing, compare that native Dime before optional Jump/Loft paths. A failed attempt can retry at the existing planning cadence. Existing fresh valid tuples remain reusable; a fully admitted strict completion receives no mandatory Dime delay. Invalid or unavailable alternatives never authorize a forced Bullet.
 
 - Configured high-loft Dime needs strict actual path/arrival clearance. It cannot borrow the ordinary Dime's TRUST trailing-burn exception. The supplied B3.10 report's slow contested loft is rejected; the captured faster admitted Dime wins. This is a captured-decision counterfactual, not proof of a catch.
 - A pure scheduler refreshes available core Bullet/Dime/SoftBullet candidates before their cache expires and gives remaining alternatives oldest-attempt fairness. Verified zigzag candidates retain priority. Cheap unavailable generators use no native slots. The original planning time and global eight-call cap remain.
@@ -25,7 +28,7 @@ Folded controls are QB, AWAY and reload X. QB opens a compact menu; report butto
 | Control | Actual behavior |
 | --- | --- |
 | AUTO / THR | Selection and automatic release; turning off cancels owned work. With THR OFF, native manual throws retain Yuna’s own behavior outside the scoped calculations. |
-| SAFE / MOD / TRUST | Existing actual-path/arrival policies. TRUST starts by default and retains qualified ordinary Bullet/Dime trailing burns, not indiscriminate covered passes. Configured LoftDime requires strict clearance in every mode. |
+| SAFE / MOD / TRUST | Existing actual-path/arrival policies. TRUST starts by default and retains qualified elevated ordinary-Dime trailing burns. All Bullet variants and flattened native paths keep strict clearance requirements. Configured LoftDime requires strict clearance in every mode. |
 | NORMAL / DEEP / SHORT | Existing pass-plan filters. Deep is 20 yards beyond LOS, with developed comebacks/end-zone exceptions. SHORT permits deep only when genuinely wide open. |
 | EASE | Comfort/catch-height/loft/relative-speed ranking. Mandatory flight/power safeguards remain separate. It cannot waive coverage. |
 | ARC AUTO / OLD | Native adaptive-angle request plus the configured-angle alternative, or original configured native control. Actual returned trajectory is always graded. |
@@ -65,14 +68,14 @@ Reports are bounded to 1.5 MB; timeline trimming and omitted-row/attempt counts 
 Replay a report locally with the exact matching tag:
 
 ```sh
-python3 scripts/replay_bad_play.py report.json --ref experimental-unified-b4
+python3 scripts/replay_bad_play.py report.json --ref experimental-unified-b4.1
 ```
 
-For the uploaded B3.10 report use `--ref experimental-unified-b3.10`. Historical tags remain available. Replay checks recorded evaluator selection and analytic risk, not native execution, replicated game timing or server catches. Wrong versions, corrupted inputs or truncated critical rows fail explicitly.
+For reports saved by B4 use `--ref experimental-unified-b4`; for B3.10 use `--ref experimental-unified-b3.10`. Historical tags remain available. Replay checks recorded evaluator selection and analytic risk, not native execution, replicated game timing or server catches. Wrong versions, corrupted inputs or truncated critical rows fail explicitly.
 
 ## Remaining limits
 
-The native CoverageJump/Power endpoint mismatch in the B3.10 report remains unresolved: the original paid-source attachment is unavailable, and the retained source audit does not prove a valid larger tolerance. B4 retains its existing coherence guard rather than claiming an invented catch calibration. Reach, pursuit, catch height and replication assumptions still need in-game evidence.
+Native endpoint mismatches remain unresolved for some ordinary Dime and CoverageJump outputs: the original paid-source attachment is unavailable, and the retained source audit does not prove a valid larger tolerance. B4 retains its existing coherence guard rather than claiming an invented catch calibration. Reach, pursuit, catch height and replication assumptions still need in-game evidence.
 
 The movement arrow remains advisory, uses projected UI, injects no Workspace object and never delays release. Its camera visibility and useful direction need live testing.
 

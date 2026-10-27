@@ -14,9 +14,9 @@ for _,version in ipairs({'BASELINE','BUILD_B','B3'})do
   local wr=actor(0,-40,0,-20);local d=actor(side,-40+gap,0,vz,'DB')
   local s={mode='Bullet',variant='Bullet',power=95,origin=Vector3.new(0,5,0),velocity=Vector3.new(0,12,-60),arrival=Vector3.new(0,3,-60),time=1,networkPing=0,receiverResidual=0,at=Mock.time}
   a.risk(s,wr,{d});a.coverage(s,wr,{d});local ok=a.allowed(s);local key=gap..':'..side..':'..vz
-  all[version][key]={Allowed=ok,Gap=gap,Side=side,Velocity=vz,Risk=s.unified and s.unified.RiskScore}
+  all[version][key]={Allowed=ok,Gap=gap,Side=side,Velocity=vz,Strict=s.margin>=6 and s.lane>=4,Risk=s.unified and s.unified.RiskScore}
   if version=='B3' then
-   check(ok==all.BASELINE[key].Allowed,'repaired permission agrees with actual V26.22 on constructed scene '..key)
+   check(ok==(all.BASELINE[key].Allowed and all.BASELINE[key].Strict),'Bullet preserves baseline vetoes and also requires strict path/arrival clearance '..key)
    if gap==4 and side==0 and vz==-20 then previous=s end
    if gap==7 and side==0 and vz==-20 then check(c.unified.better(s,previous),'larger credible burn never gets lower priority from earlier corner contact')end
   end

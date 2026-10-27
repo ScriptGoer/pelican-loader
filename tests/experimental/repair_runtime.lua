@@ -32,9 +32,9 @@ for _,case in ipairs({{source=baseline,name='V26.22'},{source=buildb,name='Build
  local wr=actor(0,-40,0,-20);local corner=actor(0,-36,0,-20)
  local s={mode='Bullet',variant='Bullet',power=95,origin=Vector3.new(0,5,0),velocity=Vector3.new(0,12,-60),arrival=Vector3.new(0,3,-60),time=1,networkPing=0,receiverResidual=0,at=Mock.time}
  a.risk(s,wr,{corner});a.coverage(s,wr,{corner})
- check(a.allowed(s),'credible isolated four-stud TRUST burn admitted by '..case.name)
+ check(a.allowed(s)==(case.name~='B3'),'legacy four-stud low Bullet waiver is retired only in repaired experiment '..case.name)
  if case.name=='B3' then
-  check(s.trustBurn and s.trustBurn.Allowed,'B3 admission retains actual V26.22 trailing/early-path proof')
+  check(s.trustBurn and s.trustBurn.Allowed and s.unified.Reason=='BULLET_REQUIRES_STRICT_COVERAGE','ordinary Bullet cannot borrow the retained trailing-gap evidence')
   for _,d in ipairs({actor(0,-20,0,0),actor(0,-36,0,-30),actor(0,-70,0,20)})do
    local bad=native(wr,1,'Bullet',95);a.risk(bad,wr,{d});a.coverage(bad,wr,{d})
    check(not a.allowed(bad),'underneath/closing/help threat refuses TRUST release')
@@ -77,7 +77,7 @@ local risk=gui:FindFirstChild('RiskMode');risk.Activated:Fire();check(c.GetRepor
 risk.Activated:Fire();check(c.GetReport():find('\nRISK_MODE|TRUST\n',1,true),'risk UI reaches actual TRUST policy')
 local wr=actor(0,-40,0,-20);local corner=actor(0,-36,0,-20)
 local s={mode='Bullet',variant='Bullet',power=95,origin=Vector3.new(0,5,0),velocity=Vector3.new(0,12,-60),arrival=Vector3.new(0,3,-60),time=1,networkPing=0,receiverResidual=0,at=Mock.time}
-a.risk(s,wr,{corner});a.coverage(s,wr,{corner});check(a.allowed(s),'TRUST UI admits proven trailing contest')
+a.risk(s,wr,{corner});a.coverage(s,wr,{corner});check(not a.allowed(s) and s.unified.Reason=='BULLET_REQUIRES_STRICT_COVERAGE','TRUST UI keeps ordinary Bullet strict')
 c.SetRiskMode('MOD');a.risk(s,wr,{corner});a.coverage(s,wr,{corner});check(not a.allowed(s),'MOD UI cannot borrow TRUST contest relief')
 -- Native-supported OpenComfort ranking is explicitly toggleable.
 c.unified.easeButton.Activated:Fire();check(not c.passPlan.openComfort,'EASE button changes OpenComfort')
@@ -200,7 +200,7 @@ do
  end
  check(readfile(firstFile)==firstContents,'four flags do not overwrite the first report')
  check(#t.env.PELICAN_FF3_BAD_PLAY_ARCHIVE==4,'session archive retains all four flags')
- check(c.bad:report().Version=='experimental-unified-b4','report version matches actual published build')
+ check(c.bad:report().Version=='experimental-unified-b4.1','report version matches actual published build')
  setclipboard=savedCopy
 
  check(c.Stop('CAPTURE'),'capture cleanup')
@@ -250,7 +250,7 @@ do
   a.coverage(sh,wr,{});return sh
  end
  local flat=prepared('Fit',1.5,-1)
- check(not a.allowed(flat) and flat.unified.Reason=='FLAT_NATIVE_REQUIRES_BULLET_GUARDS','head-level Fit cannot borrow relaxed non-Bullet admission')
+ check(not a.allowed(flat) and flat.unified.Reason=='FLAT_NATIVE_REQUIRES_STRICT_COVERAGE','head-level Fit cannot borrow relaxed non-Bullet admission')
  local dime=prepared('Dime',1.5,-1)
  check(not a.allowed(dime),'head-level Dime cannot borrow relaxed non-Bullet admission')
  local strict=prepared('Fit',10,8);check(a.allowed(strict),'safe native Fit remains available even when native flattens it')
@@ -260,7 +260,7 @@ do
  local burn=native(wr,1,'Bullet',95);burn.effectiveYLead=0
  burn.origin=Vector3.new(0,5,0);burn.velocity=Vector3.new(0,12,-60);burn.arrival=Vector3.new(0,3,-60)
  a.risk(burn,wr,{actor(0,-36,0,-20)});a.coverage(burn,wr,{actor(0,-36,0,-20)})
- check(a.allowed(burn) and burn.trustBurn.Allowed,'credible deep trailing advantage survives geometry classification')
+ check(not a.allowed(burn) and burn.trustBurn.Allowed and burn.unified.Reason=='BULLET_REQUIRES_STRICT_COVERAGE','flat trailing advantage remains evidence but cannot waive Bullet coverage')
  strict.unified.HardReason='SYNTHETIC_FINAL_POLICY_VETO'
  check(not a.allowed(strict),'final throwable wrapper enforces evaluator veto rather than returning raw guard permission')
  -- Native clamp bounds are the exact existing AntiOOB contract. The additional

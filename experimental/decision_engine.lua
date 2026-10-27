@@ -18,12 +18,16 @@ function E.certificate(shot,g)
  -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
  -- A mode label must not grant the looser elevated-pass admission to that path.
  local policy=u and u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  -- A low/ordinary Bullet cannot clear a trailing defender vertically. A
+  -- longitudinal gap and frozen defender heading do not waive its whole-path
+  -- guard. Risk mode remains aggressive for qualified elevated native Dimes.
+  or (shot.mode=='Bullet' or shot.softBullet) and not g.Strict and 'BULLET_REQUIRES_STRICT_COVERAGE'
   -- A configured loft is an extra path to clear actual coverage, not a faster
   -- ordinary Dime. The inherited trailing-burn allowance does not establish
   -- that the receiver retains its advantage through this longer flight.
   or shot.variant=='LoftDime' and not g.Strict and 'LOFT_REQUIRES_CLEAR_WINDOW'
-  or u and u.FlatNative and shot.mode~='Bullet' and not (g.Strict or g.TrustBurn and g.TrustBurn.Allowed)
-  and 'FLAT_NATIVE_REQUIRES_BULLET_GUARDS'
+  or u and u.FlatNative and shot.mode~='Bullet' and not g.Strict
+  and 'FLAT_NATIVE_REQUIRES_STRICT_COVERAGE'
  local allowed=g.Allowed==true and not policy
  local kind=not allowed and 'REJECTED' or g.Strict and 'STRICT_CLEAR_WINDOW'
   or g.TrustBurn and g.TrustBurn.Allowed and 'QUALIFIED_TRAILING_BURN' or 'QUALIFIED_CATCH_WINDOW'
