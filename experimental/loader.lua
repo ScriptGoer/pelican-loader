@@ -13,7 +13,7 @@ local manifest = {
     ObservedFF3Universe = 9908641400,
     Places = {
         [82866880824588] = {
-            Name = "FF3 live", Game = "FF3", Ref = "experimental-unified-qb",
+            Name = "FF3 live", Game = "FF3", Ref = "experimental-unified-b4.2",
             Path = "experimental/auto_qb.lua", Version = "PELICAN_FF3_V26",
             Experimental = true, Policy = "LIVE_HUMAN_TEAMMATES",
         },
@@ -260,7 +260,7 @@ function session.Reload()
         if reloadCancelled or environment[KEY] ~= session then return end
         local nextLoader = runLoader
         if sources == nil then
-            local fetched, text = pcall(function() return game:HttpGet(baseUrl .. "/experimental-unified-qb/experimental/loader.lua") end)
+            local fetched, text = pcall(function() return game:HttpGet(baseUrl .. "/repair-unified-qb/experimental/loader.lua") end)
             if reloadCancelled or environment[KEY] ~= session then return end
             if not fetched or type(text) ~= "string" or text == "" then fail("RELOAD_FETCH", fetched and "Empty loader source" or text); return end
             local compiled, chunk, problem = pcall(loadstring, text, "@reload/loader.lua")
@@ -352,7 +352,7 @@ session.Context.LoaderVersion = manifest.LoaderVersion
 session.Context.SourceMode = sourceMode
 session.Context.Sources = sources
 session.Context.LoaderBaseUrl = manifest.BaseUrl
-session.Context.LoaderRef = "experimental-unified-qb"
+session.Context.LoaderRef = "repair-unified-qb"
 if options.Threshold ~= nil and type(options.Threshold) ~= "table" then return fail("CONFIG", "Threshold options must be a table") end
 if options.ThresholdResume ~= nil and type(options.ThresholdResume) ~= "table" then return fail("CONFIG", "ThresholdResume must be a table") end
 if options.FF3 ~= nil and type(options.FF3) ~= "table" then return fail("CONFIG", "FF3 options must be a table") end

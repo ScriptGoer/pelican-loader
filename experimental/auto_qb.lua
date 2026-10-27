@@ -1,4 +1,4 @@
--- PELICAN_FF3_V26 (ff3-v26.22): TRUST trailing-corner burn windows.
+-- PELICAN_FF3_V26 (experimental-unified-b4.2): generated repair of V26.22.
 -- Native mode overrides exist only inside protected synchronous solves. Normal
 -- Yuna automatic/manual settings are restored before returning to game input.
 -- Integration contract comes from the supplied readable QB source, fn13/fn37 and
@@ -6,121 +6,145 @@
 -- Catch windows and current server acceptance remain unverified in Roblox.
 local context = ... or {}
 local Unified=(function()
--- Build B: scores are uncalibrated costs, never probabilities.
-local E={}
-E.defaults={Acceleration=36,ReactionSeconds=.12,HorizontalReach=4.5,VerticalReach=12.2,
-    PositionUncertainty=.35,VelocityUncertainty=.5,Samples=16,ContestRelief=.75,DistanceScale=1.5,
-    SafeRisk=.16,ModRisk=.32,TrustRisk=.58,RiskWeight=70,ComfortWeight=8,TouchdownValue=45}
-local function clamp(x,a,b)return math.max(a,math.min(b,x))end
-local function flat(v)return v*Vector3.new(1,0,1)end
-local function sigmoid(x)return 1/(1+math.exp(-clamp(x,-30,30)))end
-local function speed(s)return math.max(flat(s.v).Magnitude,s.hum and s.hum.WalkSpeed or 0,s.observedSpeed or 0)end
+-- Joint native-candidate ranking. Fresh native guards authorize releases;
+-- their optimistic pursuit clearances are distances, never probabilities.
+local E={defaults={DevelopingRoutes=true,DevelopmentHorizon=.18,DevelopmentMax=.35}}
+local function flat(v)return Vector3.new(v.X,0,v.Z)end
+local deliveryOrder={'RiskTier','RiskDebt','Development','RouteStability','ComfortDeficit','CatchHeight','ExcessLoft','RelativeSpeed','ContestGap','PassDistance','Flight'}
 function E.new(options)
-    local c={};for k,v in pairs(E.defaults)do c[k]=v end
-    for k,v in pairs(options or {})do
-        assert(c[k]~=nil and type(v)=='number' and v==v and v>=0 and v<10000,'Invalid evaluator parameter: '..tostring(k));c[k]=v
+ local c={};for k,v in pairs(E.defaults)do c[k]=v end
+ for k,v in pairs(options or {})do
+  assert(c[k]~=nil,'Unsupported evaluator option: '..tostring(k))
+  if k=='DevelopingRoutes'then assert(type(v)=='boolean','DevelopingRoutes must be boolean')
+  else assert(type(v)=='number'and v==v and v>=0 and v<=.5,'Development horizon must be 0..0.5 seconds')end;c[k]=v
+ end
+ assert(c.DevelopmentHorizon<=c.DevelopmentMax,'DevelopmentHorizon exceeds DevelopmentMax')
+ return setmetatable({config=c,checks=0,maxSeconds=0,holds=setmetatable({},{__mode='k'})},{__index=E})
+end
+function E.certificate(shot,g)
+ local u=shot.unified
+ -- Native SmartPass can turn a named Fit/Dime into a head-level endpoint.
+ -- A mode label must not grant the looser elevated-pass admission to that path.
+ local policy=u and u.HardReason or shot.oscillationBullet and not (g.Strict and g.WideOpen) and 'ZIGZAG_REQUIRES_WIDE_OPEN'
+  -- A low/ordinary Bullet cannot clear a trailing defender vertically. A
+  -- longitudinal gap and frozen defender heading do not waive its whole-path
+  -- guard. Risk mode remains aggressive for qualified elevated native Dimes.
+  or (shot.mode=='Bullet' or shot.softBullet) and not g.Strict and 'BULLET_REQUIRES_STRICT_COVERAGE'
+  -- A configured loft is an extra path to clear actual coverage, not a faster
+  -- ordinary Dime. The inherited trailing-burn allowance does not establish
+  -- that the receiver retains its advantage through this longer flight.
+  or shot.variant=='LoftDime' and not g.Strict and 'LOFT_REQUIRES_CLEAR_WINDOW'
+  or u and u.FlatNative and shot.mode~='Bullet' and not g.Strict
+  and 'FLAT_NATIVE_REQUIRES_STRICT_COVERAGE'
+ local allowed=g.Allowed==true and not policy
+ local kind=not allowed and 'REJECTED' or g.Strict and 'STRICT_CLEAR_WINDOW'
+  or g.TrustBurn and g.TrustBurn.Allowed and 'QUALIFIED_TRAILING_BURN' or 'QUALIFIED_CATCH_WINDOW'
+ return allowed,policy or g.Reason or (allowed and 'VIABLE_NATIVE_WINDOW' or 'COVERAGE_REJECTED'),kind
+end
+function E.admit(shot,g)
+ local allowed,reason,kind=E.certificate(shot,g)
+ local u=shot.unified
+ if u then u.Guard=g;u.Allowed=allowed;u.Reason=reason;u.AdmissionKind=kind end
+ return allowed
+end
+function E:evaluate(shot,wr,defenders,c)
+ local begun=os.clock();self.checks=self.checks+1
+ local g=c.Guard or {Allowed=false,Reason='FRESH_GUARD_MISSING'}
+ local u={Allowed=false,Threats={},Calibration='INHERITED_UNCALIBRATED_GUARDS; RANKING_NOT_PROBABILITY'};shot.unified=u
+ local t=shot.time
+ if type(t)~='number'or t~=t or t<=0 or t==math.huge or not shot.origin or not shot.velocity or not shot.arrival then u.HardReason='INVALID_TRAJECTORY';u.Reason=u.HardReason;return u end
+ local motion=flat(wr.v);local predicted=wr.p+motion*(t+math.max(0,shot.networkPing or 0))
+ local effective=shot.effectiveYLead or shot.EffectiveYLead
+ -- This is an arithmetic distinction about the returned endpoint, not a catch
+ -- hitbox, standing/jump region or an inference from the configured mode name.
+ u.FlatNative=type(effective)=='number' and math.abs(effective)<=.01 or false
+ local bounds=c.NativeBoundary
+ if bounds and bounds.Enabled then
+  local allowance=math.abs(shot.appliedLead and shot.appliedLead.X or shot.Lead and shot.Lead[1] or 0)
+  local tolerance=math.max(.05,flat(shot.arrival-shot.origin).Magnitude*.0001)
+  for _,axis in ipairs({'X','Z'})do
+   local cap=axis=='X' and 75 or 175;local inset=bounds[axis..'Tolerance']
+   if type(inset)=='number' and inset==inset and math.abs(inset)<cap then
+    local low,high=-cap+inset,cap+inset
+    local at,goal,speed=shot.arrival[axis],predicted[axis],motion[axis]
+    local edge=speed<0 and math.abs(at-low)<=tolerance and low or speed>0 and math.abs(at-high)<=tolerance and high
+    local excess=edge and (speed<0 and edge-goal or goal-edge)
+    if excess and excess>allowance+tolerance then
+     u.Boundary={Axis=axis,Edge=edge,Projected=goal,Excess=excess,LeadAllowance=allowance,Tolerance=tolerance,
+      Scope='OBSERVED_NATIVE_CLAMP; CONSTANT_VELOCITY_CONTINUATION; INTENT_UNKNOWN'}
+     u.HardReason='NATIVE_BOUNDARY_ROUTE_ADJUSTMENT'
     end
-    assert(c.Samples>=4 and c.Samples<=32 and c.Samples%1==0,'Samples must be 4..32')
-    assert(c.SafeRisk<=c.ModRisk and c.ModRisk<=c.TrustRisk and c.TrustRisk<=1,'Risk caps must be nested in [0,1]')
-    assert(c.ContestRelief<=1 and c.DistanceScale>0,'ContestRelief must be <=1 and DistanceScale positive')
-    assert(c.HorizontalReach>0 and c.VerticalReach>0,'Reach assumptions must be positive')
-    return setmetatable({config=c,checks=0,maxSeconds=0},{__index=E})
+   end
+  end
+ end
+ local ev=shot.velocity-Vector3.new(0,c.gravity*t,0)
+ u.ArrivalRelativeSpeed=(ev-wr.v).Magnitude;u.HeightAboveHead=shot.arrival.Y-(wr.head and wr.head.Position.Y or wr.p.Y+2)
+ u.BelowBody=c.ReceiverGrounded and math.max(0,wr.p.Y-shot.arrival.Y) or 0
+ local leadY=shot.appliedLead and shot.appliedLead.Y or shot.Lead and shot.Lead[2]
+ -- Grounded torso placement policy, not a calibrated FF3 catch radius. An
+ -- explicitly negative configured lead remains deliberate user placement.
+ if c.ReceiverGrounded and leadY and leadY>=0 and u.BelowBody>math.max(.05,flat(shot.arrival-shot.origin).Magnitude*.0001) then
+  u.HardReason=u.HardReason or 'NATIVE_PLACEMENT_BELOW_RECEIVER_BODY'
+ end
+ u.Adjustment=flat(shot.arrival-predicted).Magnitude
+ local apexAt=math.max(0,math.min(t,shot.velocity.Y/c.gravity))
+ u.ExcessLoft=math.max(0,shot.origin.Y+shot.velocity.Y*apexAt-.5*c.gravity*apexAt*apexAt-math.max(shot.origin.Y,shot.arrival.Y))
+ u.CatchDifficulty={RelativeSpeed=u.ArrivalRelativeSpeed,HeightAboveHead=u.HeightAboveHead,BelowGroundedBody=u.BelowBody,RouteAdjustment=u.Adjustment,ExcessLoft=u.ExcessLoft,RequiredAction='UNKNOWN'}
+ u.RiskScore=math.max(0,-math.min(g.Margin or 0,g.Lane or 0)) -- clearance debt, not probability
+ u.ReceiverAdvantage=g.TrustBurn and math.min(g.TrustBurn.Gap or 0,g.TrustBurn.ProjectedGap or 0) or g.RaceAdvantage
+ for _,k in ipairs({'MarginDefender','LaneDefender'})do if g[k]then u.Threats[#u.Threats+1]={Defender=g[k],Kind=k,Clearance=k=='MarginDefender'and g.Margin or g.Lane}end end
+ local comfort=c.OpenComfort and (c.ComfortSeconds or 0)or 0
+ -- Admission comes first. Configured loft must establish its own clear window;
+ -- it cannot win by borrowing the ordinary native Dime's trailing-burn policy.
+ -- Within the supported native families, keep modeled path clearance ahead of
+ -- cosmetic height so the repair does not restore the old low-Bullet bias.
+ u.Score={RiskTier=g.Strict and 0 or g.TrustBurn and g.TrustBurn.Allowed and 1 or 2,RiskDebt=u.RiskScore,ComfortDeficit=math.max(0,comfort-t),
+  CatchHeight=c.OpenComfort and (math.max(0,u.HeightAboveHead)+u.BelowBody)or 0,ContestGap=g.TrustBurn and g.TrustBurn.Allowed and -(u.ReceiverAdvantage or 0)or 0,
+  RouteStability=wr.oscillation and not shot.oscillationBullet and 1 or 0,
+  ExcessLoft=c.OpenComfort and u.ExcessLoft or 0,RelativeSpeed=c.OpenComfort and u.ArrivalRelativeSpeed or 0,Development=0,PassDistance=shot.passYards or flat(shot.arrival-shot.origin).Magnitude/3,Flight=t}
+ local forward=Vector3.new(c.ForwardX or 0,0,c.ForwardZ or 0);local along=motion:Dot(forward);local lateral=motion-forward*along
+ local depth=c.CurrentDepthYards;local h=self.config.DevelopmentHorizon
+ local near=depth and depth>=(c.MinDepthYards or 6)and along>0 and (depth-(c.MinDepthYards or 6))*3<=along*h
+ if self.config.DevelopingRoutes and h>0 and near and not c.GoalOrScreen and g.WideOpen and (g.NoReachableDefender and math.huge or g.DefenderETA or 0)>t+h+math.max(0,shot.networkPing or 0)and lateral.Magnitude>0 and lateral.Magnitude>=along*.5 and math.abs(wr.v.Y)<2
+  and (g.Margin or 0)-((g.ThreatSpeed or 0)+motion.Magnitude)*h>=(g.RequiredMargin or 6)
+  and (g.Lane or 0)-((g.ThreatSpeed or 0)+motion.Magnitude)*h>=(g.RequiredLane or 4) then
+  local fv=motion
+  if wr.acceleration then fv=motion+flat(wr.acceleration)*h;if fv.Magnitude>motion.Magnitude and motion.Magnitude>0 then fv=fv.Unit*motion.Magnitude end end
+  local point=shot.arrival+motion*h+(fv-motion)*t;local direction=flat(point-shot.origin)
+  if direction.Magnitude>0 then
+   local later=(direction.Unit*flat(shot.velocity).Magnitude-fv).Magnitude;local current=(flat(shot.velocity)-motion).Magnitude
+   if later+1e-6<current then u.Developing={Seconds=h,CurrentRelativeSpeed=current,ForecastRelativeSpeed=later,
+    Kind=wr.acceleration and 'OBSERVED_MOMENTUM_TREND'or 'CONSTANT_VELOCITY_CONTINUATION',Reason='NEAR_ELIGIBILITY_CATCH_GEOMETRY_IMPROVING'}end
+  end
+ end
+ u.Score.Development=u.Developing and 1 or 0
+ E.admit(shot,g);self.maxSeconds=math.max(self.maxSeconds,os.clock()-begun);return u
 end
-local function step(p,v,target,dt,cap,a,react)
-    if not react then
-        local delta=flat(target-p);local desired=delta.Magnitude>0 and delta.Unit*cap or v*0
-        local change=desired-v;v=v+(change.Magnitude>0 and change.Unit*math.min(change.Magnitude,a*dt) or change)
-    end
-    if v.Magnitude>cap then v=v.Unit*cap end
-    return p+v*dt,v
+function E.allowed(s)return s and s.unified and s.unified.Allowed==true or false end
+local function compareFields(x,y,fields)
+ for _,k in ipairs(fields)do
+  if math.abs(x[k]-y[k])>1e-6 then return x[k]<y[k],k end
+ end
 end
-local function nearestSegment(b0,b1,p0,p1)
-    local r=flat(b0-p0);local delta=flat((b1-p1)-(b0-p0))
-    local f=delta:Dot(delta)>0 and clamp(-r:Dot(delta)/delta:Dot(delta),0,1) or 0
-    return (r+delta*f).Magnitude,f
+function E.compare(a,b)
+ if not b then return true,'ONLY_CANDIDATE' end
+ local ar,br=E.allowed(a),E.allowed(b);if ar~=br then return ar,'RELEASE_PERMISSION' end
+ local x,y=a.unified.Score,b.unified.Score;if not x or not y then return x~=nil end
+ local better,field=compareFields(x,y,deliveryOrder)
+ if better~=nil then return better,field end
+ return false,'EQUIVALENT_DELIVERY'
 end
-function E:evaluate(shot,wr,defenders,context)
-    local begun=os.clock();local c=self.config;self.checks=self.checks+1
-    local t=shot.time;local result={Allowed=false,HardReason=nil,Threats={},RiskScore=0,Score=-1e9,Calibration='UNVERIFIED_MODEL_COSTS'}
-    shot.unified=result
-    if type(t)~='number' or t~=t or t==math.huge or t<=0 or not shot.origin or not shot.velocity or not shot.arrival then result.HardReason='INVALID_TRAJECTORY';return result end
-    local ping=math.max(0,shot.networkPing or 0)
-    local wrEnd=wr.p+flat(wr.v)*(t+ping)
-    local adjustment=flat(shot.arrival-wrEnd).Magnitude
-    local endVelocity=shot.velocity-Vector3.new(0,context.gravity*t,0)
-    local relativeSpeed=(endVelocity-wr.v).Magnitude
-    local height=shot.arrival.Y-(wr.head and wr.head.Position.Y or wr.p.Y+2)
-    local travel=flat(shot.arrival-wr.p).Magnitude
-    -- Necessary travel check is shared with production. This adds a bounded
-    -- acceleration correction around current motion, not free omnidirectional speed.
-    if travel>speed(wr)*(t+ping)+c.HorizontalReach or adjustment>c.HorizontalReach+.5*c.Acceleration*t*t then
-        result.HardReason='RECEIVER_MOVEMENT_INFEASIBLE'
-    end
-    result.CatchDifficulty=relativeSpeed/60+adjustment/(c.HorizontalReach+speed(wr)*t*.25)
-        +math.max(0,height-1)/3+math.max(0,-height-2)/3+math.max(0,t-1.4)^2
-    result.ArrivalRelativeSpeed=relativeSpeed;result.HeightAboveHead=height;result.Adjustment=adjustment
-    local bestAdvantage=100
-    for index,d in ipairs(defenders)do
-        local p=d.p+flat(d.v)*ping;local v=flat(d.v);local p2,v2=p,v
-        local threat,early,closest=0,0,math.huge
-        local receiverP,receiverV=wr.p+flat(wr.v)*ping,flat(wr.v)
-        local dt=t/c.Samples
-        local relativeEnd=wrEnd-(d.p+flat(d.v)*(t+ping))
-        local route=flat(wr.v)
-        local positionAdvantage=route.Magnitude>0 and math.min(relativeEnd:Dot(route.Unit),flat(wr.p-d.p):Dot(route.Unit)) or flat(relativeEnd).Magnitude-adjustment
-        for i=1,c.Samples do
-            local at=i*dt;local previousP,previousP2,previousReceiver=p,p2,receiverP
-            local ball0=shot.origin+shot.velocity*(at-dt)-Vector3.new(0,.5*context.gravity*(at-dt)^2,0)
-            local ball=shot.origin+shot.velocity*at-Vector3.new(0,.5*context.gravity*at*at,0)
-            p,v=step(p,v,shot.arrival,dt,speed(d),c.Acceleration,at<=c.ReactionSeconds)
-            p2,v2=step(p2,v2,ball,dt,speed(d),c.Acceleration,at<=c.ReactionSeconds)
-            receiverP,receiverV=step(receiverP,receiverV,ball,dt,speed(wr),c.Acceleration,at<=c.ReactionSeconds)
-            local distance,f=nearestSegment(ball0,ball,previousP,p)
-            local distance2,f2=nearestSegment(ball0,ball,previousP2,p2)
-            if distance2<distance then distance,f=distance2,f2 end
-            local contact=at-dt+f*dt
-            local contactBall=shot.origin+shot.velocity*contact-Vector3.new(0,.5*context.gravity*contact*contact,0)
-            local vertical=contactBall.Y-d.p.Y
-            if vertical>=-2 and vertical<=c.VerticalReach then
-                local uncertainty=c.PositionUncertainty+c.VelocityUncertainty*(at+ping)
-                local receiverDistance=math.min(flat(contactBall-(wr.p+flat(wr.v)*(contact+ping))).Magnitude,flat(contactBall-(previousReceiver+(receiverP-previousReceiver)*f)).Magnitude)
-                local supportAdjustment=flat(receiverP-(wr.p+flat(wr.v)*(at+ping))).Magnitude
-                local advantage=distance-receiverDistance
-                -- Overlapping WR/DB catch neighborhoods form a contest, not an
-                -- automatic DB win. Relief depends continuously on momentum advantage.
-                local receiverAccess=sigmoid((2*c.HorizontalReach-receiverDistance)/c.DistanceScale)
-                local access=sigmoid((c.HorizontalReach+uncertainty-distance)/c.DistanceScale)
-                local contest=access*(1-c.ContestRelief*receiverAccess*sigmoid(positionAdvantage/c.DistanceScale))
-                if contest>threat then result.SupportAdjustment=math.max(result.SupportAdjustment or 0,supportAdjustment*receiverAccess*contest) end
-                threat=math.max(threat,contest);closest=math.min(closest,distance)
-                if receiverDistance>c.HorizontalReach then early=math.max(early,contest)end
-            end
-        end
-        local adv=flat(shot.arrival-p).Magnitude-flat(shot.arrival-wrEnd).Magnitude
-        bestAdvantage=math.min(bestAdvantage,adv)
-        result.RiskScore=1-(1-result.RiskScore)*(1-threat) -- pooled risk COST, not independence/probability claim
-        if threat>.02 then result.Threats[#result.Threats+1]={Defender=d.name or tostring(index),RiskScore=threat,EarlyRisk=early,
-            EndpointAdvantage=adv,MinimumDistance=closest<math.huge and closest or nil}end
-    end
-    result.CatchDifficulty=result.CatchDifficulty+(result.SupportAdjustment or 0)/(2*c.HorizontalReach)
-    result.ReceiverAdvantage=bestAdvantage
-    result.ScoringValue=math.max(0,context.gain or 0)+(context.endzone and c.TouchdownValue or 0)
-    result.Score=result.ScoringValue-c.RiskWeight*result.RiskScore-c.ComfortWeight*result.CatchDifficulty
-    result.RiskCaps={SAFE=c.SafeRisk,MOD=c.ModRisk,TRUST=c.TrustRisk}
-    result.Allowed=not result.HardReason and result.RiskScore<=result.RiskCaps[context.mode]
-    result.Reason=result.HardReason or (result.Allowed and 'VIABLE_OPPORTUNITY' or 'RISK_TOLERANCE')
-    self.maxSeconds=math.max(self.maxSeconds,os.clock()-begun)
-    return result
+function E.better(a,b)
+ local result=E.compare(a,b);return result
 end
-function E.allowed(shot,mode)
-    local u=shot.unified;return u~=nil and not u.HardReason and u.RiskScore<=u.RiskCaps[mode]
-end
-function E.better(a,b,mode)
-    if not b then return true end
-    local ar,br=E.allowed(a,mode),E.allowed(b,mode)
-    if ar~=br then return ar end
-    if a.unified.Score~=b.unified.Score then return a.unified.Score>b.unified.Score end
-    return a.time<b.time
+function E:wait(player,model,epoch,shot,now)
+ local old=self.holds[player]
+ if not old or old.model~=model or old.epoch~=epoch then old={model=model,epoch=epoch};self.holds[player]=old end
+ if old.done then return false end
+ if not shot.unified.Developing then if old.untilAt then old.done=true end;return false end
+ old.untilAt=old.untilAt or now+math.min(shot.unified.Developing.Seconds,self.config.DevelopmentMax)
+ if now>=old.untilAt then old.done=true;return false end
+ return true
 end
 return E
 
@@ -175,16 +199,66 @@ function B:token(name)
 end
 function B:actor(a)
     if not a then return end
-    return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),observedSpeed=a.observedSpeed,
-        WalkSpeed=a.hum and a.hum.WalkSpeed,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,Turn=a.routeTurn or a.turn}
+    local history={};local path=a.path or {}
+    for i=1,math.min(6,#path)do local at=math.floor(1+(i-1)*math.max(0,#path-1)/math.max(1,math.min(6,#path)-1));local p=path[at];history[#history+1]={At=p.at,p=vector(p.p)}end
+    return {Id=self:token(a.name),p=vector(a.p),v=vector(a.v),acceleration=vector(a.acceleration),observedSpeed=a.observedSpeed,
+        WalkSpeed=a.hum and a.hum.WalkSpeed,JumpPower=a.hum and a.hum.JumpPower,Head=vector(a.head and a.head.Position),At=a.at,MotionAt=a.motionAt,
+        MotionSince=a.motionSince,ReadinessAt=a.readyAt,ReadinessPosition=vector(a.readyP),Turn=a.turn,RouteTurn=a.routeTurn,Oscillation=copy(a.oscillation),History=history}
 end
 function B:actors(list)local out={};for i,a in ipairs(list or {})do if i>64 then break end;out[#out+1]=self:actor(a)end;return out end
 function B:pos(epoch,now)
+    if epoch<=0 then return end
     if self.current and self.current.Epoch==epoch then return self.current end
-    if self.current then self.lastClosed=self.current end
+    if self.current then self:archiveAttempt('POSSESSION_CLOSED');self.lastClosed=self.current end
     self.serial=self.serial+1
-    local p={Id=self.serial,Epoch=epoch,Started=now,Frames={},Outcome={Status='UNKNOWN',RequiredMovement='UNKNOWN',Fault='UNRESOLVED'},DroppedFrames=0}
+    local p={Id=self.serial,Epoch=epoch,Started=now,Frames={},Timeline={},TimelineDropped=0,TimelineScope='SCORES_AND_REASONS; FULL_INPUTS_IN_KEYFRAMES',Outcome={Status='UNKNOWN',RequiredMovement='UNKNOWN',Fault='UNRESOLVED'},DroppedFrames=0}
     self.ring[#self.ring+1]=p;if #self.ring>3 then table.remove(self.ring,1)end;self.current=p;return p
+end
+-- Root settings describe the released attempt once sent. Later UI changes remain
+-- visible separately and cannot relabel the risk mode used for that throw.
+function B:settings(settings,now)
+    local p=self.current;if not p then return end
+    local snapshot=copy(settings)
+    p.LatestSettings=snapshot;p.LatestSettingsAt=now
+    if not p.SentAt then p.Settings=snapshot;p.SettingsAt=now;p.SettingsScope='LATEST_POSSESSION_CONTEXT' end
+end
+-- Keep chronological failure receipts without duplicating every full scene.
+-- Full inputs remain in PreJump/Final and the critical planning keyframes.
+local function attemptReceipt(f,stage)
+    if not f then return end
+    return copy({AttemptAt=f.AttemptAt,FinishedAt=os.clock(),Stage=stage,SelectedVariant=f.SelectedVariant,
+        Status=f.Status,Gate=f.Gate,NativeFailure=f.NativeFailure,NativeFailureDetail=f.NativeFailureDetail,Native=f.Native,QB=f.QB,Settings=f.Settings,
+        AutoJump=f.AutoJump,Result=f.Result and {Allowed=f.Result.Allowed,Reason=f.Result.Reason,
+            AdmissionKind=f.Result.AdmissionKind,Score=f.Result.Score,Guard=f.Result.Guard},
+        Comparisons=f.Comparisons and #f.Comparisons or 0,Scope='ATTEMPT_RECEIPT; FULL_INPUTS_IN_FINAL_PREJUMP_AND_KEYFRAMES'})
+end
+local function appendAttempt(p,receipt)
+    p.FinalAttempts=p.FinalAttempts or {};p.FinalAttempts[#p.FinalAttempts+1]=receipt
+    p.AttemptCount=(p.AttemptCount or 0)+1
+    if #p.FinalAttempts>16 then table.remove(p.FinalAttempts,1);p.AttemptsDropped=(p.AttemptsDropped or 0)+1 end
+end
+function B:archiveAttempt(stage)
+    local p=self.current;local f=p and p.Final
+    if not f or f.ReceiptArchived then return end
+    appendAttempt(p,attemptReceipt(f,stage));f.ReceiptArchived=true
+end
+function B:eligibility(now)if self.current then self.current.Eligibility={At=now,Rows={}}end end
+function B:excluded(name,s,reason,role)
+    if not self.current or not self.current.Eligibility then return end
+    local rows=self.current.Eligibility.Rows;if #rows<64 then rows[#rows+1]={Receiver=self:token(name),Actor=self:actor(s),Reason=reason,Role=role or 'TEAMMATE'}end
+end
+function B:context(context)
+    local out=copy(context)
+    for _,key in ipairs({'MarginDefender','LaneDefender'})do if out.Guard and out.Guard[key]then out.Guard[key]=self:token(out.Guard[key])end end
+    if out.GuardInputs and out.GuardInputs.Drops then local drops={};for name,at in pairs(out.GuardInputs.Drops)do drops[self:token(name)]=at end;out.GuardInputs.Drops=drops end
+    return out
+end
+function B:result(result)
+    if not result then return end
+    local out=copy(result)
+    for _,t in ipairs(out.Threats or {})do t.Defender=self:token(t.Defender)end
+    for _,key in ipairs({'MarginDefender','LaneDefender'})do if out.Guard and out.Guard[key]then out.Guard[key]=self:token(out.Guard[key])end end
+    return out
 end
 function B:begin(epoch,now,receivers,modes,defenders,config,mode,plan)
     local p=self:pos(epoch,now);p.LastAt=now
@@ -197,65 +271,113 @@ function B:row(name,variant)
     local f=self.frame;if not f then return end
     local key=self:token(name)..'/'..tostring(variant)
     if not f.Rows[key]then
-        if f.RowCount and f.RowCount>=128 then f.DroppedRows=f.DroppedRows+1;return end
+        if f.RowCount and f.RowCount>=512 then f.DroppedRows=f.DroppedRows+1;return end
         f.RowCount=(f.RowCount or 0)+1
         f.Rows[key]={Key=key,Receiver=self:token(name),Variant=variant,NativeStatus='NOT_SCHEDULED',Status='NOT_EVALUATED',Reason='NOT_SCHEDULED'}
     end
     return f.Rows[key]
 end
-function B:status(name,variant,status,reason)
-    local row=self:row(name,variant);if row then row.Status=status;row.Reason=reason;self.profile[reason or status]=(self.profile[reason or status] or 0)+1;self.profile.Skipped=self.profile.Skipped+1 end
+function B:status(name,variant,status,reason,shot)
+    local row=self:row(name,variant);if row then row.Status=status;row.Reason=reason;if shot then row.Native=self:trajectory(shot)end;self.profile[reason or status]=(self.profile[reason or status] or 0)+1;self.profile.Skipped=self.profile.Skipped+1 end
 end
 function B:schedule(name,modes)for _,v in ipairs(modes)do local r=self:row(name,v);if r then r.NativeStatus='SCHEDULED_NOT_ATTEMPTED' end end end
-function B:native(name,variant,shot,why)
-    local row=self:row(name,variant);if row then row.NativeStatus=shot and 'SOLVED' or 'SOLVER_REJECTED';row.NativeReason=why end
+function B:native(name,variant,shot,why,invoked,failure)
+    local row=self:row(name,variant);if row then row.NativeStatus=shot and 'SOLVED' or invoked==false and 'GENERATOR_REJECTED' or 'SOLVER_REJECTED';row.NativeReason=why;row.NativeInvoked=invoked;row.NativeFailure=copy(failure);if shot then row.Native=self:trajectory(shot)end end
 end
 function B:trajectory(shot)
     return {origin=vector(shot.origin),velocity=vector(shot.velocity),arrival=vector(shot.arrival),time=shot.time,
         power=shot.power,variant=shot.variant,mode=shot.mode,networkPing=shot.networkPing,NativeAt=shot.at,
         Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},NativeInput=shot.nativeInput,NativeInputKind=shot.nativeInputKind,PowerMethod=shot.powerMethod,
-        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle}
+        EffectiveYLead=shot.effectiveYLead,ActualAngle=shot.actualAngle,softBullet=shot.softBullet,oscillationBullet=shot.oscillationBullet,jumpBullet=shot.jumpBullet,nativeCoverageJump=shot.nativeCoverageJump,magTrial=shot.magTrial,screen=shot.screen,receiverResidual=shot.receiverResidual}
 end
 function B:input(shot,wr,defenders,context,config)
-    return {Shot=self:trajectory(shot),Receiver=self:actor(wr),Defenders=self.open and self.frame.Defenders or self:actors(defenders),Context=copy(context),Config=copy(config)}
+    return {Shot=self:trajectory(shot),Receiver=self:actor(wr),Defenders=self:actors(defenders),Context=self:context(context),Config=copy(config)}
 end
 function B:grade(shot,wr,defenders,context,config,seconds)
+    if not self.open and not self.finalActive then return end
     local captureStart=os.clock()
     local input=self:input(shot,wr,defenders,context,config)
-    local result=copy(shot.unified)
-    for _,t in ipairs(result.Threats or {})do t.Defender=self:token(t.Defender)end
+    local result=self:result(shot.unified)
     self.profile.Graded=self.profile.Graded+1;self.profile.MaxGrade=math.max(self.profile.MaxGrade,seconds)
     if seconds>.003 then self.profile.OverBudget=self.profile.OverBudget+1 end
     if self.open then
         local row=self:row(wr.name,shot.variant or shot.mode)
         if row then self.frame.Order=self.frame.Order+1;row.Order=self.frame.Order;if row.NativeStatus~='SOLVED' then row.NativeStatus='CACHE_REUSED' end;row.Input=input;row.Result=result;row.Status='EVALUATED';row.EvaluatorSeconds=seconds end
-    elseif self.finalActive and self.current then self.current.Final=self.current.Final or {};self.current.Final.Input=input;self.current.Final.Result=result;self.current.Final.At=os.clock() end
+    elseif self.finalActive and self.current then
+        local f=self.current.Final
+        if not f.SelectedVariant or f.SelectedVariant==(shot.variant or shot.mode)then f.Input=input;f.Result=result;f.At=os.clock()
+        else f.Comparisons=f.Comparisons or {};if #f.Comparisons<6 then f.Comparisons[#f.Comparisons+1]={Input=input,Result=result}end end
+    end
     self.profile.MaxCapture=math.max(self.profile.MaxCapture or 0,os.clock()-captureStart)
 end
+function B:admit(shot,guard)
+    local row
+    if self.open and shot.evidenceReceiver then row=self:row(shot.evidenceReceiver,shot.variant or shot.mode)
+    elseif self.finalActive and self.current and (not self.current.Final.SelectedVariant or self.current.Final.SelectedVariant==(shot.variant or shot.mode))then row=self.current.Final end
+    if row and row.Input then row.Result=self:result(shot.unified);row.Input.Context.Guard=self:context({Guard=guard}).Guard;row.PlanAllowed=shot.planAllowed;row.ReleaseBlocked=shot.releaseBlocked end
+end
 function B:finish(best,seconds)
+    local finishedAt=os.clock()
     local f=self.frame;if not f then return end
     f.Selected=best and self:token(best.player.Name)..'/'..tostring(best.shot.variant or best.shot.mode) or nil
+    local winner=f.Selected and f.Rows[f.Selected]
     for key,row in pairs(f.Rows)do
         if row.Status=='EVALUATED' then
+            if self.compare and winner and winner.Result then
+                local preferred,field=self.compare({unified=winner.Result},{unified=row.Result})
+                row.SelectionComparison={Winner=f.Selected,Preferred=preferred,Field=field}
+            end
             row.Reason=row.Result.HardReason or row.PlanAllowed==false and 'EXPLICIT_DEPTH_PLAN'
-                or not row.Result.Allowed and 'RISK_TOLERANCE' or key==f.Selected and 'WINNER' or 'LOWER_OPPORTUNITY_SCORE'
+                or not row.Result.Allowed and row.Result.Reason or key==f.Selected and 'WINNER' or 'LOWER_ORDERED_SCORE'
         elseif row.Status=='NOT_EVALUATED' and row.NativeStatus=='SCHEDULED_NOT_ATTEMPTED' and row.Reason~='GRADING_BUDGET' then row.Reason=f.NativeLimited and 'PLANNING_BUDGET' or 'MODE_ROTATION'
-        elseif row.NativeStatus=='SOLVER_REJECTED' then row.Reason='NATIVE_SOLVER_REJECTED' end
+        elseif row.NativeStatus=='SOLVER_REJECTED' then row.Reason='NATIVE_SOLVER_REJECTED'
+        elseif row.NativeStatus=='GENERATOR_REJECTED' then row.Reason=row.NativeReason or 'GENERATION_UNAVAILABLE' end
     end
     f.Duration=seconds;self.profile.MaxFrame=math.max(self.profile.MaxFrame,seconds);self.profile.Frames=self.profile.Frames+1
+    if self.current then
+        local p=self.current;local light={At=f.At,Mode=f.Mode,Plan=f.Plan,Selected=f.Selected,Rows={}}
+        for key,row in pairs(f.Rows)do light.Rows[key]={Status=row.Status,Reason=row.Reason,NativeStatus=row.NativeStatus,NativeReason=row.NativeReason,
+            Comparison=copy(row.SelectionComparison),Score=row.Result and copy(row.Result.Score),GuardReason=row.Result and row.Result.Reason,Flight=row.Input and row.Input.Shot.time,Power=row.Input and row.Input.Shot.power}end
+        p.Timeline[#p.Timeline+1]=light
+        if #p.Timeline>64 then table.remove(p.Timeline,1);p.TimelineDropped=p.TimelineDropped+1 end
+        if not p.FirstPlan then p.FirstPlan=copy(f)end
+        if best and best.shot.unified and best.shot.unified.Allowed and not p.FirstViable then p.FirstViable=copy(f)end
+    end
+    f.Duration=seconds+os.clock()-finishedAt;self.profile.MaxFrame=math.max(self.profile.MaxFrame,f.Duration)
+    self.profile.MaxCapture=math.max(self.profile.MaxCapture or 0,os.clock()-finishedAt)
     self.open=false
 end
-function B:final(epoch,now,qb,settings)
+function B:final(epoch,now,qb,settings,variant)
+    self:archiveAttempt('SUPERSEDED_FINAL_ATTEMPT')
     local p=self:pos(epoch,now);self.open=false;self.finalActive=true
-    p.Final={AttemptAt=now,QB=self:actor(qb),Settings=copy(settings),Status='RECALCULATING'}
+    p.Final={AttemptAt=now,QB=self:actor(qb),Settings=copy(settings),Status='RECALCULATING',SelectedVariant=variant}
+end
+function B:timing(best,now)if self.current then self.current.Timing={At=now,Receiver=self:token(best.player.Name),Forecast=copy(best.shot.unified.Developing),Status='DEVELOPING_ROUTE_CONTINUATION'};self.current.DevelopmentDecision=self.current.DevelopmentDecision or copy(self.frame)end end
+function B:released(shot)
+    if not self.current or not self.current.Final then return end
+    self.current.Final.Checks={Status='ALL_RELEASE_GUARDS_PASSED',Native=self:trajectory(shot),Guard=self:context({Guard=shot.unified.Guard}).Guard}
+    self.current.ReleasedDecision=copy(self.frame)
 end
 function B:gate(reason)
+    if self.current then self.current.LastGate=reason;self.current.LastGateAt=os.clock() end
     if self.finalActive and self.current and self.current.Final then self.current.Final.Gate=reason end
 end
 function B:sent(id,api,now)
     if not self.current then return end
     self.current.ThrowId=id or ('local:'..self.current.Id);self.current.SentAt=now;self.current.Final.Status=api
+    self.current.Settings=copy(self.current.Final.Settings or self.current.Settings)
+    self.current.SettingsAt=self.current.Final.AttemptAt or now;self.current.SettingsScope='FINAL_RELEASE_CONTEXT'
+    self:archiveAttempt('REQUEST_ATTEMPTED')
     self.lastSent=self.current;self.finalActive=false
+end
+function B:prejump(allowed)
+    if not self.current or not self.current.Final then return end
+    self.current.PreJump=copy(self.current.Final)
+    self.current.PreJump.Status=allowed and 'PREJUMP_VERIFIED' or 'PREJUMP_BLOCKED'
+    local gate=self.current.Final.Gate
+    if not allowed and (gate=='NATIVE_FRAME_BUDGET' or gate=='QB_LAUNCH_POSE_CHANGED_REPLAN' or gate=='DECISION_STALE_AFTER_NATIVE_SOLVER') then self.current.PreJump.Status='PREJUMP_DEFERRED' end
+    self.current.Final.Status=self.current.PreJump.Status;self:archiveAttempt(self.current.PreJump.Status)
+    self.current.Final=nil;self.finalActive=false
 end
 function B:observe(id,value)
     for _,p in pairs({last=self.lastSent,closed=self.lastClosed})do if p.ThrowId==id then p.Observation=copy(value);p.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end end
@@ -263,11 +385,19 @@ function B:observe(id,value)
     if self.pinned and self.pinned.Possession.ThrowId==id then self.pinned.Possession.Observation=copy(value);self.pinned.Possession.Outcome.Status=value.ObservedOutcome or value.Outcome or 'UNKNOWN' end
 end
 function B:flag(now,current)
-    local p=not current and self.lastSent and now-(self.lastSent.SentAt or 0)<=45 and self.lastSent or self.lastClosed or self.current
-    if current then p=self.current end
+    local p,selection
+    if current then p=self.current;selection='CURRENT_POSSESSION'
+    elseif self.lastSent and now-(self.lastSent.SentAt or 0)<=45 then p=self.lastSent;selection='LAST_SENT_WITHIN_45S'
+    elseif self.lastClosed then p=self.lastClosed;selection='LAST_CLOSED_FALLBACK'
+    else p=self.current;selection='CURRENT_FALLBACK' end
     if not p then return false,'NO_POSSESSION_EVIDENCE' end
-    self.pinned={Schema='PELICAN_BAD_PLAY_1',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=os.time(),
-        Possession=copy(p),Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
+    self.flagSerial=(self.flagSerial or 0)+1;local wall=os.time()
+    local snapshot=copy(p)
+    if p.Final and not p.Final.ReceiptArchived then appendAttempt(snapshot,attemptReceipt(p.Final,'FLAGGED_CURRENT_ATTEMPT')) end
+    self.pinned={Schema='PELICAN_BAD_PLAY_1',Version='experimental-unified-b4.2',CodeId=self.CodeId,EngineId=self.EngineId,FlaggedAt=now,WallTime=wall,
+        Flag={Kind=current and 'MISSED' or 'BAD_THROW',At=now,WallTime=wall,Sequence=self.flagSerial,Selection=selection,
+            PossessionId=p.Id,Epoch=p.Epoch,HasReleasedThrow=p.SentAt~=nil,SecondsSinceRelease=p.SentAt and now-p.SentAt or nil},
+        Possession=snapshot,Profile=copy(self.profile),ReplayScope='EVALUATOR_AND_RECORDED_CANDIDATE_SELECTION_ONLY',
         Missing={NativeSolverReplay='NOT_AVAILABLE',ServerCatchMechanics='NOT_OBSERVED'}}
     return true,p.Id
 end
@@ -283,8 +413,81 @@ end
 function B:report()return self.pinned end
 return B
 
-end)().new('612c8134763c8f5c6410f58531ac32425ce724b63cfdfde957d085ac80f6de26','28743e9edad14669e9d664ae3f42ace86e219209493d03d72cbfcb593cac90aa')
+end)().new('2b48cea50eb0cb9bc8f6f10ea59da858173906c6d40666679246203628616895','0d7caab82a69230ad7bb03f4777a4b97180162cfa89b46eaa275ba4139f40e3d')
 controller.bad.pinned=env.PELICAN_FF3_BAD_PLAY_REPORT
+controller.unified.helperHUD=(function()
+-- Hide only the separately owned Pelican jump-width bar, never Yuna/game UI.
+local H={}
+function H.new(pg,env)
+ return setmetatable({pg=pg,env=env,nextAt=0},{__index=H})
+end
+function H:check(now)
+ if now<self.nextAt then return end;self.nextAt=now+.5
+ local owner=self.env.PELICAN_FF3_MOBILE_JUMP
+ local gui=self.pg:FindFirstChild('PELICAN_FF3_MOBILE_JUMP_V1')
+ if type(owner)~='table'or owner.Version~='PELICAN_FF3_MOBILE_JUMP_V1'or owner.IsStopped or not gui or not gui:IsA('ScreenGui')then return end
+ if self.lease and self.lease.gui==gui and self.lease.owner==owner then return end
+ self:stop();self.lease={gui=gui,owner=owner,before=gui.Enabled};gui.Enabled=false
+end
+function H:stop()
+ local l=self.lease;self.lease=nil
+ if l and l.gui.Parent==self.pg and self.env.PELICAN_FF3_MOBILE_JUMP==l.owner and l.gui.Enabled==false then l.gui.Enabled=l.before end
+end
+return H
+
+end)().new(pg,env)
+controller.bad.compare=Unified.compare
+controller.unified.oscillation=(function()
+-- Observed bounded lateral reversals. No remote inputs or inferred route intent.
+local O={}
+local function flat(v)return Vector3.new(v.X,0,v.Z)end
+function O.detect(path,forward,now,policy)
+ if not forward or #path<4 then return end
+ local first,last=path[1],path[#path]
+ if last.at-first.at<policy.MinMotionAge then return end
+ local right=Vector3.new(-forward.Z,0,forward.X)
+ local travel,lateral,along,run,sign,turns,active=0,0,0,0,0,0,first.at
+ local minX,maxX,minZ,maxZ=first.p.X,first.p.X,first.p.Z,first.p.Z
+ for i=2,#path do
+  local a,b=path[i-1],path[i];local delta=flat(b.p-a.p);local dt=b.at-a.at
+  travel=travel+delta.Magnitude;lateral=lateral+math.abs(delta:Dot(right));along=along+math.abs(delta:Dot(forward))
+  if dt>0 and delta.Magnitude/dt>=policy.MinMoveSpeed then active=b.at end
+  minX=math.min(minX,b.p.X);maxX=math.max(maxX,b.p.X);minZ=math.min(minZ,b.p.Z);maxZ=math.max(maxZ,b.p.Z)
+  local step=delta:Dot(right);local direction=step>0 and 1 or step<0 and -1 or 0
+  if direction~=0 then
+   if sign==0 then sign=direction;run=0
+   elseif direction==sign then run=0
+   else run=run+math.abs(step);if run>=policy.MinMotionTravel/2 then turns=turns+1;sign=direction;run=0 end end
+  end
+ end
+ if turns<2 or travel<policy.MinMotionTravel or lateral<along*2 or flat(last.p-first.p).Magnitude>travel*.5
+  or now-active>policy.Interval then return end
+ return {Reversals=turns,Travel=travel,Age=last.at-first.at,ActiveAt=active,At=last.at,MinX=minX,MaxX=maxX,MinZ=minZ,MaxZ=maxZ,
+  Scope='RECENT_OBSERVED_LATERAL_REVERSALS; CONTINUATION_NOT_GUARANTEED'}
+end
+function O.control(s,origin,power,gravity,ping,lead)
+ if not s.oscillation then return nil,'NO_OBSERVED_ZIGZAG' end
+ local target=s.head.Position+Vector3.new(0,lead.Y,0);local delta=target-origin;local range=flat(delta).Magnitude
+ if range<.01 then return nil,'ZIGZAG_RANGE_INVALID' end
+ local disc=power^4-gravity*(gravity*range*range+2*delta.Y*power*power)
+ if disc<0 then return nil,'ZIGZAG_POINT_UNREACHABLE' end
+ local angle=math.atan((power*power-math.sqrt(disc))/(gravity*range))
+ local time=range/(power*math.cos(angle))
+ return -flat(s.v).Magnitude*(time+ping),time
+end
+function O.power(s,origin,time,gravity,minPower,lead)
+ local delta=s.head.Position+Vector3.new(0,lead.Y,0)-origin
+ local request=math.sqrt(flat(delta).Magnitude^2/time^2+(delta.Y/time+gravity*time/2)^2)
+ if request>94 then return nil,'ZIGZAG_COMFORT_POINT_OUT_OF_RANGE' end
+ return math.floor(math.max(minPower,request))
+end
+function O.contains(s,point,allowance)
+ local b=s and s.oscillation
+ return b and point.X>=b.MinX-allowance and point.X<=b.MaxX+allowance and point.Z>=b.MinZ-allowance and point.Z<=b.MaxZ+allowance or false
+end
+return O
+
+end)()
 local connections, events, counts, samples = {}, {}, {}, {}
 local profile, lease, choice, pending, gui, status, autoButton, throwButton, copyButton
 local receiverButton, receiverMenu, renderReceivers, awayButton, riskButton
@@ -335,7 +538,7 @@ local function setGate(value)
     if stopped then return end
     counts[value]=(counts[value] or 0)+1
     if gate~=value then gate=value; log('GATE',value) end
-    if status then status.Text=(choice and choice.player.Name..' ' or '')..value:gsub('_',' '):sub(1,24) end
+    if status then status.Text=expanded and value:gsub('_',' '):sub(1,24) or 'QB' end
 end
 local function rememberBlocked(player,shot,reason,evidence)
     if not shot and not evidence then return end
@@ -515,7 +718,7 @@ function riskPolicy.normalize(value)
     value=value:upper();if value=='MODERATE' then value='MOD' end
     return riskPolicy.profiles[value] and value or nil
 end
-riskPolicy.mode=riskPolicy.normalize(ff3Options.RiskMode or (riskPolicy.normalize(env.PELICAN_FF3_RISK_MODE) or 'SAFE'))
+riskPolicy.mode=riskPolicy.normalize(ff3Options.RiskMode or 'TRUST')
 assert(riskPolicy.mode,'FF3.RiskMode must be SAFE, MOD or TRUST')
 env.PELICAN_FF3_RISK_MODE=riskPolicy.mode
 local closeBullet=ff3Options.CloseBullet
@@ -615,7 +818,7 @@ controller.history=(function()
         if not h.enabled or not started or ended or not kinds[kind] then return end
         data.Revision=data.Revision+1
         local record={Id=data.Writer..':'..data.Revision,Seq=data.Revision,Run=runId,Session=sessionId,Kind=kind,
-            Release=controller.bad.CodeId,Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
+            Release='experimental-unified-b4.2',Place=game.PlaceId,At=os.time(),Clock=os.clock(),Payload=safe(payload or {},0,{n=0}) or {}}
         data.Records[#data.Records+1]=record;trim();h.dirty=true
         if kind=='run_start' then total('Runs') elseif kind=='throw' then
             total('Requests');total(record.Payload.Api=='API_ACCEPTED_UNCONFIRMED' and 'Accepted' or 'Ambiguous')
@@ -671,7 +874,7 @@ controller.history=(function()
         for _,mode in ipairs({'SoftBullet','QuickBullet','Bullet','Fit','Dime','Jump','JumpBullet','CoverageJump','MagDime'}) do
             local other=cached and cached.shots and cached.shots[mode]
             if other then comparisons[#comparisons+1]={Mode=mode,Power=other.power,Time=other.time,Arrival=h.Vector(other.arrival),
-                LegacyCoverageUnavailable=true,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
+                Margin=other.margin,Lane=other.lane,DefenderETA=other.defenderETA,Age=os.clock()-other.at} end
         end
         return h.Append('throw',{Epoch=possession.epoch,Source=source or 'AUTO_QB',Api=api,Catch='UNKNOWN',
             Mode=shot.mode,Variant=shot.variant or shot.mode,NativeMode=shot.nativeMode,Risk=riskPolicy and riskPolicy.mode,
@@ -680,13 +883,13 @@ controller.history=(function()
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),Gravity=CFG.Gravity,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,CloseBulletEnabled=touch.enabled,
             Receiver=h.Actor(player and player.Name or 'AWAY',s),Comparisons=comparisons,Defenders=actors,DefenderCount=#(defenders or {}),
-            LegacyCoverageUnavailable=true,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,TrustBurn=shot.trustBurn,
+            Margin=shot.margin,Lane=shot.lane,DefenderETA=shot.defenderETA,ReceiverResidual=shot.receiverResidual,TrustBurn=shot.trustBurn,
             LeadSettings=controller.receiverEvidence and controller.receiverEvidence.ReadSettings(),
             EffectiveYLead=shot.effectiveYLead,VerticalLeadControlActive=shot.verticalLeadControlActive,
             LeadControls=controller.receiverEvidence and controller.receiverEvidence.Bindings(shot),
             NativeContext=controller.receiverEvidence and controller.receiverEvidence.NativeContext(),
             Lead=shot.appliedLead and {shot.appliedLead.X,shot.appliedLead.Y},ManualInput=shot.nativeInput,
-            Unified=shot.unified,MagTrial=shot.magTrial,MagExtraY=shot.magExtraY,MagTrustSource=shot.magTrustSource,
+            Unified=controller.bad:result(shot.unified),MagTrial=shot.magTrial,MagExtraY=shot.magExtraY,MagTrustSource=shot.magTrustSource,
             MagBaseLead=shot.magBaseLead and {shot.magBaseLead.X,shot.magBaseLead.Y},MagCatchCalibration=shot.magTrial and 'MISSING; ANGLE_REQUIRED_UNVERIFIED' or nil,
             ActualAngleDegrees=shot.actualAngle,AdaptiveAngle=shot.angleControl~=nil,AngleRequest=shot.angleControl,NativeAngleAdjustment=shot.nativeAngleAdjustment,EndzoneTarget=shot.endzoneTarget,
             InputKind=shot.nativeInputKind,Ping=shot.networkPing,DistanceYards=shot.passYards,
@@ -723,13 +926,13 @@ controller.history=(function()
             Power=shot.power,RequestedPower=shot.requestedPower,PowerMethod=shot.powerMethod,Time=shot.time,
             MinimumFlight=shot.minimumFlight,PowerPolicyReason=shot.powerReason,BulletControl=touch.lastControl,
             Origin=h.Vector(shot.origin),Velocity=h.Vector(shot.velocity),Arrival=h.Vector(shot.arrival),
-            LegacyCoverageUnavailable=true,Receiver=h.Actor(player.Name,s),
-            Unified=shot.unified,Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,
+            Margin=shot.margin,Lane=shot.lane,Receiver=h.Actor(player.Name,s),
+            Unified=controller.bad:result(shot.unified),Risk=riskPolicy.mode,Ping=shot.networkPing,DirectLane=shot.directLane,
             DefenderETA=shot.defenderETA,ReceiverETA=shot.receiverETA,RaceAdvantage=shot.raceAdvantage,
             RouteLateral=shot.routeLateral,ReceiverTurn=shot.receiverTurn,OverTop=shot.safetyOverTop,BurnCandidate=shot.burnCandidate,TrustBurn=shot.trustBurn,
             FitReason=shot.fitReason,FitComparison=shot.fitAlternativeVariant,FitSecondComparison=shot.fitSecondVariant,
             PlanReason=shot.planReason,ReleaseBlocked=shot.releaseBlocked,SafetyRead=shot.safetyRead,ContestedChestThreat=shot.contestedChestThreat,
-            LegacyMarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
+            MarginDefender=h.Actor(shot.marginDB or 'NONE',shot.marginActor),LaneDefender=h.Actor(shot.laneDB or 'NONE',shot.laneActor)})
     end
     function h.Flush()
         if not h.enabled or not started or not h.dirty or h.flushing then return end
@@ -1140,9 +1343,10 @@ function controller.SetBlacklisted(player,value)
 end
 function controller.GetReceiverState(player)
     if controller.IsBlacklisted(player) then return 'BLOCKED' end
-    return controller.mag.manual[receiverKey(player)]==true and 'TRUSTED' or 'NORMAL'
+    return 'NORMAL'
 end
 function controller.SetReceiverState(player,value)
+    if value=='TRUSTED' then setGate('MANUAL_MAG_TRUST_UNSUPPORTED_IN_B3');return false end
     if stopped or not instance(player,'Player') or player==me or not ({NORMAL=true,BLOCKED=true,TRUSTED=true})[value] then return false end
     local key=receiverKey(player)
     if value=='TRUSTED' and key:sub(1,4)~='UID:' then return false end
@@ -1560,7 +1764,7 @@ function touch.fullAllowed(shot)
     if shot.screen and controller.league.mode=='LEAGUE' then shot.powerReason='EXPLICIT_ARMED_SCREEN_RECEIVER_PREPARED';return true end
     if not touch.enabled then return true end
     local power=shot.power or shot.velocity and shot.velocity.Magnitude
-    local minimum=power and power>=94.5 and touch.comfort or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick
+    local minimum=power and power>=94.5 and touch.comfort or shot.oscillationBullet and touch.comfort*.95 or shot.variant=='SoftBullet' and touch.comfort*.95 or touch.quick
     shot.minimumFlight=minimum
     if not finite(shot.time) or shot.time<minimum then shot.powerReason='NATIVE_FLIGHT_TOO_FAST';return false end
     if power and power<94.5 then shot.powerReason='NATIVE_FLIGHT_COMFORT_CHECKED';return true end
@@ -1617,7 +1821,7 @@ local function onLineAdded(o)
 end
 function controller.GetReport()
     local selectedRisk=riskPolicy.profiles[riskPolicy.mode]
-    local rows={VERSION,'UNIFIED_DECISIONS|'..game:GetService('HttpService'):JSONEncode(controller.unified.last or {}),'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
+    local rows={VERSION,'PLACE|'..tostring(game.PlaceId),'STATE|'..(stopped and 'STOPPED' or 'RUNNING'),
         'GATE|'..gate,'AUTO|'..tostring(auto),'THROW|'..tostring(throwing),'RISK_MODE|'..riskPolicy.mode,'PASS_PLAN|'..controller.passPlan.mode,
         'RECEIVER_FILTER|'..controller.receiverFilter.mode,'FRIEND_LOOKUP_STATUS|'..controller.receiverFilter.status,'FRIEND_LOOKUP_METHOD|'..(controller.receiverFilter.method or 'NOT_USED'),'FRIEND_LOOKUP_CALLS|'..controller.receiverFilter.checks,
         'PLAY_PROFILE|'..controller.league.mode,'PLAY_PROFILE_REQUEST|'..controller.league.requested,'PLAY_PROFILE_SOURCE|'..controller.league.source,
@@ -1628,7 +1832,7 @@ function controller.GetReport()
         'NATIVE_COVERAGE_JUMP|'..tostring(controller.nativeJump.enabled),'NATIVE_JUMP_POLICY|OWN_JUMP_LEAD_AND_NATIVE_CONTROLS; FRESH_CHEST_THREAT_REQUIRED; SAFE_ORDINARY_BULLET_VETO; CATCH_WINDOW_UNCALIBRATED',
         'LEAGUE_COVERAGE_POLICY|WHOLE_NATIVE_PATH_AND_ARRIVAL; DEFENDER_PING_BUDGET; GEOMETRIC_LAYERS_NOT_ASSIGNED_ROLES; FIT_WINDOW_REQUIRES_FRESH_BULLET_AND_DIME',
         'SHARED_COVERAGE_WINDOWS|'..tostring(controller.coverageWindows.enabled),'SHARED_COVERAGE_SCOPE|CASUAL_AND_LEAGUE; ORIGINAL_CASUAL_UI_AND_RECEIVER_FILTERS_RETAINED',
-        'OPEN_COMFORT|'..tostring(controller.passPlan.openComfort),'OPEN_COMFORT_POLICY|SAFE_ORDINARY_BULLET_FIRST; NATIVE_JUMP_NOT_PLANNED; CUSTOM_JB_REQUIRES_FRESH_CHEST_THREAT',
+        'OPEN_COMFORT|'..tostring(controller.passPlan.openComfort),'OPEN_COMFORT_POLICY|NATIVE_ENDPOINT_EASE_RANKING; CONDITIONAL_HIGH_ONLY; NO_FREE_POINT_OR_MAG_ADAPTER',
         'PASS_PLAN_DEEP_YARDS|'..controller.passPlan.deepYards,'WIDE_OPEN_JUMP|'..tostring(controller.passPlan.preferJump),'CLEANUP_CONFIRMED|'..tostring(cleanupComplete),
         'STOP_REASON|'..stopReason,'FATAL_ERROR|'..fatalError,'ERROR_POLICY|STOP_AND_PRESERVE_NO_RETRY',
         'PROFILE|'..(profile and 'SHARED_LOCK_NATIVE_SOLVER_LIVE_INPUT' or 'NONE'),
@@ -1666,40 +1870,40 @@ function controller.GetReport()
         'FIELD_WAIT_ARMED|'..tostring(fieldWaitSince~=nil),
         'FIELD_WAIT_ACTIVE_SECONDS|'..string.format('%.2f',fieldWaitSeconds),
         'NATIVE_MODE_OWNERSHIP|PROTECTED_SOLVE_ONLY; YUNA_AUTO_RESTORED_BETWEEN_CALLS',
-        'RELEASE_VERSION|experimental-unified-b2','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'UNIFIED_MAX_SECONDS|'..controller.unified.maxSeconds,'UNIFIED_CHECKS|'..controller.unified.checks,'UNIFIED_CONFIG|'..game:GetService('HttpService'):JSONEncode(controller.unified.config),'MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
+        'RELEASE_VERSION|experimental-unified-b4.2','BAD_PLAY_CODE_ID|'..controller.bad.CodeId,'PRESENTATION_MODE|'..tostring(controller.presentation and controller.presentation.status),'PRESENTATION_LIGHTING|'..tostring(controller.presentation and controller.presentation.lightingStatus),'RETIRED_FEATURES|MAG_TRIAL; CUSTOM_JUMP_BULLET; WIDE_OPEN_JUMP_PREFERENCE; LEADS_AVAILABLE_IN_DATA','RANKING_POLICY|EXPLICIT_ADMISSION_CERTIFICATES; CONFIGURED_LOFT_STRICT; NATIVE_EXPOSURE_AND_COMFORT_ORDER; NO_SIMULATED_CONTEST_RELIEF','MODE_SCOPE_ACTIVE|'..tostring(modeTransaction~=nil),
         'MAG_TRIAL|'..tostring(controller.mag.enabled),'MAG_EXTRA_Y|'..tostring(controller.mag.extraY),
         'MAG_STATUS|'..controller.mag.status,
         'ADAPTIVE_ANGLE|'..tostring(controller.angle.enabled),'ADAPTIVE_ANGLE_STATUS|'..controller.angle.status,
         'ADAPTIVE_ANGLE_ESTIMATES|'..controller.angle.requests,
         'ANGLE_POLICY|COVERAGE_DERIVED_NATIVE_DIME_JUMP; FOUR_BOUNDED_ESTIMATES; NO_EXTRA_NATIVE_SOLVES; FIT_BULLET_LOW_BRANCH_UNCHANGED; NATIVE_OUTPUT_AND_SAFETY_RECHECK_REQUIRED',
-        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
-        'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|OPT_IN_TRIAL; NATIVE_LOW_ARC_95; BULLET_X_FIT_Y; UNCONDITIONAL_JUMP_BRANCH_LIFT; CATCH_WINDOW_UNCALIBRATED',
-        'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
-        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
-        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
-        'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
-        'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
+        'MAG_POLICY|UNSUPPORTED_IN_B3; ENABLE_REJECTED; CONTROL_REMOVED',
+        'JUMP_BULLET|'..tostring(controller.jumpBullet.enabled),'JUMP_BULLET_POLICY|CUSTOM_RAISED_BULLET_UNSUPPORTED; HIGH_USES_NATIVE_JUMP_OWN_LEAD_AND_FRESH_PROOFS',
+        'BULLET_RISK_POLICY|STRICT_PATH_AND_ARRIVAL_IN_SAFE_MOD_TRUST; NO_LOW_PATH_BURN_WAIVER',
+        'TRUST_BURN_POLICY|ELEVATED_NATIVE_DIME; BULLET_AND_FLAT_NATIVE_STRICT; CONFIGURED_LOFT_STRICT; CURRENT_AND_PROJECTED_GAP_4; NO_OVER_TOP; EARLY_PATH_CLEAR',
+        'TRUST_BURN_CONTEST_FRACTION|'..riskPolicy.burn.contestFraction,'TRUST_BURN_MAX_CONTEST_SECONDS|'..riskPolicy.burn.contestSeconds,
+        'SAFETY_READS|'..tostring(controller.safety.enabled),'SAFETY_POLICY|ACTUAL_PATH_AND_ARRIVAL_THREATS; HIGH_SAFETY_LABEL_IS_ADVISORY; STRICT_CONDITIONAL_NATIVE_JUMP; CATCH_REACH_UNCALIBRATED',
+        'OPPORTUNITY_POLICY|MOD_TRUST_ROUTE_INDEPENDENT; FRESH_CACHED_RECEIVERS_REGRADED; SHORTER_READY_COMPLETIONS_PREFERRED; CANCEL_PENDING_NOT_RECEIVER',
         'REACTIVE_WINDOWS|'..tostring(controller.reactivity.enabled),'REACTIVE_CACHED_PASSES|'..controller.reactivity.cachedPasses,
         'MOTION_WATCH_CHECKS|'..controller.reactivity.checks,'MOTION_WATCH_WAKES|'..controller.reactivity.wakes,'MOVEMENT_HINTS|'..controller.reactivity.motionHints,
         'MOTION_HINT_POLICY|OPTIONAL_MOVE_DIRECTION_REGRADES_ONLY; REMOTE_INPUT_NOT_VERIFIED; NATIVE_VELOCITY_PREDICTION',
         'COVERAGE_GRADES|'..controller.coverageMath.grades,'DEFENDER_VERTICAL_BANDS|'..controller.coverageMath.verticalBands,
         'SHARED_OPTIMIZATIONS|CASUAL_AND_LEAGUE; ONE_VERTICAL_BAND_PER_DB_GRADE; REUSE_SAFETY_RESULT; CACHE_ONLY_REACTIVE_PLANNING',
         'CANCELLATION_SCOPE|PENDING_PREDICTION_ONLY; FRESH_REPLAN_SAME_RECEIVER_ALLOWED',
-        'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
+        'FIT_POLICY|TIMING_RESCUE_OR_ENABLED_POLICY_GRADED_LAYER_WINDOW; NO_SAFE_NON_FIT; ARRIVES_BEFORE_MODELED_DB; FRESH_COUNTERFACTUALS_AT_RELEASE',
         'MOTION_POLICY|ONE_HISTORY_SAMPLE_PER_HEARTBEAT; LIVE_POSE_AND_VELOCITY_RECHECKED_AT_RELEASE',
         'NATIVE_ENDPOINT_POLICY|HORIZONTAL_NUMERIC_TOLERANCE_MAX(0.05,RANGE*0.0001); ACTUAL_ARRIVAL_STILL_GRADED',
         'DEFENDER_MODEL|SPEED_BOUNDED_PURSUIT; INHERITED_UNCALIBRATED_REACH',
-        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
-        'UNIFIED_POLICY|SHARED_MATCHUP_MODEL; NESTED_RISK_CAPS; NO_MODE_LABEL_RANKING; SCORES_UNCALIBRATED',
-        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
+        'SAFE_OPEN_SECONDS|'..CFG.Settle,'MODEL_MAX_FLIGHT_SECONDS|NATIVE_TRAJECTORY_ABOVE_FIELD','MODEL_MAX_RANGE_STUDS|NATIVE_SOLVER_AND_FIELD_BOUNDS',
+        'RISK_POLICY|SAFE=STRICT; MOD=QUALIFIED_ELEVATED_WINDOWS; TRUST=QUALIFIED_ELEVATED_DIME_BURNS; BULLET_AND_FLAT_PATHS_STRICT',
+        'RISK_LIMITS|margin='..selectedRisk.margin..' lane='..selectedRisk.lane..' race='..tostring(selectedRisk.race)..' lateral='..tostring(selectedRisk.lateral)..' turn='..tostring(selectedRisk.turn),
         'MAX_HEARTBEAT_SECONDS|'..string.format('%.6f',maxHeartbeat),'MAX_NATIVE_CALLS_FRAME|'..maxFrameCalls,
-        'CLOSE_BULLET_POLICY|ADAPTIVE_GENTLE_AND_WINDOW_NATIVE_LOW_ARC; LOWEST_STRICT_SAFE_POWER; NO_YELLOW_DEPENDENCY',
+        'CLOSE_BULLET_POLICY|ACTUAL_NATIVE_FLIGHT_FLOORS; COMFORT_BEFORE_FASTEST; LOWER_POWER_MUST_BE_SUPPORTED_AND_SAFE',
         'BULLET_POWER_METHOD|'..touch.method,'BULLET_POWER_METHOD_REASON|'..touch.methodReason,'BULLET_POWER_CONTROL_FAILURE|'..(touch.methodReceipt or 'NONE'),
         'BULLET_REQUEST_MIN|'..touch.min,'BULLET_COMFORT_SECONDS|'..touch.comfort,'BULLET_WINDOW_SECONDS|'..touch.quick,
         'FULL_POWER_MIN_YARDS|'..(touch.full or 'ACTUAL_FLIGHT_ONLY'),'FULL_POWER_MIN_FLIGHT_SECONDS|'..touch.comfort,
-        'LEGACY_COVERAGE|INACTIVE_PLACEHOLDERS; DO_NOT_INTERPRET_MARGIN_LANE_AS_MEASUREMENTS',
+        'DEEP_THROW_YARDS|REMOVED','RECEIVER_POLICY|AUTOMATIC_SAFE_FIRST; BEST_COVERED_MANUAL_LOCK_OTHERWISE',
         'RECEIVER_SWITCH_YARDS|'..CFG.ReceiverSwitchYards,'AUTO_JUMP_REQUESTS|'..assistance.jumpCount,
-        'AUTO_JUMP_POLICY|'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
+        'AUTO_JUMP_POLICY|NO_BULLET_QB_JUMPS; FRESH_ADMITTED_NATIVE_WINDOW; VERIFIED_NORMAL_JUMP; OBSERVED_TAKEOFF_OFFSET'..(controller.jumpTiming.delay>0 and 'OBSERVED_TAKEOFF_THEN_SHORT_OFFSET; NO_PEAK_WAIT' or 'NORMAL_REQUEST_THEN_IMMEDIATE_RELEASE; NO_ASCENT_OR_PEAK_WAIT'),
         'JUMP_DELAY_TARGET_SECONDS|'..controller.jumpTiming.delay,'JUMP_TIMING_STATUS|'..controller.jumpTiming.status,
         'JUMP_OBSERVATIONS|'..controller.jumpTiming.observations,'JUMP_TIMING_CANCELLED|'..controller.jumpTiming.cancelled,
         'LAST_JUMP_RELEASE_DELAY_SECONDS|'..tostring(controller.jumpTiming.lastReleaseDelay),
@@ -1786,6 +1990,8 @@ local function preserve(copy)
     env.PELICAN_FF3_LAST_REPORT=controller.GetReport()
 end
 function controller.Stop(reason)
+    controller.unified.holds=setmetatable({},{__mode="k"});controller.bad:archiveAttempt('STOPPED');controller.bad.open=false;controller.bad.finalActive=false;if controller.presentation then controller.presentation:stop()end;controller.unified.helperHUD:stop()
+    if controller.bad.current then controller.bad.current.Stop={Reason=clean(reason or "USER_END"),At=os.clock()};if controller.bad.current.Final and not controller.bad.current.SentAt then controller.bad.current.Final.Status="STOPPED_BEFORE_REQUEST";controller.bad.current.Final.Gate=clean(reason or "USER_END")end end
     controller.reactivity.watch=nil
     if controller.league.ClearScreen then controller.league.ClearScreen('STOPPED') end
     if controller.jumpTiming.Reset then controller.jumpTiming.Reset() end
@@ -1806,7 +2012,7 @@ function controller.Stop(reason)
     if controller.receiverEvidence then controller.receiverEvidence.Stop(stopReason) end
     local friendsClean=controller.receiverFilter.stop()
     local historyClean=controller.history.Stop(stopReason,fatalError~='NONE')
-    cleanupComplete=historyClean and friendsClean and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and controller.jumpTiming.track==nil and controller.jumpTiming.last==nil and controller.reactivity.watch==nil and assistance.guide==nil and controller.comeback.worker==nil
+    cleanupComplete=historyClean and friendsClean and (not controller.presentation or controller.presentation.clean) and #remaining==0 and gui==nil and lease==nil and modeTransaction==nil and sequence==nil and ownedAnimation==nil and assistance.jumpPlan==nil and controller.jumpTiming.track==nil and controller.jumpTiming.last==nil and controller.reactivity.watch==nil and assistance.guide==nil and controller.comeback.worker==nil
     preserve(true)
     if cleanupComplete and env[KEY]==controller then env[KEY]=nil end
     -- The loader's init pcall cannot see a later heartbeat failure. Notify it
@@ -1909,7 +2115,7 @@ function controller.SetNativeJump(value)
     if stopped or type(value)~='boolean' or not controller.nativeJump.supported then return false end
     releaseChoice();controller.nativeJump.enabled=value;env.PELICAN_FF3_NATIVE_JUMP=value
     if controller.mag.RefreshModes then controller.mag.RefreshModes() end
-    if controller.nativeJump.button then controller.nativeJump.button.Text=value and 'JUMP ON' or 'JUMP OFF' end
+    if controller.nativeJump.button then controller.nativeJump.button.Text=value and 'HIGH ON' or 'HIGH OFF' end
     return true
 end
 if context.RegisterCleanup then context.RegisterCleanup(function() return controller.Stop('LOADER_CLEANUP') end) end
@@ -2336,7 +2542,7 @@ local function sample(player,now)
     local s=samples[player]
     if not s or s.model~=model or now-(s.motionAt or s.at)>.35 then
         s={model=model,p=root.Position,v=velocity,at=now,n=1,turn=0,routeTurn=0,path={},motionSince=nil,observedSpeed=0,
-            motionAt=now,motionP=root.Position,motionV=velocity,motionFrame=motionFrame}; samples[player]=s
+            motionAt=now,motionP=root.Position,motionV=velocity,motionFrame=motionFrame,readyAt=now,readyP=root.Position}; samples[player]=s
         s.path[1]={at=now,p=root.Position}
     elseif s.motionFrame~=motionFrame then
         local dt=now-s.motionAt
@@ -2344,10 +2550,17 @@ local function sample(player,now)
             local observed=(root.Position-s.motionP)/dt
             -- A teleport makes interception estimates stale, rather than a route ban.
             if observed.Magnitude>100 then s.n=0; s.path={}; s.motionSince=nil end
-            s.observedSpeed=flat(observed).Magnitude
-            if s.observedSpeed>=CFG.MinMoveSpeed and flat(velocity).Magnitude>=CFG.MinMoveSpeed and observed.Magnitude<=100 then
-                s.motionSince=s.motionSince or s.motionAt
-            else s.motionSince=nil end
+            local readyElapsed=now-(s.readyAt or s.motionAt)
+            if observed.Magnitude>100 then
+                s.readyAt=now;s.readyP=root.Position;s.observedSpeed=0
+            elseif readyElapsed>=CFG.Interval then
+                s.observedSpeed=flat(root.Position-(s.readyP or s.motionP)).Magnitude/readyElapsed
+                if s.observedSpeed>=CFG.MinMoveSpeed and flat(velocity).Magnitude>=CFG.MinMoveSpeed then
+                    s.motionSince=s.motionSince or s.readyAt or s.motionAt
+                else s.motionSince=nil end
+                s.readyAt=now;s.readyP=root.Position
+            elseif flat(velocity).Magnitude<CFG.MinMoveSpeed then s.motionSince=nil end
+            s.acceleration=flat(velocity-s.motionV)/dt
             s.turn=clamp((velocity-s.motionV).Magnitude/30,0,1)
             s.routeTurn=clamp(flat(velocity-s.motionV).Magnitude/30,0,1)
             s.n=s.n+1
@@ -2368,8 +2581,14 @@ local function sample(player,now)
     s.p,s.v,s.at=root.Position,velocity,now
     while #s.path>1 and now-s.path[1].at>CFG.MotionWindow do table.remove(s.path,1) end
     s.hum,s.head,s.root,s.name=hum,head,root,player.Name
+    s.oscillation=controller.unified.oscillation.detect(s.path,lines.forward,now,CFG)
     controller.passPlan.observe(s,player)
     return s
+end
+function controller.unified.ObserveOscillation(now)
+    if not auto or not profile or now<(controller.unified.nextMotionAt or 0) then return end
+    controller.unified.nextMotionAt=now+.05 -- bounded observation cadence, not native solve work
+    for player in pairs(samples)do if teammate(player)then sample(player,now)end end
 end
 local function receiverReady(player,s,now,point)
     if controller.IsBlacklisted(player) then return false,'BLACKLISTED' end
@@ -2384,8 +2603,8 @@ local function receiverReady(player,s,now,point)
         return true
     end
     if not controller.field.BeyondMinimum(root.Position) then return false,'INSIDE_OR_TOO_CLOSE_TO_LOS' end
-    if not vector(root.AssemblyLinearVelocity) or flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
-    if not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
+    if not vector(root.AssemblyLinearVelocity) or not s.oscillation and flat(root.AssemblyLinearVelocity).Magnitude<CFG.MinMoveSpeed then return false,'IDLE_OR_ROUTE_NOT_READY' end
+    if not s.oscillation and (not s.motionSince or now-s.motionSince<CFG.MinMotionAge or s.observedSpeed<CFG.MinMoveSpeed) then return false,'IDLE_OR_ROUTE_NOT_READY' end
     local travel=0
     for i=2,#s.path do travel=travel+flat(s.path[i].p-s.path[i-1].p).Magnitude end
     if travel<CFG.MinMotionTravel then return false,'INSUFFICIENT_RECENT_MOVEMENT' end
@@ -2750,18 +2969,19 @@ local function lane(shot,d,direct,both,earlyUntil)
     if d.hum and finite(d.hum.JumpPower) then reach=clamp(d.hum.JumpPower^2/(2*workspace.Gravity)+5,12.2,24) end
     local bottom,top=d.p.Y-2,d.p.Y+reach
     local disc=v.Y*v.Y-2*CFG.Gravity*(bottom-o.Y)
-    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+    if disc<0 then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
     local r=math.sqrt(disc); local lo,hi=math.max(0,(v.Y-r)/CFG.Gravity),math.min(t,(v.Y+r)/CFG.Gravity)
-    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+    if hi<lo then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
     local bodyRadius=4.5+d.turn*3
     local function interval(a,b)
-        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil end
+        if b<a then return 45,both and 45 or nil,earlyUntil and 45 or nil,earlyUntil and 45 or nil end
         local vx,vz=v.X,v.Z
         if direct then vx,vz=vx-d.v.X,vz-d.v.Z end
         local first=linearMinimum(o.X-d.p.X,o.Z-d.p.Z,vx,vz,a,b,direct and 0 or runSpeed(d))-bodyRadius
         if both then
             local early=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,math.min(b,earlyUntil),0)-bodyRadius or 45)
-            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early
+            local pursuit=earlyUntil and (a<=earlyUntil and linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X,v.Z,a,math.min(b,earlyUntil),runSpeed(d))-bodyRadius or 45)
+            return first,linearMinimum(o.X-d.p.X,o.Z-d.p.Z,v.X-d.v.X,v.Z-d.v.Z,a,b,0)-bodyRadius,early,pursuit
         end
         return first
     end
@@ -2769,10 +2989,11 @@ local function lane(shot,d,direct,both,earlyUntil)
     if high<=0 then return interval(lo,hi) end
     r=math.sqrt(high)
     local enter,leave=(v.Y-r)/CFG.Gravity,(v.Y+r)/CFG.Gravity
-    local early,earlyDirect,earlyContest=interval(lo,math.min(hi,enter))
-    local late,lateDirect,lateContest=interval(math.max(lo,leave),hi)
+    local early,earlyDirect,earlyContest,earlyPursuit=interval(lo,math.min(hi,enter))
+    local late,lateDirect,lateContest,latePursuit=interval(math.max(lo,leave),hi)
     return math.min(early,late),both and math.min(earlyDirect,lateDirect) or nil,
-        earlyUntil and math.min(earlyContest,lateContest) or nil
+        earlyUntil and math.min(earlyContest,lateContest) or nil,
+        earlyUntil and math.min(earlyPursuit,latePursuit) or nil
 end
 function riskPolicy.BurnStart(shot,receiver)
     shot.trustBurn=nil
@@ -2795,10 +3016,19 @@ function riskPolicy.BurnEarlyUntil(shot,receiver,d)
     -- the same contest boundary back so a bigger burn cannot grade worse.
     return math.max(0,b.EarlyUntil-math.max(0,gap-riskPolicy.burn.gap)/closing)
 end
-function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect)
+function riskPolicy.BurnGrade(shot,receiver,d,clearance,path,earlyDirect,earlyPursuit,earlyUntil,defenderIndex)
     local b=shot.trustBurn
     if not b or clearance>=CFG.ThrowMargin and path>=CFG.ThrowLane then return end
     b.Threats=b.Threats+1
+    -- Diagnostic certificate only: current-direction and optimistic pursuit
+    -- envelopes intentionally remain separate, with their actual time window.
+    b.EarlyPursuit=math.min(b.EarlyPursuit or math.huge,earlyPursuit or -math.huge)
+    b.Certificates=b.Certificates or {}
+    if #b.Certificates<16 then
+        b.Certificates[#b.Certificates+1]={DefenderIndex=defenderIndex,EarlyUntil=earlyUntil,
+            EarlyDirect=earlyDirect,EarlyPursuit=earlyPursuit,ArrivalClearance=clearance,WholeFlightPursuit=path}
+    else b.CertificatesOmitted=(b.CertificatesOmitted or 0)+1 end
+    b.CertificateScope='SAME_VERTICAL_BANDS; CURRENT_DIRECTION_AND_INSTANT_TURN; UNCALIBRATED; DIAGNOSTIC_ONLY'
     local relative=flat(receiver.p-d.p)
     local future=flat(predict(receiver,b.Horizon)-predict(d,b.Horizon))
     local gap,futureGap=relative:Dot(b.Route),future:Dot(b.Route)
@@ -2818,7 +3048,7 @@ function riskPolicy.BurnFinish(shot)
     local b=shot.trustBurn
     if not b then return end
     local p=riskPolicy.profiles.TRUST
-    b.Reason=b.Blocked or (shot.safetyOverTop or shot.safetyRead and shot.safetyRead.High) and 'SAFETY_OVER_TOP'
+    b.Reason=b.Blocked or shot.safetyOverTop and 'SAFETY_OVER_TOP'
         or (shot.routeLateral or math.huge)>p.lateral and 'ROUTE_CORRECTION'
         or (shot.receiverTurn or 1)>p.turn and 'ROUTE_UNSTABLE'
         or (shot.receiverETA or math.huge)>shot.time+p.arrivalSlack and 'RECEIVER_LATE'
@@ -2827,14 +3057,119 @@ function riskPolicy.BurnFinish(shot)
     b.Route=nil -- retain scalar diagnostics only
 end
 local function risk(shot,receiver,defenders)
-    local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),endzone=controller.field.InEndzone(shot.arrival)}
-    local begun=os.clock()
-    controller.unified:evaluate(shot,receiver,defenders,inputs)
-    controller.bad:grade(shot,receiver,defenders,inputs,controller.unified.config,os.clock()-begun)
-    shot.unified.Generation=controller.unified.generation
-    shot.margin,shot.lane=0,0;shot.defenderETA=math.huge
-    shot.wideMargin,shot.wideLane=0,0;shot.safetyOverTop=false;shot.safetyRead=nil
-    shot.score=shot.unified.Score;shot.powerAllowed=true
+    local gradeStarted=os.clock();shot.maxThreatSpeed=0
+    shot.guardInputs={Clock=gradeStarted,Drops={}}
+    local ref=receiver.chestReference;if ref then shot.guardInputs.ChestReference={time=ref.time,at=ref.at}end
+    controller.coverageMath.grades=controller.coverageMath.grades+1
+    shot.receiverETA=nil;shot.raceAdvantage=nil;shot.directLane=nil;shot.routeLateral=nil;shot.receiverTurn=nil
+    shot.minimumFlight=nil;shot.powerReason=nil
+    local margin,laneMargin,wideMargin,wideLane=45,45,45,45; local t=shot.time
+    local pingBudget=finite(shot.networkPing) and math.max(0,shot.networkPing) or 0
+    local firstDB,directLane=math.huge,45
+    local enhanced=controller.coverageWindows.enabled or controller.league.mode=='LEAGUE'
+    local layers=enhanced and {Underneath=0,Deeper=0,LaneThreats=0,CatchThreats=0} or nil
+    local flight=flat(shot.arrival-shot.origin)
+    -- The scene read uses a common ordinary-Bullet horizon, not the elevated
+    -- candidate's different lead point. It is policy geometry, not role proof
+    -- or a calibrated percentage of the game's catch hitbox.
+    local read
+    if controller.safety.enabled and lines.forward then
+        local reference=shot.variant=='Bullet' and shot or receiver.chestReference
+        if reference and reference.at and os.clock()-reference.at>CFG.CacheAge then reference=nil end
+        local horizon=reference and reference.time or math.max(.05,flat(receiver.p-shot.origin).Magnitude/95)
+        local motion=flat(receiver.v);local along=motion:Dot(lines.forward)
+        read={State='NO_HIGH_SAFETY',High=false,Dropping=false,Contested=false,
+            Slant=along>=CFG.MinMoveSpeed and (motion-lines.forward*along).Magnitude>=CFG.MinMoveSpeed,Horizon=horizon}
+        receiver.dropHistory=receiver.dropHistory or setmetatable({}, {__mode='k'})
+    end
+    shot.safetyRead=read;shot.contestedChestThreat=false
+    local route=flat(receiver.v)
+    route=route.Magnitude>0 and lines.forward and route:Dot(lines.forward)>0 and route.Unit or nil
+    shot.safetyOverTop,shot.safetyName=false,nil
+    shot.marginDB,shot.laneDB,shot.marginActor,shot.laneActor=nil,nil,nil,nil
+    riskPolicy.BurnStart(shot,receiver)
+    for defenderIndex,d in ipairs(defenders) do
+        -- Instant turning at observed/normal run speed is optimistic for the DB.
+        -- A trailing defender must cover the actual distance before arrival;
+        -- a stationary prevent defender can move instead of staying frozen.
+        local distance=flat(shot.arrival-d.p).Magnitude
+        local speed=runSpeed(d);shot.maxThreatSpeed=math.max(shot.maxThreatSpeed,speed)
+        local baseClearance=distance-speed*t-(4.5+d.turn*3)
+        local clearance=baseClearance-(enhanced and speed*pingBudget or 0)
+        local eta=speed>0 and math.max(0,distance-(4.5+d.turn*3))/speed or (distance<=4.5+d.turn*3 and 0 or math.huge)
+        firstDB=math.min(firstDB,eta)
+        local earlyUntil=riskPolicy.BurnEarlyUntil(shot,receiver,d)
+        local basePath,directPath,earlyDirect,earlyPursuit=lane(shot,d,false,riskPolicy.mode~='SAFE',earlyUntil)
+        if directPath then directLane=math.min(directLane,directPath-(enhanced and speed*pingBudget or 0)) end
+        if clearance<margin then margin=clearance;shot.marginDB=d.name;shot.marginActor=d end
+        local pathClearance=basePath-(enhanced and speed*pingBudget or 0)
+        riskPolicy.BurnGrade(shot,receiver,d,clearance,pathClearance,earlyDirect,earlyPursuit,earlyUntil,defenderIndex)
+        if read then
+            local relative=flat(d.p-receiver.p);local depth=relative:Dot(lines.forward)
+            local later=relative+flat(d.v-receiver.v)*(read.Horizon+pingBudget)
+            local laterDepth=later:Dot(lines.forward)
+            local radius=4.5+d.turn*3 -- inherited model envelope; not a verified catch radius
+            local side=(relative-lines.forward*depth).Magnitude
+            local laterSide=(later-lines.forward*laterDepth).Magnitude
+            local relevant=side<=speed*(read.Horizon+pingBudget)+radius or laterSide<=radius
+            local key=d.model or d
+            if receiver.dropHistory[key]then shot.guardInputs.Drops[d.name]=receiver.dropHistory[key]end
+            local dropping=relevant and depth>0 and flat(d.v):Dot(lines.forward)<=-CFG.MinMoveSpeed
+                and flat(d.v):Dot(-relative)>0
+            if dropping then receiver.dropHistory[key]=os.clock();read.Dropping=true end
+            local recent=receiver.dropHistory[key] and os.clock()-receiver.dropHistory[key]<=CFG.MotionWindow
+            local catchClearance=flat(receiver.p+flat(receiver.v)*(read.Horizon+pingBudget)-d.p).Magnitude
+                -speed*(read.Horizon+pingBudget)-radius
+            if recent and relevant and catchClearance<CFG.ThrowMargin then receiver.dropHistory[key]=os.clock() end
+            if relevant and depth>radius and laterDepth>radius and not dropping and not (recent and catchClearance<CFG.ThrowMargin) then read.High=true end
+            if relevant and read.Slant and (dropping or recent) and catchClearance<CFG.ThrowMargin then
+                read.Contested=true
+                if shot.variant=='Bullet' and clearance<CFG.ThrowMargin then shot.contestedChestThreat=true end
+            end
+        end
+        -- Reuse this exact grade for the over-top check instead of rebuilding
+        -- the same defender vertical intervals in coverage().
+        if route and not shot.safetyOverTop then
+            local relative=flat(d.p-receiver.p);local along=relative:Dot(route)
+            if along>=0 and relative:Dot(lines.forward)>0 and (relative-route*along).Magnitude<=speed*t+(4.5+d.turn*3)
+                and (baseClearance<CFG.ThrowMargin or basePath<CFG.ThrowLane) then shot.safetyOverTop=true;shot.safetyName=d.name end
+        end
+        if layers then
+            local fraction=flight.Magnitude>0 and flat(d.p-shot.origin):Dot(flight)/(flight.Magnitude*flight.Magnitude) or 0
+            if lines.forward and flat(d.p-receiver.p):Dot(lines.forward)>0 then layers.Deeper=layers.Deeper+1
+            elseif fraction>0 and fraction<1 and (pathClearance<CFG.ThrowLane or clearance<CFG.ThrowMargin) then
+                layers.Underneath=layers.Underneath+1
+            end
+            if pathClearance<CFG.ThrowLane then layers.LaneThreats=layers.LaneThreats+1 end
+            if clearance<CFG.ThrowMargin then layers.CatchThreats=layers.CatchThreats+1 end
+        end
+        wideMargin=math.min(wideMargin,clearance-(enhanced and 0 or speed*pingBudget))
+        wideLane=math.min(wideLane,pathClearance-(enhanced and 0 or speed*pingBudget))
+        if pathClearance<laneMargin then laneMargin=pathClearance;shot.laneDB=d.name;shot.laneActor=d end
+    end
+    if read then
+        read.State=read.High and 'HIGH_SAFETY_OBSERVED' or read.Contested and 'DROPPING_SLANT_CONTEST'
+            or read.Dropping and 'SAFETY_FLOATING_AUTO_ARC' or 'NO_HIGH_SAFETY'
+    end
+    shot.coverageLayers=layers
+    shot.margin,shot.lane,shot.defenderETA=margin,laneMargin,firstDB
+    shot.wideMargin,shot.wideLane=wideMargin,wideLane
+    shot.powerAllowed=touch.fullAllowed(shot)
+    if shot.mode=='Fit' then shot.fitAllowed=false end
+    if riskPolicy.mode~='SAFE' then
+        local speed=runSpeed(receiver)
+        shot.receiverETA=speed>0 and math.max(0,flat(shot.arrival-receiver.p).Magnitude-4.5)/speed or math.huge
+        shot.raceAdvantage=firstDB-shot.receiverETA;shot.directLane=directLane
+        local movement=flat(receiver.v)
+        local residual=flat(shot.arrival-predict(receiver,t))
+        shot.routeLateral=movement.Magnitude>0 and (residual-movement.Unit*residual:Dot(movement.Unit)).Magnitude or math.huge
+        shot.receiverTurn=receiver.routeTurn or receiver.turn
+    end
+    riskPolicy.BurnFinish(shot)
+    -- Once both clearances have a useful safety surplus, extra empty space
+    -- must not make a slow floating arc beat an already-safe direct throw.
+    shot.score=math.min(margin,CFG.ThrowMargin*2)*1.8+math.min(laneMargin,CFG.ThrowLane*2)*1.5-t*3-receiver.turn*12-(shot.receiverResidual or 0)*.25
+    shot.guardInputs.ClockEnd=os.clock();shot.guardSeconds=os.clock()-gradeStarted
     return shot
 end
 local lastNativeInputs
@@ -2895,24 +3230,138 @@ local function safetyAhead(s,defenders,time,shot)
     end
     return false
 end
+function controller.unified.BaselineCoverage(shot,s,defenders)
+    local forward=lines.forward and flat(s.v):Dot(lines.forward)>0
+    local ahead=flat(shot.arrival-s.p):Dot(flat(s.v))>0
+    shot.burnCandidate=forward and ahead and not shot.safetyOverTop or false
+    shot.clearBurn=forward and ahead and not shot.safetyOverTop
+        and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane or false
+    controller.passPlan.assess(shot,s)
+end
+function controller.unified.CoverageReady(shot)
+    return type(shot)=='table' and finite(shot.margin) and finite(shot.lane)
+        and finite(shot.time) and shot.time>0
+end
+function controller.unified.BaselineThrowable(shot)
+    if not controller.unified.CoverageReady(shot) then return false end
+    if shot.planAllowed==false then return false end
+    if shot.releaseBlocked then return false end
+    if shot.powerAllowed==false then return false end
+    if controller.safety.enabled and shot.mode=='Jump' and not shot.nativeCoverageJump then return false end
+    if shot.mode=='Fit' and not shot.fitAllowed then return false end
+    if (shot.jumpBullet or shot.nativeCoverageJump) and not shot.jumpBulletAllowed then return false end
+    local strict=shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane
+        and (not shot.safetyOverTop or shot.mode=='Bullet')
+    if shot.nativeCoverageJump then return strict end
+    if shot.magTrial then return strict and controller.mag.Allowed(shot.magPlayer) end
+    if strict then return true end
+    if riskPolicy.mode=='TRUST' and shot.trustBurn and shot.trustBurn.Allowed then return true end
+    local p=riskPolicy.profiles[riskPolicy.mode]
+    -- Risk modes govern a qualified catch window, including a crosser or a
+    -- comeback. Forward-route classification must not veto an otherwise valid
+    -- window. Bullet/covered Jump/Mag retain the strict branches above.
+    return riskPolicy.mode~='SAFE' and shot.mode~='Bullet' and not shot.softBullet and not shot.safetyOverTop
+        and shot.margin>=p.margin and shot.lane>=p.lane and (shot.directLane or -math.huge)>0
+        and (shot.raceAdvantage or -math.huge)>=p.race and (shot.receiverETA or math.huge)<=shot.time+p.arrivalSlack
+        and (shot.routeLateral or math.huge)<=p.lateral and (shot.receiverTurn or 1)<=p.turn
+end
+
+function controller.unified.Guard(shot)
+    if not controller.unified.CoverageReady(shot) then
+        return {Allowed=false,Strict=false,Reason='COVERAGE_GRADE_MISSING'}
+    end
+    local allowed=controller.unified.BaselineThrowable(shot)
+    if shot.oscillationBullet and not (shot.wideOpen and shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane) then allowed=false end
+    local reason=shot.planAllowed==false and shot.planReason or shot.releaseBlocked and 'RELEASE_BLOCKED'
+        or shot.powerAllowed==false and shot.powerReason
+        or shot.mode=='Fit' and not shot.fitAllowed and (shot.fitReason or 'FIT_COMPARISON_REQUIRED')
+        or (shot.nativeCoverageJump or shot.jumpBullet) and not shot.jumpBulletAllowed and (shot.jumpBulletReason or 'JUMP_COMPARISON_REQUIRED')
+        or not allowed and (shot.trustBurn and shot.trustBurn.Reason or 'COVERAGE_REJECTED')
+        or shot.trustBurn and shot.trustBurn.Allowed and 'TRAILING_CORNER_ADVANTAGE' or 'CLEAR_NATIVE_WINDOW'
+    return {Allowed=allowed,Reason=reason,Margin=shot.margin,Lane=shot.lane,DirectLane=shot.directLane,
+        Strict=shot.margin>=CFG.ThrowMargin and shot.lane>=CFG.ThrowLane,ThreatSpeed=shot.maxThreatSpeed or 0,RequiredMargin=CFG.ThrowMargin,RequiredLane=CFG.ThrowLane,
+        TrustBurn=shot.trustBurn,DefenderETA=finite(shot.defenderETA) and shot.defenderETA or nil,NoReachableDefender=shot.defenderETA==math.huge,RaceAdvantage=shot.raceAdvantage,
+        ReceiverETA=shot.receiverETA,PowerAllowed=shot.powerAllowed,MinimumFlight=shot.minimumFlight,
+        WideOpen=shot.wideOpen,MarginDefender=shot.marginDB,LaneDefender=shot.laneDB,
+        SafetyRead=shot.safetyRead,FitReason=shot.fitReason,JumpReason=shot.jumpBulletReason}
+end
 local function coverage(shot,s,defenders)
-    shot.endzoneTarget=controller.field.InEndzone(shot.arrival)
-    shot.catchDepthYards=downfield(shot.arrival)/3
-    shot.deepTarget=shot.catchDepthYards>=controller.passPlan.deepYards
-    shot.planAllowed=controller.passPlan.mode=='NORMAL' or controller.passPlan.mode=='DEEP' and (shot.deepTarget or shot.endzoneTarget)
-        or controller.passPlan.mode=='SHORT' and not shot.deepTarget
-    shot.planReason=shot.planAllowed and 'PASS_PLAN_ALLOWED' or 'EXPLICIT_DEPTH_PLAN'
-    if controller.bad.open then local row=controller.bad:row(s.name,shot.variant or shot.mode);if row then row.PlanAllowed=shot.planAllowed;row.ReleaseBlocked=shot.releaseBlocked end elseif controller.bad.finalActive and controller.bad.current.Final then controller.bad.current.Final.PlanAllowed=shot.planAllowed end
-    shot.clearBurn=false;shot.wideOpen=shot.unified.RiskScore<=controller.unified.config.SafeRisk
+    controller.unified.BaselineCoverage(shot,s,defenders)
+    if shot.oscillationBullet and not s.oscillation then shot.releaseBlocked=true end
+    local inputs={gravity=CFG.Gravity,mode=riskPolicy.mode,gain=math.max(0,downfield(shot.arrival)/3),
+        endzone=shot.endzoneTarget,CurrentDepthYards=downfield(s.p)/3,MinDepthYards=CFG.MinDownfieldYards,
+        ReceiverGrounded=s.hum and s.hum.FloorMaterial~=nil and s.hum.FloorMaterial~=Enum.Material.Air,
+        NativeBoundary=profile and type(profile.q.AntiOOB)=='table' and {Enabled=profile.q.AntiOOB.Enabled,XTolerance=profile.q.AntiOOB.XTolerance,ZTolerance=profile.q.AntiOOB.ZTolerance} or nil,
+        GoalOrScreen=lines.goalToGo or shot.screen or shot.endzoneTarget,ForwardX=lines.forward and lines.forward.X,
+        ForwardZ=lines.forward and lines.forward.Z,OpenComfort=controller.passPlan.openComfort,
+        ComfortSeconds=touch.enabled and touch.comfort or 0,WorldGravity=workspace.Gravity,CoverageWindows=controller.coverageWindows.enabled,Profile=controller.league.mode,SafetyReads=controller.safety.enabled,CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,FullPowerYards=touch.full},GuardInputs=shot.guardInputs,Guard=controller.unified.Guard(shot)}
+    shot.evidenceReceiver=s.name
+    local begun=os.clock();controller.unified:evaluate(shot,s,defenders,inputs)
+    if not shot.advisory then controller.bad:grade(shot,s,defenders,inputs,controller.unified.config,(shot.guardSeconds or 0)+os.clock()-begun) end
 end
 local function throwable(shot)
-    return shot.planAllowed~=false and not shot.releaseBlocked and (not shot.magTrial or controller.mag.Allowed(shot.magPlayer))
-        and Unified.allowed(shot,riskPolicy.mode)
+    local g=controller.unified.Guard(shot)
+    local allowed=Unified.admit(shot,g)
+    if shot.unified and not shot.advisory then controller.bad:admit(shot,g) end
+    return allowed
 end
 controller.fit={}
-function controller.jumpBullet.assess(shot) shot.jumpBulletAllowed=true;return throwable(shot) end
-function controller.fit.assess(shot) shot.fitAllowed=true;return throwable(shot) end
-local function better(a,b) return Unified.better(a,b,riskPolicy.mode) end
+function controller.jumpBullet.assess(shot,alternatives)
+    shot.jumpBulletAllowed=true;shot.jumpBulletReason=nil;shot.jumpBulletChest=nil
+
+    for _,other in ipairs(alternatives) do
+        if other~=shot and not other.jumpBullet and not other.nativeCoverageJump and not other.magTrial and throwable(other)
+            and (not controller.safety.enabled or other.mode=='Bullet')
+            and (other.mode~='Bullet' or other.margin>=CFG.ThrowMargin and other.lane>=CFG.ThrowLane) then
+            shot.jumpBulletAllowed=false;shot.jumpBulletReason=other.mode=='Bullet' and 'ORDINARY_SAFE_BULLET_AVAILABLE' or 'ORDINARY_SAFE_PASS_AVAILABLE';return false
+        end
+    end
+    for _,other in ipairs(alternatives) do
+        if other.variant=='Bullet' and (other.margin<CFG.ThrowMargin or other.lane<CFG.ThrowLane)
+            then
+            if throwable(shot) then
+                shot.jumpBulletReason='FRESH_CHEST_PATH_THREAT'
+                shot.jumpBulletChest={Time=other.time,Margin=other.margin,Lane=other.lane,Variant=other.variant}
+                return true
+            end
+        end
+    end
+    shot.jumpBulletAllowed=false;shot.jumpBulletReason='NO_SAFE_JUMP_OR_FRESH_CHEST_PATH_THREAT';return false
+end
+function controller.fit.assess(shot,alternatives,requiredVariant)
+    shot.fitAllowed=true;shot.fitAlternativeVariant=nil;shot.fitSecondVariant=nil
+    if not throwable(shot) or not (shot.defenderETA>shot.time) then
+        shot.fitAllowed=false;shot.fitReason='FIT_NOT_SAFE_BEFORE_DB';return false
+    end
+    local late
+    for _,other in ipairs(alternatives) do
+        if other.mode~='Fit' and not other.jumpBullet and not other.nativeCoverageJump and not other.magTrial then
+            if throwable(other) then shot.fitAllowed=false;shot.fitReason='SAFE_NON_FIT_AVAILABLE';return false end
+            if (not requiredVariant or other.variant==requiredVariant) and other.defenderETA<=other.time
+                and shot.time<other.time and (not late or other.time<late.time) then late=other end
+        end
+    end
+    if not late and (controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and not shot.safetyOverTop then
+        local chest,loft
+        for _,other in ipairs(alternatives) do
+            if other.margin<CFG.ThrowMargin or other.lane<CFG.ThrowLane or other.safetyOverTop then
+                if other.variant=='Bullet' then chest=other elseif other.variant=='Dime' then loft=other end
+            end
+        end
+        if chest and loft and (not requiredVariant or requiredVariant=='Bullet') then
+            shot.fitAlternativeVariant='Bullet';shot.fitSecondVariant='Dime';shot.fitReason='COVERAGE_WINDOW_BETWEEN_LAYERS'
+            shot.fitAlternativeTime=chest.time;shot.fitAlternativeDB=chest.defenderETA;return true
+        end
+    end
+    if not late then shot.fitAllowed=false;shot.fitReason='NO_LATE_ALTERNATIVE_PROVEN';return false end
+    shot.fitAlternativeVariant=late.variant or late.mode;shot.fitAlternativeTime=late.time
+    shot.fitAlternativeDB=late.defenderETA;shot.fitReason='TIMING_RESCUE'
+    return true
+end
+local function better(a,b)
+    throwable(a);if b then throwable(b) end
+    return Unified.better(a,b)
+end
 local function receiverBetter(a,b) return not b or better(a.shot,b.shot) end
 local function classify(shot,s,defenders)
     local speed=flat(s.v).Magnitude
@@ -2996,12 +3445,19 @@ function controller.angle.Request(player,mode,lead)
 end
 local function solve(player,mode)
     if mode=='Jump' and (controller.passPlan.openComfort or controller.safety.enabled) then return nil,'NATIVE_JUMP_DISABLED_FOR_OPEN_COMFORT' end
+    -- BEGIN NATIVE LOFT ALTERNATIVE
+    local loft=mode=='LoftDime'
+    -- END NATIVE LOFT ALTERNATIVE
     local nativeJump=mode=='CoverageJump'
     local fastJump=nativeJump and controller.safety.enabled
     if nativeJump and not controller.nativeJump.enabled then return nil,'NATIVE_JUMP_OFF' end
     local screen=controller.league.ScreenEligible and controller.league.ScreenEligible(player,samples[player],os.clock()) or false
     if screen and mode~='SoftBullet' and mode~='QuickBullet' and mode~='Bullet' then return nil,'SCREEN_BULLET_ONLY' end
-    local soft=mode=='SoftBullet' or mode=='QuickBullet'
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    local zig=mode=='ZigzagBullet'
+    if zig and (not samples[player] or not samples[player].oscillation) then return nil,'NO_OBSERVED_ZIGZAG' end
+    -- END OBSERVED OSCILLATION ADAPTER
+    local soft=mode=='SoftBullet' or mode=='QuickBullet' or zig
     local jump=mode=='JumpBullet'
     local mag=mode=='MagDime'
     if mag and not controller.mag.Allowed(player) then return controller.mag.Reject('MAG_TRUST_OR_TRIAL_UNAVAILABLE') end
@@ -3011,6 +3467,17 @@ local function solve(player,mode)
     if fastJump then requestedPower=profile and profile.q.Power end
     if soft and not requestedPower then return nil,'CLOSE_BULLET_NOT_NEEDED' end
     local appliedLead
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    if zig then
+        local s=samples[player];local _,_,head=body(me);local ping=me:GetNetworkPing()
+        if not head or not finite(ping) or ping<0 then return nil,'ZIGZAG_POSE_UNVERIFIED' end
+        requestedPower=controller.unified.oscillation.power(s,head.Position,touch.comfort,CFG.Gravity,touch.min,profile.leads.Bullet)
+        if not requestedPower then return nil,'ZIGZAG_COMFORT_POINT_OUT_OF_RANGE' end
+        local x,why=controller.unified.oscillation.control(s,head.Position,requestedPower,CFG.Gravity,ping,profile.leads.Bullet)
+        if not x then return nil,why end
+        appliedLead=Vector2.new(x,profile.leads.Bullet.Y)
+    end
+    -- END OBSERVED OSCILLATION ADAPTER
     if jump then
         if not profile or not leadTable(profile.leads) or profile.leads.Fit.Y<=0 then return nil,'JUMP_BULLET_FIT_HEIGHT_UNAVAILABLE' end
         appliedLead=Vector2.new(profile.leads.Bullet.X,profile.leads.Fit.Y);requestedPower=95
@@ -3019,16 +3486,23 @@ local function solve(player,mode)
         if not profile or not leadTable(profile.leads) then return controller.mag.Reject('MAG_LEAD_UNAVAILABLE') end
         appliedLead=Vector2.new(profile.leads.Dime.X,profile.leads.Dime.Y+controller.mag.extraY)
     end
-    local nativeMode=(jump or nativeJump) and 'Jump' or (soft or mag) and 'Dime' or mode
+    local nativeMode=(jump or nativeJump) and 'Jump' or (soft or mag or loft) and 'Dime' or mode
     -- The source's selected manual value is power in Power mode and degrees
     -- in Angle mode. Do not keep passing the old Angle after selecting Power.
     local nativeInput=(soft or jump or fastJump) and requestedPower or profile and (profile.q.ManualType=='Power' and profile.q.Power or profile.q.Angle)
     local angleControl
-    if controller.angle.enabled and not soft and not jump and not fastJump and (nativeMode=='Dime' or nativeMode=='Jump') then
+    if controller.angle.enabled and not soft and not jump and not fastJump and not loft and (nativeMode=='Dime' or nativeMode=='Jump') then
         local reason;angleControl,reason=controller.angle.Request(player,mode,appliedLead or profile.leads[nativeMode])
         if not angleControl then controller.angle.status=reason;return nil,reason end
         nativeInput=angleControl.requested
     end
+    -- BEGIN NATIVE LOFT ALTERNATIVE
+    if loft then
+        if not controller.angle.enabled or not profile or not finite(profile.q.Angle) or profile.q.Angle<=0 or profile.q.Angle>=89 or not finite(profile.q.Power) or profile.q.Power<=0 or profile.q.Power>95 then return nil,'CONFIGURED_LOFT_UNAVAILABLE' end
+        angleControl={requested=profile.q.Angle,powerCap=profile.q.Power,reason='CONFIGURED_NATIVE_ANGLE_ALTERNATIVE'}
+        nativeInput=angleControl.requested
+    end
+    -- END NATIVE LOFT ALTERNATIVE
     if soft and touch.method=='ANGLE' then
         nativeInput=touch.angle(player,requestedPower)
         if not nativeInput then touch.record(player,mode,requestedPower,nil,'ANGLE_ESTIMATE_UNREACHABLE');return nil,'CLOSE_BULLET_ANGLE_ESTIMATE_UNREACHABLE' end
@@ -3126,6 +3600,14 @@ local function solve(player,mode)
     -- the actual ballistic arrival for every later reach/coverage check.
     local endpointTolerance=math.max(.05,flat(target-origin).Magnitude*.0001)
     if endpointError>endpointTolerance then
+        -- BEGIN SOFT POWER FALLBACK
+        if soft and touch.method=='POWER' then
+            touch.record(player,mode,requestedPower,power,'POWER_ENDPOINT_MISMATCH_TRY_NATIVE_ANGLE')
+            touch.method='ANGLE';touch.methodReason='POWER_ENDPOINT_MISMATCH_TRY_NATIVE_ANGLE'
+            touch.powerFallback={At=os.clock(),Reason=touch.methodReason,Error=endpointError,Tolerance=endpointTolerance,RequestedPower=requestedPower,ReturnedPower=power}
+            return solve(player,mode) -- one Angle retry; the POWER flag is already cleared; global native cap still applies
+        end
+        -- END SOFT POWER FALLBACK
         arrivalRejects[mode]={target=player.Name,origin=origin,velocity=velocity,time=time,arrival=arrival,aim=target,
             error=endpointError,tolerance=endpointTolerance,epoch=possession.epoch}
         return nil,'NATIVE_ARRIVAL_AIMPOINT_MISMATCH',{Error=endpointError,Tolerance=endpointTolerance,Time=time,Power=power,
@@ -3172,14 +3654,17 @@ local function solve(player,mode)
         end
     end
     appliedLead=appliedLead or profile.leads[soft and 'Bullet' or nativeMode]
+    -- BEGIN OBSERVED OSCILLATION ADAPTER
+    if zig and not controller.unified.oscillation.contains(samples[player],arrival,math.abs(profile.leads.Bullet.X)) then return nil,'ZIGZAG_NATIVE_POINT_OUTSIDE_OBSERVED_AREA' end
+    -- END OBSERVED OSCILLATION ADAPTER
     if fastJump and (not finite(requestedPower) or math.abs(power-requestedPower)>1 or math.abs(velocity.Magnitude-power)>1
         or math.abs(arrival.Y-aimpoint.Y-appliedLead.Y)>endpointTolerance) then return nil,'NATIVE_JUMP_POWER_OR_LEAD_UNVERIFIED' end
     if fastJump then
         local rise=math.atan((arrival.Y-origin.Y)/math.max(.001,flat(arrival-origin).Magnitude))
         if math.atan(velocity.Y/math.max(.001,flat(velocity).Magnitude))>(math.pi/2+rise)/2+.0001 then return nil,'NATIVE_JUMP_HIGH_ARC_REJECTED' end
     end
-    return {origin=origin,velocity=velocity,power=power,time=time,mode=mag and 'Dime' or (soft or jump) and 'Bullet' or nativeJump and 'Jump' or mode,arrival=arrival,
-        variant=mode,softBullet=soft,jumpBullet=jump,nativeCoverageJump=nativeJump,screen=screen,nativeMode=nativeMode,appliedLead=appliedLead,
+    return {origin=origin,velocity=velocity,power=power,time=time,mode=(mag or loft) and 'Dime' or (soft or jump) and 'Bullet' or nativeJump and 'Jump' or mode,arrival=arrival,
+        variant=mode,softBullet=soft,oscillationBullet=zig,jumpBullet=jump,nativeCoverageJump=nativeJump,screen=screen,nativeMode=nativeMode,appliedLead=appliedLead,
         magTrial=mag,magPlayer=mag and player or nil,magTrustSource=mag and controller.mag.Source(player,false) or nil,
         magExtraY=mag and controller.mag.extraY or nil,magBaseLead=mag and profile.leads.Dime or nil,
         angleControl=angleControl,actualAngle=actualAngle,nativeAngleAdjustment=angleControl and actualAngle-angleControl.requested or nil,
@@ -3194,12 +3679,20 @@ local plannerModes=controller.passPlan.openComfort and {'SoftBullet','QuickBulle
 controller.jumpBullet.baseModes=#plannerModes
 controller.jumpBullet.plannerModes=plannerModes
 function controller.mag.RefreshModes()
-    for i=#plannerModes,controller.jumpBullet.baseModes+1,-1 do plannerModes[i]=nil end
-    if controller.nativeJump.supported then
-        if controller.nativeJump.enabled and (controller.passPlan.openComfort or controller.safety.enabled) then plannerModes[#plannerModes+1]='CoverageJump' end
-    elseif controller.jumpBullet.enabled then plannerModes[#plannerModes+1]='JumpBullet' end
-    if controller.mag.enabled then plannerModes[#plannerModes+1]='MagDime' end
+    for i=#plannerModes,1,-1 do plannerModes[i]=nil end
+    for _,m in ipairs({'ZigzagBullet','SoftBullet','Bullet','Dime','LoftDime','QuickBullet','Fit'})do plannerModes[#plannerModes+1]=m end
+    if controller.nativeJump.supported and controller.nativeJump.enabled then plannerModes[#plannerModes+1]='CoverageJump' end
 end
+controller.mag.enabled=false;controller.jumpBullet.enabled=false;controller.passPlan.preferJump=false
+function controller.SetMagTrial(value) if value then setGate('MAG_UNSUPPORTED_IN_B3');return false end;return true end
+function controller.SetJumpBullet(value) if value then setGate('CUSTOM_JB_UNSUPPORTED_IN_B3');return false end;return true end
+function controller.SetOpenComfort(value)
+    if stopped or type(value)~='boolean' then return false end
+    releaseChoice();controller.passPlan.openComfort=value;controller.mag.RefreshModes()
+    if controller.unified.easeButton then controller.unified.easeButton.Text=value and 'EASE ON' or 'EASE OFF' end
+    return true
+end
+
 controller.mag.RefreshModes()
 function controller.fit.alternatives(player,s,defenders,now,fresh,fresh2,includeFit)
     local result={};local cache=shotCache[player]
@@ -3214,9 +3707,74 @@ function controller.fit.alternatives(player,s,defenders,now,fresh,fresh2,include
     if includeFit then for _,other in ipairs(result) do if other.mode=='Fit' then controller.fit.assess(other,result) end end end
     return result
 end
+controller.unified.nativeSchedule=(function()
+-- Pure native-work selection. This never grades or authorizes a throw.
+local S={}
+local core={ZigzagBullet=0,Bullet=1,Dime=2,SoftBullet=3}
+local optional={QuickBullet=1,Fit=2,CoverageJump=3,LoftDime=4}
+function S.next(modes,modeAt,tried,now,cacheAge,unavailable)
+    local best,oldest,priority,reason
+    local refresh=cacheAge/2 -- leave half the existing tuple lifetime to refresh
+    for index,mode in ipairs(modes) do
+        if not tried[mode] and not (unavailable and unavailable[mode]) then
+            local at=modeAt and modeAt[mode] or -math.huge
+            local rank=core[mode]
+            if rank and now-at>=refresh then
+                if reason~='DUE_CORE' or at<oldest or at==oldest and rank<priority then
+                    best,oldest,priority,reason=mode,at,rank,'DUE_CORE'
+                end
+            elseif reason~='DUE_CORE' and not rank then
+                rank=optional[mode] or #modes+index
+                if not best or at<oldest or at==oldest and rank<priority then
+                    best,oldest,priority,reason=mode,at,rank,'FAIR_OPTIONAL'
+                end
+            end
+        end
+    end
+    -- Refreshed cores need no duplicate probing when optional work is absent.
+    return best,reason
+end
+return S
+
+end)()
+function controller.unified.ScheduleUnavailable(r,now)
+    local missing={}
+    if not touch.enabled then
+        missing.SoftBullet='CLOSE_BULLET_NOT_NEEDED'
+        missing.QuickBullet='CLOSE_BULLET_NOT_NEEDED'
+        missing.ZigzagBullet='CLOSE_BULLET_NOT_NEEDED'
+    else
+        if not closePower(r.player,false) then missing.SoftBullet='CLOSE_BULLET_NOT_NEEDED' end
+        if not closePower(r.player,true) then missing.QuickBullet='CLOSE_BULLET_NOT_NEEDED' end
+    end
+    if not r.sample.oscillation then missing.ZigzagBullet='NO_OBSERVED_ZIGZAG' end
+    if not controller.nativeJump.enabled then missing.CoverageJump='NATIVE_JUMP_OFF' end
+    local q=profile and profile.q
+    if not controller.angle.enabled or not q or not finite(q.Angle) or q.Angle<=0 or q.Angle>=89
+        or not finite(q.Power) or q.Power<=0 or q.Power>95 then
+        missing.LoftDime='CONFIGURED_LOFT_UNAVAILABLE'
+    end
+    if controller.league.ScreenEligible and controller.league.ScreenEligible(r.player,r.sample,now) then
+        for _,mode in ipairs(plannerModes)do
+            if mode~='SoftBullet' and mode~='QuickBullet' and mode~='Bullet' then missing[mode]='SCREEN_BULLET_ONLY' end
+        end
+    end
+    return missing
+end
+function controller.unified.Settings()
+    return {Auto=auto,AutomaticThrow=throwing,Risk=riskPolicy.mode,Plan=controller.passPlan.mode,
+        Profile=controller.league.mode,RequestedProfile=controller.league.requested,ReceiverFilter=controller.receiverFilter.mode,
+        OpenComfort=controller.passPlan.openComfort,NativeJump=controller.nativeJump.enabled,AdaptiveAngle=controller.angle.enabled,
+        SafetyReads=controller.safety.enabled,CoverageWindows=controller.coverageWindows.enabled,JumpDelaySeconds=controller.jumpTiming.delay,
+        MovementGuide={Enabled=ff3Options.MovementGuide~=false,Status=controller.groundGuide.status,Draws=controller.groundGuide.draws,Checks=assistance.guideChecks},
+        MinDownfieldYards=CFG.MinDownfieldYards,WorldGravity=workspace.Gravity,Unified=controller.unified.config,
+        CloseBullet={Enabled=touch.enabled,Comfort=touch.comfort,Quick=touch.quick,MinPower=touch.min,FullPowerYards=touch.full,Method=touch.method,MethodReason=touch.methodReason,PowerFallback=touch.powerFallback},
+        Leads=controller.receiverEvidence.ReadSettings(),NativeContext=controller.receiverEvidence.NativeContext(),
+        Field={LOS=controller.history.Vector(lines.los),Forward=controller.history.Vector(lines.forward),GoalToGo=lines.goalToGo,Generation=lines.generation,Status=lines.status}}
+end
 local function evaluate(receivers,indices,defenders,now)
-    controller.unified.generation=(controller.unified.generation or 0)+1
     controller.bad:begin(possession.epoch,now,receivers,plannerModes,defenders,controller.unified.config,riskPolicy.mode,controller.passPlan.mode)
+    controller.bad.frame.Settings=controller.unified.Settings()
     controller.angle.scene={at=now,epoch=possession.epoch,generation=lines.generation,team=me.Team,defenders=defenders}
     local groups={}
     for _,index in ipairs(indices) do
@@ -3226,30 +3784,41 @@ local function evaluate(receivers,indices,defenders,now)
             cache={model=r.sample.model,epoch=possession.epoch,generation=lines.generation,shots={},rotation=0}
             shotCache[r.player]=cache
         end
-        groups[#groups+1]={r=r,cache=cache,tried={}}
+        groups[#groups+1]={r=r,cache=cache,tried={},unavailable=controller.unified.ScheduleUnavailable(r,now)}
     end
     for _,g in ipairs(groups)do controller.bad:schedule(g.r.player.Name,plannerModes)end
     local calls,started,limited=0,os.clock(),false
+    local attempts=0;local attemptLimit=#groups*#plannerModes
     local callLimit=(controller.coverageWindows.enabled or controller.league.mode=='LEAGUE') and math.min(5,CFG.PlanCalls) or CFG.PlanCalls
     -- Interleave receivers before trying a second/third mode. A slow native
     -- solve cannot consume every frame's allowance on the same receiver.
-    for pass=1,3 do
+    for pass=1,#plannerModes do
         for offset=1,#groups do
             local index=(offset+planRound-1)%#groups+1
             local g=groups[index]
-            if calls>=callLimit or os.clock()-started>=CFG.PlanSeconds then limited=true; break end
-            -- Advance only after an actual solve. Even if a single native
-            -- call consumes the whole time allowance, every mode gets a turn.
-            local mode
-            for _=1,#plannerModes do
-                g.cache.rotation=g.cache.rotation%#plannerModes+1
-                local nextMode=plannerModes[g.cache.rotation]
-                if not g.tried[nextMode] then mode=nextMode; break end
+            if calls>=callLimit or attempts>=attemptLimit or os.clock()-started>=CFG.PlanSeconds then limited=true; break end
+            -- A core tuple gets a refresh opportunity at half its existing
+            -- cache lifetime. Remaining native work goes to the oldest option.
+            -- Unavailable generators consume no native-call slot and are still
+            -- explicit in BAD PLAY rather than silently becoming safe paths.
+            if not g.skipsLogged then
+                g.skipsLogged=true
+                for _,skipped in ipairs(plannerModes)do
+                    local reason=g.unavailable[skipped]
+                    if reason then
+                        g.tried[skipped]=true;g.cache.shots[skipped]=nil
+                        receiverRejects[g.r.player.Name..'/'..skipped]=reason
+                        controller.bad:native(g.r.player.Name,skipped,nil,reason,false)
+                    end
+                end
             end
+            local mode=controller.unified.nativeSchedule.next(plannerModes,g.cache.modeAt,g.tried,now,CFG.CacheAge,g.unavailable)
+            if mode then
             g.tried[mode]=true
-            local shot,why=solve(g.r.player,mode); calls=calls+1
-            controller.bad:native(g.r.player.Name,mode,shot,why)
-            g.cache.plannedAt=now
+            local beforeCalls=frameCalls
+            local shot,why,nativeFailure=solve(g.r.player,mode);calls=calls+(frameCalls-beforeCalls);attempts=attempts+1
+            controller.bad:native(g.r.player.Name,mode,shot,why,frameCalls>beforeCalls,nativeFailure)
+            g.cache.plannedAt=now;g.cache.modeAt=g.cache.modeAt or {};if why~='NATIVE_FRAME_BUDGET' then g.cache.modeAt[mode]=now end
             if stopped then return end
             if shot then g.cache.shots[mode]=shot
             else
@@ -3257,9 +3826,10 @@ local function evaluate(receivers,indices,defenders,now)
                 receiverRejects[g.r.player.Name..'/'..mode]=why
                 if why=='NATIVE_SETTINGS_CHANGED_DURING_SOLVE' then return end
             end
+            end -- an exhausted/fully refreshed group needs no additional probe
         end
-        if calls>=callLimit or os.clock()-started>=CFG.PlanSeconds then
-            if pass<3 then limited=true end
+        if calls>=callLimit or attempts>=attemptLimit or os.clock()-started>=CFG.PlanSeconds then
+            if pass<#plannerModes then limited=true end
             break
         end
     end
@@ -3285,30 +3855,23 @@ local function evaluate(receivers,indices,defenders,now)
         end
     end
     local best,incumbent
-    local gradingStarted=os.clock()
-    table.sort(groups,function(a,b)return (a.cache.gradedAt or -math.huge)<(b.cache.gradedAt or -math.huge)end)
     candidateEvidence={}
     for _,g in ipairs(groups) do
         local r,bestShot=g.r,nil
         local chest=g.cache.shots.Bullet
         r.sample.chestReference=chest and now-chest.at<=CFG.CacheAge and chest or nil
         local valid={}
-        local gradeRotation=g.cache.gradeRotation or 0
-        for offset=1,#plannerModes do
-            local mode=plannerModes[(offset+gradeRotation-1)%#plannerModes+1]
+        for _,mode in ipairs(plannerModes) do
             local shot=g.cache.shots[mode]
             if shot and now-shot.at<=CFG.CacheAge then
                 shot.releaseBlocked=false
                 local eligible,rejection=receiverReady(r.player,r.sample,now,shot.arrival)
                 if eligible then eligible,rejection=receivePossible(shot,r.sample) end
-                if eligible and os.clock()-gradingStarted<.003 then
-                    g.cache.gradedAt=now;g.cache.gradeRotation=(offset+gradeRotation)%#plannerModes
+                if eligible then
                     risk(shot,r.sample,defenders); coverage(shot,r.sample,defenders)
                     valid[#valid+1]=shot
-                else
-                    controller.bad:status(r.player.Name,mode,eligible and 'NOT_EVALUATED' or 'READINESS_REJECTED',eligible and 'GRADING_BUDGET' or rejection)
-                    receiverRejects[r.player.Name..'/'..mode]=rejection end
-            else controller.bad:status(r.player.Name,mode,'NOT_EVALUATED',shot and 'STALE_NATIVE_TUPLE' or 'NO_NATIVE_TUPLE')
+                else controller.bad:status(r.player.Name,mode,'READINESS_REJECTED',rejection,shot);receiverRejects[r.player.Name..'/'..mode]=rejection end
+            else controller.bad:status(r.player.Name,mode,'NOT_EVALUATED',shot and 'STALE_NATIVE_TUPLE' or 'NO_NATIVE_TUPLE',shot)
             end
         end
         for _,shot in ipairs(valid) do if shot.jumpBullet or shot.nativeCoverageJump then shot.jumpBulletAllowed=false end end
@@ -3316,6 +3879,8 @@ local function evaluate(receivers,indices,defenders,now)
         for _,shot in ipairs(valid) do if shot.jumpBullet or shot.nativeCoverageJump then controller.jumpBullet.assess(shot,valid) end end
         for _,shot in ipairs(valid) do
             local mode=shot.variant or shot.mode
+            candidateEvidence[#candidateEvidence+1]=string.format('%s %s t=%.3f p=%.2f margin=%.2f lane=%.2f release=%s clearBurn=%s safetyOverTop=%s',r.player.Name,mode,shot.time,shot.power,shot.margin,shot.lane,tostring(throwable(shot)),tostring(shot.clearBurn),tostring(shot.safetyOverTop))..string.format(' directLane=%s race=%s wrETA=%s lateral=%s',tostring(shot.directLane),tostring(shot.raceAdvantage),tostring(shot.receiverETA),tostring(shot.routeLateral))
+                ..' safetyRead='..tostring(shot.safetyRead and shot.safetyRead.State)..' fitReason='..tostring(shot.fitReason)..' fitSecond='..tostring(shot.fitSecondVariant)..' jumpReason='..tostring(shot.jumpBulletReason)..' dbETA='..tostring(shot.defenderETA)..' powerAllowed='..tostring(shot.powerAllowed)..' powerMethod='..tostring(shot.powerMethod)..' powerReason='..tostring(shot.powerReason)..' minFlight='..tostring(shot.minimumFlight)..' plan='..tostring(shot.planReason)..' depthYards='..tostring(shot.catchDepthYards)..' comeback='..tostring(shot.deepComeback)..' wide='..tostring(shot.wideOpen)
             if better(shot,bestShot) then bestShot=shot end
         end
         if bestShot then
@@ -3333,16 +3898,6 @@ local function evaluate(receivers,indices,defenders,now)
         else opportunities[r.player]=nil end
     end
 
-    controller.unified.last={}
-    for _,g in ipairs(groups)do for _,shot in pairs(g.cache.shots)do
-        if shot.unified and shot.unified.Generation==controller.unified.generation and now-shot.at<=CFG.CacheAge and #controller.unified.last<48 then
-            local u=shot.unified
-            controller.unified.last[#controller.unified.last+1]={Receiver=g.r.player.Name,Variant=shot.variant or shot.mode,
-                Flight=shot.time,Power=shot.power,DecisionAge=math.max(0,now-shot.at),Evaluation=u,Selected=best and best.player==g.r.player and best.shot==shot,
-                Reason=u.HardReason or shot.planAllowed==false and 'EXPLICIT_DEPTH_PLAN' or not throwable(shot) and 'RISK_TOLERANCE'
-                    or best and best.shot==shot and 'WINNER' or 'LOWER_OPPORTUNITY_SCORE'}
-        end
-    end end
     controller.bad:finish(best,os.clock()-started)
     return best
 end
@@ -3368,13 +3923,47 @@ local function ascentTime(hum)
     if hum.UseJumpPower==true and finite(hum.JumpPower) and hum.JumpPower>0 then return hum.JumpPower/gravity end
     if hum.UseJumpPower==false and finite(hum.JumpHeight) and hum.JumpHeight>0 then return math.sqrt(2*hum.JumpHeight/gravity) end
 end
+function controller.groundGuide.SelectShot(r,now)
+    if type(r)~='table' or not r.sample then return end
+    local cache=shotCache[r.player]
+    if not cache or cache.model~=r.sample.model or cache.epoch~=possession.epoch or cache.generation~=lines.generation then return end
+    local function usable(shot)
+        if not controller.unified.CoverageReady(shot) or not finite(shot.at) or now<shot.at or now-shot.at>CFG.CacheAge
+            or not vector(shot.origin) or not vector(shot.velocity) or not vector(shot.arrival)
+            or type(shot.powerAllowed)~='boolean' or type(shot.planAllowed)~='boolean'
+            or type(shot.unified)~='table' or type(shot.unified.Guard)~='table'
+            or (shot.mode~='Bullet' and shot.mode~='Dime') or shot.jumpBullet
+            or shot.nativeCoverageJump or shot.magTrial or shot.screen then return false end
+        -- Reach checking writes telemetry: validate a probe so advice cannot
+        -- mutate the actual cached/native-release evidence.
+        local probe={mode=shot.mode,time=shot.time,arrival=shot.arrival}
+        return receivePossible(probe,r.sample)
+    end
+    if usable(r.shot) then return r.shot end
+    local best
+    for _,mode in ipairs({'Bullet','Dime','SoftBullet','QuickBullet'})do
+        local shot=cache.shots[mode]
+        if usable(shot) and (not best or shot.at>best.at)then best=shot end
+    end
+    return best
+end
+function controller.groundGuide.Queue(r,now)
+    local scene=controller.angle.scene;local ball=ready()
+    if not ball or not scene or now-scene.at>CFG.CacheAge or scene.epoch~=possession.epoch
+        or scene.generation~=lines.generation or scene.team~=me.Team then
+        controller.groundGuide.status='WAIT_FRESH_GUIDE_SCENE';return
+    end
+    assistance.guidePending={r=r,ball=ball,defenders=scene.defenders}
+end
 forecastGuide=function(data,now)
     clearGuide()
-    if ff3Options.MovementGuide==false and ff3Options.PredictiveJump==false or not data or stopped or not auto or pending or usedTools[data.ball.tool]==possession.epoch
+    if ff3Options.MovementGuide==false or not data or stopped or not auto or pending or usedTools[data.ball.tool]==possession.epoch
         or receiverMenu and receiverMenu.Visible then return end
     local r,ball=data.r,data.ball
-    local shot,s=r.shot,r.sample
-    if not shot or not shot.time or throwable(shot) or not receiverReady(r.player,s,now) then return end
+    local shot,s=controller.groundGuide.SelectShot(r,now),r.sample
+    if not lines.forward or not shot then controller.groundGuide.status='WAIT_FRESH_GUIDE_TRAJECTORY';return end
+    if Unified.admit(shot,controller.unified.Guard(shot)) then controller.groundGuide.status='CURRENT_WINDOW_OPEN';return end
+    if not receiverReady(r.player,s,now) or s.oscillation then controller.groundGuide.status='WAIT_STABLE_GUIDE_ROUTE';return end
     local velocity=flat(s.v)
     if velocity.Magnitude<CFG.MinMoveSpeed or not finite(ball.hum.WalkSpeed) or ball.hum.WalkSpeed<=0 then return end
     if shot.jumpBullet or shot.nativeCoverageJump or shot.magTrial or shot.mode=='Fit' then return end -- no unproven counterfactual for an elevated trial/timing rescue
@@ -3392,7 +3981,7 @@ forecastGuide=function(data,now)
         local arrival=shot.arrival+velocity*lead
         if onField(futureQB) and onField(arrival) and (downfield(futureQB)<=controller.field.QBLimit(ball.root))
             and (controller.field.BeyondMinimum(arrival)) then
-            local future={origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,variant=shot.variant,softBullet=shot.softBullet,networkPing=shot.networkPing,
+            local future={advisory=true,appliedLead=shot.appliedLead,effectiveYLead=shot.effectiveYLead,origin=shot.origin+run*lead,arrival=arrival,time=shot.time,mode=shot.mode,variant=shot.variant,softBullet=shot.softBullet,networkPing=shot.networkPing,
                 velocity=shot.velocity+(velocity-run)*(lead/shot.time)}
             -- This is an estimated continuation, not an extra native solve.
             -- Reject estimates exceeding the source's maximum release power.
@@ -3405,7 +3994,7 @@ forecastGuide=function(data,now)
                     room=math.min(room,flat(futureQB-p).Magnitude-runSpeed(d)*lead-(4.5+d.turn*3))
                     oldRoom=math.min(oldRoom,flat(ball.root.Position-p).Magnitude-runSpeed(d)*lead-(4.5+d.turn*3))
                 end
-                local receiver={p=predict(s,lead),v=s.v,turn=s.turn,routeTurn=s.routeTurn,depthEpoch=s.depthEpoch,depthGeneration=s.depthGeneration,depthPeakYards=s.depthPeakYards}
+                local receiver={name=s.name,hum=s.hum,head=s.head and {Position=s.head.Position+velocity*lead},p=predict(s,lead),v=s.v,turn=s.turn,routeTurn=s.routeTurn,depthEpoch=s.depthEpoch,depthGeneration=s.depthGeneration,depthPeakYards=s.depthPeakYards}
                 risk(future,receiver,defenders);coverage(future,receiver,defenders);assistance.guideChecks=assistance.guideChecks+1
                 if throwable(future) and room>0 then
                     local roomGain=finite(room) and finite(oldRoom) and clamp(room-oldRoom,-6,6) or 0
@@ -3430,7 +4019,7 @@ do
         timing.track=nil;timing.last=nil
     end
     function timing.Observe(now)
-        if timing.delay==0 or stopped or not auto or not possession.wasReady or usedTools[possession.tool]==possession.epoch then timing.Reset();return end
+        if stopped or not auto or not possession.wasReady or usedTools[possession.tool]==possession.epoch then timing.Reset();return end
         local p=timing.track
         if not p or p.model~=me.Character or not p.root.Parent or p.hum.Parent~=p.model then
             local model,root,_,hum=body(me)
@@ -3448,38 +4037,49 @@ do
         p.air=air
     end
     function timing.Wait(seq,ball,now)
-        if timing.delay==0 then return true end
+        if not seq.deep or seq.skipAutoJump then
+            timing.status='AUTO_JUMP_NOT_REQUIRED';return true
+        end
         local jump=timing.last
+        local rising=ball.hum.FloorMaterial==Enum.Material.Air and ball.root.AssemblyLinearVelocity.Y>0
         if jump and jump.model==ball.model and jump.hum==ball.hum then
             seq.jumpObservedAt=jump.at;seq.jumpTimingSource='OBSERVED_LOCAL_TAKEOFF'
+            if seq.deep and ascentTime(ball.hum) and not rising then
+                timing.status='DEEP_WAIT_LANDING';setGate(timing.status);return false
+            end
             if now-jump.at<timing.delay then timing.status='WAIT_JUMP_RELEASE_OFFSET';setGate(timing.status);return false end
             timing.status='POST_JUMP_READY';return true
         end
-        if seq.jumpObservedAt then
-            timing.status='JUMP_ENDED_BEFORE_RELEASE';timing.cancelled=timing.cancelled+1
-            cancelSequence(timing.status);cancelJump(timing.status);setGate(timing.status);return false
-        end
-        if not seq.jumpAwaitAt then
-            if ball.hum.Jump==true then seq.jumpAwaitAt=now
-            elseif seq.deep and assistance.jumpEpoch==possession.epoch and now-assistance.jumpRequestedAt<=.25 then seq.jumpAwaitAt=assistance.jumpRequestedAt end
-        end
-        if seq.jumpAwaitAt then
-            if now-seq.jumpAwaitAt>=.25 then
-                timing.status='JUMP_TAKEOFF_NOT_OBSERVED';timing.cancelled=timing.cancelled+1
-                assistance.jumpFailedEpoch=possession.epoch
-                cancelSequence(timing.status);cancelJump(timing.status);setGate(timing.status);return false
+        if seq.deep and ascentTime(ball.hum) then
+            if ball.hum.FloorMaterial==Enum.Material.Air then
+                timing.status='DEEP_WAIT_LANDING'
+            elseif seq.jumpAwaitAt and now-seq.jumpAwaitAt<.25 then
+                timing.status='WAIT_LOCAL_TAKEOFF'
+            else
+                -- No takeoff does not poison the possession or create a ground
+                -- throw. requestJump can try again after the bounded retry gap.
+                seq.preJumpCheckedAt=nil;seq.jumpAwaitAt=nil
+                timing.status='WAIT_DEEP_TAKEOFF_RETRY'
             end
-            timing.status='WAIT_LOCAL_TAKEOFF';setGate(timing.status);return false
+            setGate(timing.status);return false
         end
         timing.status='NO_NEW_JUMP_IMMEDIATE';return true
     end
 end
-local function deepThrow() return false end
+local function deepThrow(shot,hum)
+    if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false end -- Bullet variants never request a QB jump
+    local ascent=ascentTime(hum)
+    -- A timing policy relative to this character's normal jump, not an
+    -- invented official FF3 yardage/catch threshold. Missing jump parameters
+    -- still classify elevated native modes for a normal jump. The short takeoff
+    -- offset is handled separately; no yard cutoff or peak gate is introduced.
+    return ascent and shot.time>ascent*2 or not ascent and shot.mode~='Bullet'
+end
 -- Request the ordinary jump only. The optional short offset starts at observed
 -- local takeoff, never at the apex or animation windup.
 requestJump=function(ball,now)
-    if assistance.jumpFailedEpoch==possession.epoch then return end
-    if assistance.jumpEpoch==possession.epoch and (not assistance.jumpRequestObserved or now-assistance.jumpRequestedAt<.25) then return end
+
+    if assistance.jumpEpoch==possession.epoch and now-assistance.jumpRequestedAt<.25 then return end
     local hum=ball.hum
     if hum.Jump==true or hum.FloorMaterial==Enum.Material.Air then
         assistance.jumpStatus=controller.jumpTiming.delay>0 and 'USER_JUMP_OR_AIRBORNE; OFFSET_IF_RECENT_TAKEOFF' or 'USER_JUMP_OR_AIRBORNE; RELEASE_IMMEDIATE';return
@@ -3488,7 +4088,8 @@ requestJump=function(ball,now)
         assistance.jumpStatus='NORMAL_JUMP_UNAVAILABLE; RELEASE_IMMEDIATE';return
     end
     assistance.jumpEpoch=possession.epoch;assistance.jumpRequestedAt=now;assistance.jumpRequestObserved=false;assistance.jumpCount=assistance.jumpCount+1
-    assistance.jumpPlan={hum=hum,model=ball.model,epoch=possession.epoch,before=hum.Jump,owned=true,requested=now}
+    assistance.jumpPlan={hum=hum,model=ball.model,epoch=possession.epoch,before=hum.Jump,owned=true,requested=now,requestedFrame=motionFrame}
+    if sequence then sequence.jumpAwaitAt=now end
     hum.Jump=true;assistance.jumpMethod='HUMANOID_JUMP'
     if type(hum.ChangeState)=='function' then
         hum:ChangeState(Enum.HumanoidStateType.Jumping)
@@ -3503,7 +4104,9 @@ updateJump=function(now)
     -- Leave the normal Jump flag available for one physics turn. This cleanup
     -- never authorizes, delays or retries a throw, even if no ascent occurs.
     if plan.hum.Jump~=true then plan.owned=false;assistance.jumpPlan=nil
-    elseif now>plan.requested or me.Character~=plan.model or stopped then cancelJump('JUMP_REQUEST_FINISHED') end
+    -- os.clock() advances within a Heartbeat: the later guide callback
+    -- must not clear a jump requested earlier in that same physics turn.
+    elseif motionFrame>plan.requestedFrame or me.Character~=plan.model or stopped then cancelJump('JUMP_REQUEST_FINISHED') end
 end
 
 drawGuide=function(now)
@@ -3519,7 +4122,13 @@ drawGuide=function(now)
     assistance.nextGuideDraw=now+1/30
     local _,root,_,hum=body(me)
     if not root or not hum or not finite(hum.WalkSpeed) then assistance.guideUI.Visible=false;return end
-    local ok=controller.groundGuide.Project(root.Position,g.direction,clamp(hum.WalkSpeed*g.lead,3,9))
+    local length=clamp(hum.WalkSpeed*g.lead,3,9)
+    local ok=false
+    for _=1,3 do
+        ok=controller.groundGuide.Project(root.Position,g.direction,length)
+        if ok then break end
+        length=length/2
+    end
     assistance.guideUI.Visible=ok
 end
 function controller.groundGuide.Project(position,direction,length)
@@ -3537,7 +4146,8 @@ function controller.groundGuide.Project(position,direction,length)
     local base=cf:PointToWorldSpace(V(localPoint.X,ground.Size.Y/2+.04,localPoint.Z))
     local right=V(-direction.Z,0,direction.X)
     local start=base+direction*.75;local tip=base+direction*length
-    local left=tip-direction*2+right*1.25;local wing=tip-direction*2-right*1.25
+    local headLength=math.min(2,length*.4);local halfWidth=math.min(1.25,length*.25)
+    local left=tip-direction*headLength+right*halfWidth;local wing=tip-direction*headLength-right*halfWidth
     local points={start,tip,left,wing};local projected={}
     for i,point in ipairs(points) do
         if not onField(point) or downfield(point)>qbLimit then
@@ -3583,6 +4193,7 @@ local function holdManual(r,reason,evidence)
     choice=r
     if not stable then log('MANUAL_SELECT',r.player.Name) end
     setGate(reason or 'MANUAL_LOCK_COVERED')
+    controller.groundGuide.Queue(r,os.clock())
 end
 local function fallbackReceiver(receivers)
     local best,incumbent
@@ -4120,11 +4731,31 @@ controller.receiverEvidence=(function()
 end)()
 -- END RECEIVER EVIDENCE
 
-local function releaseNow(ball,selected,defenders,now)
+function controller.unified.AutoJumpAllowed(shot,receiver,hum)
+    if shot.mode=='Bullet' or shot.softBullet or shot.screen or shot.jumpBullet or shot.nativeCoverageJump then return false,'BULLET_OR_SCREEN' end
+    local u=shot.unified
+    if not u or not u.Allowed or not u.Guard or not u.Guard.Allowed then return false,'NO_ADMITTED_NATIVE_WINDOW' end
+    local _,root=body(me)
+    local ascent=hum and ascentTime(hum)
+    local detail={PhysicsKnown=ascent~=nil,AscentSeconds=ascent,Gravity=workspace.Gravity,
+        VerticalVelocity=root and root.AssemblyLinearVelocity.Y or nil}
+    if hum then
+        detail.Sit=hum.Sit;detail.PlatformStand=hum.PlatformStand;detail.Jump=hum.Jump
+        detail.JumpingEnabled=hum:GetStateEnabled(Enum.HumanoidStateType.Jumping)
+        detail.FloorMaterial=tostring(hum.FloorMaterial)
+        local stateOK,state=pcall(function()return hum:GetState()end)
+        detail.State=stateOK and tostring(state) or 'UNAVAILABLE'
+        detail.UseJumpPower=hum.UseJumpPower;detail.JumpPower=hum.JumpPower;detail.JumpHeight=hum.JumpHeight
+    end
+    if not hum or not ascent then return false,'JUMP_PHYSICS_UNVERIFIED',detail end
+    if detail.Sit or detail.PlatformStand or not detail.JumpingEnabled then return false,'NORMAL_JUMP_UNAVAILABLE',detail end
+    return true,'FRESH_ADMITTED_NATIVE_WINDOW',detail
+end
+local function releaseNow(ball,selected,defenders,now,preJump)
     if not sequence or sequence.player~=selected.player or sequence.epoch~=possession.epoch then return end
-    local _,qbRoot,qbHead=body(me)
-    controller.bad:final(possession.epoch,now,qbRoot and {name='QB',p=qbRoot.Position,v=qbRoot.AssemblyLinearVelocity,head=qbHead},
-        {Leads=controller.receiverEvidence.ReadSettings(),NativeContext=controller.receiverEvidence.NativeContext(),Plan=controller.passPlan.mode,Profile=controller.league.mode,Field={LOS=controller.history.Vector(lines.los),Forward=controller.history.Vector(lines.forward)}})
+    local _,qr,qh=body(me)
+    controller.bad:final(possession.epoch,now,qr and {name='QB',p=qr.Position,v=qr.AssemblyLinearVelocity,head=qh},
+        controller.unified.Settings(),selected.shot.variant or selected.shot.mode)
     local receipt={stage='FINAL_CONTEXT_CHECK',mode=selected.shot.mode,variant=selected.shot.variant}
     sequence.blockEvidence=receipt
     if usedTools[ball.tool]==possession.epoch then setGate('REQUEST_ALREADY_ATTEMPTED'); return end
@@ -4137,35 +4768,63 @@ local function releaseNow(ball,selected,defenders,now)
     local eligible,rejection=receiverReady(selected.player,selected.sample,now)
     if not eligible then releaseChoice(); setGate(rejection); return end
     local activeSequence=sequence
-
+    local fitVariant=selected.shot.fitAlternativeVariant
+    local fitComparison,fitSecond,why
+    if selected.shot.mode=='Fit' or (selected.shot.jumpBullet or selected.shot.nativeCoverageJump) then
+        if selected.shot.jumpBullet or selected.shot.nativeCoverageJump then fitVariant='Bullet' end
+        if not fitVariant then setGate('FIT_TIMING_COMPARISON_MISSING');return end
+        fitComparison,why=solve(selected.player,fitVariant)
+        if stopped or sequence~=activeSequence then return end
+        if not fitComparison then setGate(why or 'FIT_TIMING_COMPARISON_FAILED');return end
+    end
+    if selected.shot.mode=='Fit' and selected.shot.fitSecondVariant then
+        fitSecond,why=solve(selected.player,selected.shot.fitSecondVariant)
+        if stopped or sequence~=activeSequence then return end
+        if not fitSecond then setGate(why or 'FIT_SECOND_COMPARISON_FAILED');return end
+    end
     -- Solve the actual throw last so the native preview/captures and pose
     -- reference describe the released candidate, not its counterfactual.
     receipt.stage='FINAL_NATIVE_SOLVE'
     local shot;shot,why,receipt.failure=solve(selected.player,selected.shot.variant or selected.shot.mode)
     if shot then receipt.shot=shot;receipt.stage='FINAL_TUPLE_NOT_GRADED';controller.bad.current.Final.Native=controller.bad:trajectory(shot) end
     if stopped or sequence~=activeSequence then return end
-    if not shot then controller.bad.current.Final.NativeFailure=why;setGate(why); return end
+    if not shot then controller.bad.current.Final.NativeFailure=why;controller.bad.current.Final.NativeFailureDetail=receipt.failure;setGate(why);return end
     if os.clock()-now>.28 then setGate('DECISION_STALE_AFTER_NATIVE_SOLVER'); return end
     if not readLines(os.clock()) then releaseChoice(); setGate(lines.status); return end
     local receiver,freshDefenders,changed=currentDefenders(selected.player,os.clock())
     if not receiver or not freshDefenders then setGate(changed or 'PLAYER_OBSERVATIONS_CHANGED');return end
     selected.sample,defenders=receiver,freshDefenders
-
+    if fitComparison and fitComparison.variant=='Bullet' then receiver.chestReference=fitComparison end
     eligible,rejection=receiverReady(selected.player,selected.sample,os.clock(),shot.arrival)
     if not eligible then releaseChoice(); setGate(rejection); return end
     eligible,rejection=receivePossible(shot,selected.sample)
     if not eligible then releaseChoice(); setGate(rejection); return end
     risk(shot,selected.sample,defenders); coverage(shot,selected.sample,defenders)
     receipt.stage='FINAL_CURRENT_COVERAGE'
-
-    if not throwable(shot) then setGate(shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or shot.planAllowed==false and shot.planReason or shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
-    local _,receiverRoot=body(selected.player)
-    if sequence.deep then
-        local movement=receiverRoot and flat(receiverRoot.AssemblyLinearVelocity)
-        if not movement or movement.Magnitude<CFG.MinMoveSpeed or movement.Unit:Dot(sequence.route)<=math.cos(math.pi/4) then
-            setGate('RECEIVER_BROKE_BURN');return
+    if shot.mode=='Fit' then
+        if not receiverReady(selected.player,receiver,os.clock(),fitComparison.arrival) or not receivePossible(fitComparison,receiver)
+            or (current.head.Position-fitComparison.launchHead).Magnitude>.5 then setGate('FIT_COMPARISON_CHANGED');return end
+        risk(fitComparison,receiver,defenders);coverage(fitComparison,receiver,defenders)
+        if fitSecond then
+            if not receiverReady(selected.player,receiver,os.clock(),fitSecond.arrival) or not receivePossible(fitSecond,receiver)
+                or (current.head.Position-fitSecond.launchHead).Magnitude>.5 then setGate('FIT_SECOND_COMPARISON_CHANGED');return end
+            risk(fitSecond,receiver,defenders);coverage(fitSecond,receiver,defenders)
+        end
+        controller.fit.assess(shot,controller.fit.alternatives(selected.player,receiver,defenders,os.clock(),fitComparison,fitSecond),fitComparison.variant)
+        if not shot.fitAllowed or shot.fitAlternativeVariant~=fitComparison.variant then setGate('FIT_TIMING_RESCUE_NO_LONGER_VALID');return end
+    end
+    if (shot.jumpBullet or shot.nativeCoverageJump) then
+        if not receiverReady(selected.player,receiver,os.clock(),fitComparison.arrival) or not receivePossible(fitComparison,receiver)
+            or (current.head.Position-fitComparison.launchHead).Magnitude>.5 then setGate('JUMP_BULLET_COMPARISON_CHANGED');return end
+        risk(fitComparison,receiver,defenders);coverage(fitComparison,receiver,defenders)
+        if not controller.jumpBullet.assess(shot,controller.fit.alternatives(selected.player,receiver,defenders,os.clock(),fitComparison,nil,true)) then
+            setGate(shot.jumpBulletReason);return
         end
     end
+    if shot.safetyOverTop and shot.mode~='Bullet' then setGate('SAFETY_OVER_TOP'); return end
+    if not throwable(shot) then setGate(shot.unified and shot.unified.Reason or shot.safetyRead and shot.safetyRead.High and shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or shot.planAllowed==false and shot.planReason or shot.powerAllowed==false and (shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'DEFENDER_INTERCEPTION_RISK'); return end
+    local _,receiverRoot=body(selected.player)
+
     if not throwing or not auto or not ownsLock() or not teammate(selected.player) or not controller.receiverFilter.allowed(selected.player) or receiverMenu and receiverMenu.Visible then return end
     if shot.magTrial and not controller.mag.Allowed(selected.player) then setGate('MAG_TRUST_REVOKED');return end
     current,reason=ready()
@@ -4175,9 +4834,11 @@ local function releaseNow(ball,selected,defenders,now)
     if current.model~=shot.qbModel or (current.head.Position-shot.launchHead).Magnitude>.5 then
         setGate('QB_LAUNCH_POSE_CHANGED_REPLAN');return
     end
+    if preJump then return true,shot end
     local unit=shot.velocity.Unit
     -- Readable live InputBegan request, exactly: Vector3.new(70000000) is X only.
     -- No retry: FireServer acceptance does not confirm a throw or server state.
+    controller.bad:released(shot)
     usedTools[ball.tool]=possession.epoch; attempts=attempts+1
     pending={tool=ball.tool,model=ball.model,target=selected.player.Name,mode=shot.mode,at=now,outcome='REQUESTING',source='AUTO_QB'}
     classify(shot,selected.sample,defenders)
@@ -4237,6 +4898,12 @@ local function abortPreparedBurn(seq,reason)
     log('BURN_CANCEL',seq.player.Name..' '..reason..'; REPLAN_ALLOWED')
     cancelSequence(reason);releaseChoice();setGate(reason)
 end
+-- BEGIN RELEASE PIPELINE REPAIR
+function controller.unified.ReleaseDeferred(reason)
+    return reason=='NATIVE_FRAME_BUDGET' or reason=='QB_LAUNCH_POSE_CHANGED_REPLAN'
+        or reason=='DECISION_STALE_AFTER_NATIVE_SOLVER'
+end
+-- END RELEASE PIPELINE REPAIR
 local function driveSequence(now)
     local seq=sequence
     if not seq then return end
@@ -4251,13 +4918,40 @@ local function driveSequence(now)
         cancelSequence(why or 'RELEASE_CONTEXT_CHANGED'); return
     end
     if seq.deep then
-        local _,root=body(seq.player)
-        local velocity=root and flat(root.AssemblyLinearVelocity)
-        if not velocity or velocity.Magnitude<CFG.MinMoveSpeed or velocity.Unit:Dot(seq.route)<=math.cos(math.pi/4) then
-            abortPreparedBurn(seq,'RECEIVER_BROKE_BURN');return
+        local grounded=ball.hum.FloorMaterial~=Enum.Material.Air
+        local canRequest=grounded and ball.hum.Jump~=true and now>=(seq.nextJumpCheckAt or 0) and
+            (assistance.jumpEpoch~=possession.epoch or now-assistance.jumpRequestedAt>=.25)
+        if canRequest then
+            local passed,prepared=releaseNow(ball,seq.selected,{},now,true)
+            local jumpAllowed,jumpReason,jumpDetails=false,'PREJUMP_WINDOW_CHANGED',nil
+            if passed and not stopped and sequence==seq then jumpAllowed,jumpReason,jumpDetails=controller.unified.AutoJumpAllowed(prepared,seq.selected.sample,ball.hum) end
+            if controller.bad.current and controller.bad.current.Final then controller.bad.current.Final.AutoJump={Allowed=jumpAllowed,Reason=jumpReason,Readiness=jumpDetails} end
+            controller.bad:prejump(passed==true)
+            if stopped or sequence~=seq then return end
+            if not passed then
+                if controller.unified.ReleaseDeferred(gate) then
+                    seq.preJumpDeferred=gate
+                    if controller.bad.current and controller.bad.current.PreJump then
+                        controller.bad.current.PreJump.Deferred=gate
+                        controller.bad.current.PreJump.Status='PREJUMP_DEFERRED'
+                    end
+                    setGate('PREJUMP_REPLAN')
+                    return -- no jump and no packet; retry fresh on the next callback
+                end
+                -- A fresh refusal invalidates this receiver's optimistic cache;
+                -- it must not repeatedly beat other current opportunities.
+                shotCache[seq.player]=nil;opportunities[seq.player]=nil
+                cancelSequence('PREJUMP_WINDOW_CHANGED');cancelJump('PREJUMP_CANCELLED');return
+            end
+            if jumpAllowed then
+                seq.preJumpCheckedAt=now;seq.nextJumpCheckAt=now+.25
+                requestJump(ball,now)
+                return -- fresh final native solve after physics, on its own budget
+            end
+            -- Skipping an uncertain jump must not suppress an otherwise admitted
+            -- TRUST/MOD throw. Normal fresh final checks still authorize release.
+            seq.skipAutoJump=true;assistance.jumpStatus='SKIPPED_'..jumpReason
         end
-        requestJump(ball,now)
-        if stopped or sequence~=seq then return end
     end
     if not controller.jumpTiming.Wait(seq,ball,now) then return end
     if not seq.animationStarted then seq.animation=visual.prepare(ball,now);seq.animationStarted=true end
@@ -4268,6 +4962,8 @@ local function driveSequence(now)
     releaseNow(ball,seq.selected,defenders,now)
     if stopped or sequence~=seq then return end
     if usedTools[ball.tool]==possession.epoch then sequence=nil;lastSequenceOutcome='API_ACCEPTED_UNCONFIRMED'
+    elseif controller.unified.ReleaseDeferred(gate) then
+        setGate('JUMP_FINAL_REPLAN') -- no request was sent; keep observed takeoff
     else
         local evidence=seq.blockEvidence
         rememberBlocked(seq.player,evidence and evidence.shot,gate,evidence)
@@ -4336,6 +5032,71 @@ do
         return false
     end
 end
+function controller.unified.CompareLoft(best,now,defenders)
+    if not best or not best.shot then return true end
+    local permission=best.shot.unified
+    if permission and permission.Allowed and permission.Guard and permission.Guard.Strict then return true end
+    local cache=shotCache[best.player]
+    if not cache then return true end
+    cache.modeAt=cache.modeAt or {}
+    -- Core Dime precedes the optional receiver-Jump/configured-loft paths.
+    -- A fresh existing core tuple was already regraded with this scene. Only
+    -- missing/stale core work is supplemented. A failed attempt may retry at
+    -- the existing planning cadence,
+    -- rather than hiding a changing window for the whole native-cache lifetime.
+    -- modeAt and the global native cap bound retries, including reactive ticks.
+    for _,mode in ipairs({'Dime','CoverageJump','LoftDime'})do
+        local enabled=mode=='Dime' or mode=='CoverageJump' and controller.nativeJump.enabled
+            or mode=='LoftDime' and controller.angle.enabled
+        local tried=cache.modeAt[mode]
+        local horizon=mode=='Dime' and CFG.Interval or CFG.CacheAge
+        local cached=cache.shots[mode]
+        local missingCore=mode~='Dime' or not cached or now-cached.at>CFG.CacheAge
+        if enabled and missingCore and (not tried or now-tried>=horizon) then
+            if frameCalls>=8 then
+                controller.bad.open=true
+                controller.bad:status(best.player.Name,mode,'NOT_EVALUATED','NATIVE_FRAME_BUDGET')
+                local omitted=controller.bad:row(best.player.Name,mode)
+                if omitted then omitted.NativeStatus='BUDGET_NOT_ATTEMPTED';omitted.NativeReason='NATIVE_FRAME_BUDGET';omitted.NativeInvoked=false end
+                controller.bad:finish(best,0)
+                setGate('WAIT_NATIVE_MODE_COMPARISON_BUDGET');return false
+            end
+            local before=frameCalls;local begun=os.clock();local shot,why,failure=solve(best.player,mode)
+            if stopped then return false end
+            controller.bad.open=true
+            controller.bad:native(best.player.Name,mode,shot,why,frameCalls>before,failure)
+            if why=='NATIVE_FRAME_BUDGET' then
+                controller.bad:status(best.player.Name,mode,'NOT_EVALUATED','NATIVE_FRAME_BUDGET')
+                local omitted=controller.bad:row(best.player.Name,mode)
+                if omitted then omitted.NativeStatus='BUDGET_NOT_ATTEMPTED';omitted.NativeReason='NATIVE_FRAME_BUDGET';omitted.NativeInvoked=false end
+                controller.bad:finish(best,os.clock()-begun)
+                setGate('WAIT_NATIVE_MODE_COMPARISON_BUDGET');return false
+            end
+            cache.modeAt[mode]=now
+            cache.shots[mode]=shot
+            if shot then
+                local eligible,reason=receiverReady(best.player,best.sample,now,shot.arrival)
+                if eligible then eligible,reason=receivePossible(shot,best.sample) end
+                if eligible then
+                    risk(shot,best.sample,defenders);coverage(shot,best.sample,defenders)
+                    if shot.nativeCoverageJump then
+                        local chest=cache.shots.Bullet
+                        if chest and now-chest.at<=CFG.CacheAge then
+                            risk(chest,best.sample,defenders);coverage(chest,best.sample,defenders)
+                            controller.jumpBullet.assess(shot,{chest})
+                        end
+                    end
+                    if better(shot,best.shot) then best.shot=shot end
+                else controller.bad:status(best.player.Name,mode,'READINESS_REJECTED',reason,shot) end
+            end
+            controller.bad:finish(best,os.clock()-begun)
+            -- A newly strict ordinary completion needs no optional loft probes.
+            local u=best.shot.unified
+            if u and u.Allowed and u.Guard and u.Guard.Strict then return true end
+        end
+    end
+    return true
+end
 local function tick(now,cachedOnly)
     if stopped or inTick then return end
     if now-lastTick>=CFG.Interval then cachedOnly=false;lastTick=now
@@ -4368,6 +5129,7 @@ local function tick(now,cachedOnly)
         -- A later authoritative play transition or actual change of equipped
         -- ball/character permits a new attempt, including reuse of the same Tool.
         observePossession(now)
+        local evidence=controller.bad:pos(possession.epoch,now);if evidence then controller.bad:settings(controller.unified.Settings(),now)end
         local ball,why=ready()
         if not ball then resetFieldWait(); releaseChoice(); setGate(why); return end
         if not refreshNativeInputs() then resetFieldWait(); releaseChoice(); setGate('NATIVE_LEAD_CHANGED'); return end
@@ -4412,7 +5174,7 @@ local function tick(now,cachedOnly)
         local roster=Players:GetPlayers()
         if #roster>CFG.MaxRoster then releaseChoice(); setGate('ROSTER_LIMIT'); return end
         local receivers,defenders,seenRoster={},{},{}
-        receiverRejects={};receiverRejectAt=now
+        receiverRejects={};receiverRejectAt=now;controller.bad:eligibility(now)
         local observationMissing=false
         for _,player in ipairs(roster) do
             seenRoster[player]=true
@@ -4420,6 +5182,7 @@ local function tick(now,cachedOnly)
                 local s=sample(player,now)
                 if not s or s.n<2 then
                     if player.Team~=me.Team then observationMissing=true end
+                    controller.bad:excluded(player.Name,s,'MOVEMENT_UNVERIFIED',player.Team==me.Team and 'TEAMMATE' or 'OPPONENT')
                     receiverRejects[player.Name]='MOVEMENT_UNVERIFIED'; opportunities[player]=nil; shotCache[player]=nil
                 elseif player.Team==me.Team then
                     local eligible,rejection=receiverReady(player,s,now)
@@ -4428,8 +5191,9 @@ local function tick(now,cachedOnly)
                     if eligible then
                         local estimate=math.max(.05,flat(s.p-ball.head.Position).Magnitude/95)
                         receivers[#receivers+1]={player=player,sample=s,estimate=estimate,rank=0}
-                    else receiverRejects[player.Name]=rejection; opportunities[player]=nil; shotCache[player]=nil end
+                    else controller.bad:excluded(player.Name,s,rejection);receiverRejects[player.Name]=rejection;opportunities[player]=nil;shotCache[player]=nil end
                 elseif player.Team~=me.Team then defenders[#defenders+1]=s end
+            elseif player~=me and player.Team==me.Team then controller.bad:excluded(player.Name,nil,player.Neutral and 'NEUTRAL_TEAMMATE' or 'NO_LIVE_CHARACTER')
             end
         end
         for player in pairs(samples) do if not seenRoster[player] then samples[player]=nil; opportunities[player]=nil; shotCache[player]=nil end end
@@ -4460,25 +5224,22 @@ local function tick(now,cachedOnly)
                 -- challenger slot on the rank leader. Revisit the least
                 -- recently planned eligible character; native mode rotation
                 -- still advances only when evaluate actually attempts it.
-                local oldest=-1;local urgentPriority=-math.huge;local urgentIndex
+                local oldest=-1
                 for i,r in ipairs(receivers) do
                     if i~=indices[1] then
                         local cache=shotCache[r.player]
-                        local soon=r.sample.p+r.sample.v*r.estimate
-                        local priority=(controller.field.InEndzone(soon) and 45 or 0)-r.estimate*3
-                        if priority>urgentPriority then urgentPriority=priority;urgentIndex=i end
                         local at=cache and cache.model==r.sample.model and cache.epoch==possession.epoch
                             and cache.generation==lines.generation and cache.plannedAt or -math.huge
                         if not indices[2] or at<oldest then indices[2]=i;oldest=at end
                     end
                 end
-                if urgentIndex and now-oldest<CFG.CacheAge then indices[2]=urgentIndex end
             end
         end
         local best=evaluate(receivers,indices,defenders,now)
         if stopped then return end
         if cachedOnly and (not best or not throwable(best.shot)) then return end
         if not best then holdManual(fallbackReceiver(receivers),'MANUAL_LOCK_NO_VALID_AUTO_TRAJECTORY'); return end
+        if not controller.unified.CompareLoft(best,now,defenders) then return end
         local previous=choice
         local stable=previous and previous.player==best.player and previous.model==best.player.Character
         best.since=stable and choice.since or now; best.model=best.player.Character
@@ -4486,9 +5247,12 @@ local function tick(now,cachedOnly)
         -- The last candidate may differ from the winner; settle the actual shared
         -- native lock and final preview on the winner before any release.
         local final,failed,failure
-        if best.shot.mode=='Fit' or (best.shot.jumpBullet or best.shot.nativeCoverageJump) and (controller.passPlan.openComfort or controller.safety.enabled) then
-            -- Reserve final calls for the candidate and fresh counterfactuals
-            -- (three for a league layer-window Fit). Avoid a redundant preview.
+        if throwing or best.shot.mode=='Fit' or (best.shot.jumpBullet or best.shot.nativeCoverageJump) then
+            -- The bounded cached tuple chooses/locks a candidate only. Automatic
+            -- releaseNow still solves the actual throw after current readiness,
+            -- context and possession checks; it never sends this cached tuple.
+            -- Save the duplicate native preview call for that fresh transaction.
+            -- Selection-only mode retains its native preview below.
             if lock(best.player) then final=best.shot else failed='NATIVE_LOCK_BUSY' end
         else final,failed,failure=solve(best.player,best.shot.variant or best.shot.mode) end
         if not final then
@@ -4503,10 +5267,10 @@ local function tick(now,cachedOnly)
         eligible,rejection=receivePossible(best.shot,best.sample)
         if not eligible then shotCache[best.player]=nil; opportunities[best.player]=nil; holdManual(best,'MANUAL_LOCK_'..rejection); return end
         risk(best.shot,best.sample,defenders); coverage(best.shot,best.sample,defenders)
-        if best.shot.mode=='Fit' then controller.fit.assess(best.shot) end
-        if best.shot.jumpBullet or best.shot.nativeCoverageJump then controller.jumpBullet.assess(best.shot) end
+        if best.shot.mode=='Fit' then controller.fit.assess(best.shot,controller.fit.alternatives(best.player,best.sample,defenders,now)) end
+        if best.shot.jumpBullet or best.shot.nativeCoverageJump then controller.jumpBullet.assess(best.shot,controller.fit.alternatives(best.player,best.sample,defenders,now,nil,nil,true)) end
         if not throwable(best.shot) then
-            opportunities[best.player]=nil; holdManual(best,best.shot.safetyRead and best.shot.safetyRead.High and best.shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or best.shot.planAllowed==false and best.shot.planReason or best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
+            opportunities[best.player]=nil; holdManual(best,best.shot.unified and best.shot.unified.Reason or best.shot.safetyRead and best.shot.safetyRead.High and best.shot.mode~='Bullet' and 'SAFETY_HIGH_BULLET_ONLY' or best.shot.planAllowed==false and best.shot.planReason or best.shot.powerAllowed==false and (best.shot.powerReason or 'BULLET_COMFORT_UNAVAILABLE') or 'MANUAL_LOCK_COVERED')
             assistance.guidePending={r=best,ball=ball,defenders=defenders};return
         end
         best.manualOnly=false
@@ -4514,8 +5278,9 @@ local function tick(now,cachedOnly)
         if not stable then log('SELECT',best.player.Name..' '..best.shot.mode) end
         if not throwing then setGate('SELECT_ONLY'); return end
         if receiverMenu and receiverMenu.Visible then setGate('RECEIVER_MENU_OPEN'); return end
-        if controller.jumpTiming.delay>0 and assistance.jumpFailedEpoch==possession.epoch and deepThrow(best.shot,ball.hum) and not controller.jumpTiming.last then
-            holdManual(best,'JUMP_TAKEOFF_NOT_OBSERVED');return
+
+        if controller.unified:wait(best.player,best.model,possession.epoch,best.shot,now) then
+            setGate('DEVELOPING_ROUTE_CONTINUATION');controller.bad:timing(best,now);return
         end
         submit(ball,best,defenders,now)
     end)
@@ -4538,19 +5303,161 @@ local function button(text,x,width,y)
     b.Parent=gui; return b
 end
 function controller.ExportBadPlay()
-    local report=controller.bad:report()
-    if not report then return false,'FLAG_A_PLAY_FIRST' end
-    local encoded=game:GetService('HttpService'):JSONEncode(report)
-    if #encoded>1500000 then return false,'REPORT_SIZE_LIMIT; EVIDENCE_RETAINED_IN_MEMORY' end
+    local function done(ok,value)controller.bad.exportStatus=value;return ok,value end
+    local report=controller.bad:report();if not report then return done(false,'FLAG_A_PLAY_FIRST') end
     env.PELICAN_FF3_BAD_PLAY_REPORT=report
-    local copy=type(setclipboard)=='function' and setclipboard or type(toclipboard)=='function' and toclipboard
-    local copied=copy and pcall(copy,encoded) or false
-    local saved=type(writefile)=='function' and pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) or false
-    return copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API'
+    local http=game:GetService('HttpService')
+    if not report.ExportFile then
+        env.PELICAN_FF3_BAD_FILE_SEQUENCE=(env.PELICAN_FF3_BAD_FILE_SEQUENCE or 0)+1
+        local valid,guid=pcall(function()return http:GenerateGUID(false)end)
+        local suffix=valid and type(guid)=='string' and guid:gsub('[^%w%-]','') or tostring(os.time())..'-'..tostring(env.PELICAN_FF3_BAD_FILE_SEQUENCE)
+        report.ExportFile='PELICAN_FF3_BAD_PLAY_'..suffix..'.json'
+    end
+    local archive=env.PELICAN_FF3_BAD_PLAY_ARCHIVE
+    if type(archive)~='table' then archive={};env.PELICAN_FF3_BAD_PLAY_ARCHIVE=archive end
+    local found=false;for _,old in ipairs(archive)do if old==report then found=true;break end end
+    if not found then archive[#archive+1]=report;while #archive>8 do table.remove(archive,1)end end
+    local ok,encoded=pcall(function()return game:GetService('HttpService'):JSONEncode(report)end)
+    if not ok then return done(false,'ENCODE_FAILED') end
+    while #encoded>1500000 and report.Possession.Timeline and #report.Possession.Timeline>0 do
+        local timeline=report.Possession.Timeline;local drop=math.ceil(#timeline/2)
+        for _=1,drop do table.remove(timeline,1)end
+        report.Possession.TimelineDropped=(report.Possession.TimelineDropped or 0)+drop
+        local valid,nextEncoded=pcall(function()return game:GetService('HttpService'):JSONEncode(report)end)
+        if not valid then return done(false,'ENCODE_FAILED')end;encoded=nextEncoded
+    end
+    if #encoded>1500000 then return done(false,'REPORT_SIZE_LIMIT; RETAINED_IN_MEMORY') end
+    env.PELICAN_FF3_BAD_PLAY_REPORT=report
+    local copier=type(setclipboard)=='function' and setclipboard or type(toclipboard)=='function' and toclipboard
+    local copied=copier and pcall(copier,encoded) or false
+    local saved=type(writefile)=='function' and pcall(writefile,report.ExportFile,encoded) or false
+    if saved then pcall(writefile,'PELICAN_FF3_BAD_PLAY.json',encoded) end -- latest-report alias only
+    return done(copied==true or saved==true,copied and 'COPIED' or saved and 'SAVED' or 'NO_EXPORT_API')
 end
+controller.presentation=(function()
+-- Local presentation ownership. Never disables Roblox controls/chat or inputs.
+local P={}
+local function is(o,k)return typeof(o)=='Instance' and o:IsA(k)end
+local function root(o)
+ for _=1,32 do if not o then return end;if is(o,'ScreenGui')then return o end;o=o.Parent end
+end
+local function ownedName(o)
+ local n=o.Name:lower();return n:find('pelican',1,true) or n:find('yuna',1,true)
+end
+function P.new(options)
+ return setmetatable({options=options,hidden=false,leases={},connections={},nextScan=0,status='VISIBLE',lightingStatus='NOT_REQUESTED'},{__index=P})
+end
+function P:connect(signal,fn)
+ if signal then local c=signal:Connect(fn);self.connections[#self.connections+1]=c;return c end
+end
+function P:claim(o)
+ if not self.hidden or not o or self.leases[o] then return end
+ local prop=is(o,'ScreenGui') and 'Enabled' or is(o,'GuiObject') and 'Visible'
+ if not prop then return end
+ local before=o[prop];self.leases[o]={property=prop,before=before};o[prop]=false
+ if o.GetPropertyChangedSignal then
+  self.leases[o].connection=o:GetPropertyChangedSignal(prop):Connect(function()
+   if self.hidden and o.Parent and o[prop]~=false then o[prop]=false end
+  end)
+ end
+end
+function P:scan()
+ local opts=self.options
+ for _,container in ipairs(opts.containers)do
+  local queue=container:GetChildren();local i=1
+  while i<=#queue and i<=512 do
+   local o=queue[i];i=i+1
+   if is(o,'ScreenGui') then
+    if container==opts.hiddenContainer or ownedName(o) then self:claim(o)end
+   elseif is(o,'Folder') then for _,child in ipairs(o:GetChildren())do if #queue<512 then queue[#queue+1]=child end end
+   elseif container==opts.hiddenContainer and is(o,'GuiObject') then self:claim(o)end
+  end
+ end
+ for _,o in ipairs(opts.roots()or {})do self:claim(root(o)or o)end
+end
+function P:normalLighting()
+ local b=self.options.baseline and self.options.baseline()
+ if type(b)~='table' or type(b.Values)~='table' or b.JobId~=self.options.job or b.Source~='USER_CAPTURED_BEFORE_VISUAL_MODS' then self.lightingStatus='ORIGINAL_LIGHTING_UNAVAILABLE';return end
+ self.lightLease={};local light=self.options.lighting
+ for key,value in pairs(b.Values)do
+  local ok,before=pcall(function()return light[key]end)
+  if ok then
+   local wrote=pcall(function()light[key]=value end)
+   if wrote then self.lightLease[key]={before=before,written=value}end
+  end
+ end
+ self.lightingStatus='CAPTURED_BASELINE_APPLIED; OTHER_VISUAL_WRITERS_NOT_DISABLED'
+end
+function P:set(hidden)
+ if self.stopped and hidden then return end
+ if self.hidden==hidden and (hidden or not next(self.leases) and not self.lightLease) then return end
+ self.hidden=hidden
+ if hidden then self:scan();self:normalLighting();self.status='HIDDEN'
+ else
+  local remaining={}
+  for o,l in pairs(self.leases)do
+   if l.connection then local ok=pcall(function()l.connection:Disconnect()end);if not ok then self.connections[#self.connections+1]=l.connection end;l.connection=nil end
+   local ok=pcall(function()if o.Parent and o[l.property]==false then o[l.property]=l.before end end)
+   if not ok then remaining[o]=l end
+  end
+  self.leases=remaining
+  local lightRemaining={}
+  for key,l in pairs(self.lightLease or {})do local ok=pcall(function()if self.options.lighting[key]==l.written then self.options.lighting[key]=l.before end end);if not ok then lightRemaining[key]=l end end
+  self.lightLease=next(lightRemaining) and lightRemaining or nil;self.status=next(remaining) and 'RESTORE_FAILED' or 'VISIBLE'
+ end
+end
+function P:message(text)if text=='z' then self:set(not self.hidden);return true end;return false end
+function P:start(me)
+ self:connect(me.Chatted,function(text)
+  local ok,err=pcall(self.message,self,text)
+  if not ok then self:stop();if self.options.error then self.options.error(err)end end
+ end)
+ for _,container in ipairs(self.options.containers)do
+  self:connect(container.DescendantAdded,function(o)
+   if self.hidden and (is(o,'ScreenGui') or ownedName(o)) then
+    if container==self.options.hiddenContainer or ownedName(o) then self:claim(root(o)or o)end
+    self.nextScan=0
+   end
+  end)
+ end
+end
+function P:update(now)
+ if self.hidden and now>=self.nextScan then self.nextScan=now+.5;self:scan()end
+end
+function P:stop()
+ self:set(false);self.stopped=true
+ local remaining={}
+ for _,c in ipairs(self.connections)do local ok=pcall(function()c:Disconnect()end);if not ok then remaining[#remaining+1]=c end end
+ self.connections=remaining;self.clean=#remaining==0 and not next(self.leases) and not self.lightLease
+ return self.clean
+end
+return P
+
+end)().new({containers={pg},job=game.JobId,lighting=game:GetService('Lighting'),baseline=function()return env.PELICAN_FF3_VISUAL_BASELINE end,
+ error=function(err)fatalError=clean(err);log('PRESENTATION_ERROR',err);controller.Stop('PRESENTATION_ERROR')end,
+ roots=function()
+    local list={};if gui then list[#list+1]=gui end
+    if profile and profile.hud then for _,card in pairs(profile.hud)do if type(card)=='table' and card.CardText then list[#list+1]=card.CardText end end end
+    for _,item in ipairs(controller.presentation.extraRoots or {})do list[#list+1]=item end
+    return list
+ end})
+if core then controller.presentation.options.containers[#controller.presentation.options.containers+1]=core end
+if type(gethui)=='function' then
+ local ok,h=pcall(gethui)
+ if ok and typeof(h)=='Instance' and h~=core and h~=pg then
+    controller.presentation.options.hiddenContainer=h;controller.presentation.options.containers[#controller.presentation.options.containers+1]=h
+ end
+end
+function controller.SetPresentationHidden(value)controller.presentation:set(value==true)end
+function controller.RegisterPresentationGui(o)
+ if typeof(o)~='Instance' then return false end
+ local p=controller.presentation;p.extraRoots=p.extraRoots or {};if #p.extraRoots>=64 then return false end
+ p.extraRoots[#p.extraRoots+1]=o;if p.hidden then p:scan()end;return true
+end
+controller.presentation:start(me)
 local built,buildError=pcall(function()
     gui=Instance.new('ScreenGui'); gui.Name='PELICAN_FF3_AUTO_QB_V26'; gui.ResetOnSpawn=false; gui.DisplayOrder=1000; gui.Parent=pg
-    status=button('WAIT YUNA',-166,138)
+    status=button('QB',-82,54,40);status.Name='CompactQB'
     assistance.guideUI=Instance.new('Frame');assistance.guideUI.Name='RunGuide';assistance.guideUI.Size=UDim2.new(1,0,1,0)
     assistance.guideUI.Position=UDim2.fromOffset(0,0);assistance.guideUI.BackgroundTransparency=1;assistance.guideUI.Visible=false
     assistance.guideUI.Active=false;assistance.guideUI.Parent=gui
@@ -4560,13 +5467,7 @@ local built,buildError=pcall(function()
         segment.BorderSizePixel=0;segment.BackgroundColor3=Color3.fromRGB(125,230,190);segment.BackgroundTransparency=.15
         segment.Active=false;segment.Parent=assistance.guideUI;assistance.guideSegments[#assistance.guideSegments+1]=segment
     end
-    controller.badButton=button('BAD PLAY',-366,106,62);controller.badButton.Size=UDim2.fromOffset(106,34)
-    connect(controller.badButton.Activated,function()
-        local ok,id=controller.bad:flag(os.clock())
-        controller.badButton.Text=ok and ('FLAGGED '..tostring(id)) or 'NO PLAY'
-        if ok then controller.ExportBadPlay() end
-    end)
-    local kill=button('X',-26,22); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
+    local kill=button('X',-26,22,40); kill.BackgroundColor3=Color3.fromRGB(195,40,40)
     autoButton=button('AUTO ON',-166,58,87); throwButton=button('THR ON',-105,51,87); copyButton=button('COPY',-51,47,87)
     receiverButton=button('WR LIST',-166,106,112); receiverButton.Name='Receivers'
     riskButton=button(riskPolicy.mode,-58,54,112);riskButton.Name='RiskMode'
@@ -4597,15 +5498,15 @@ local built,buildError=pcall(function()
     connect(controller.receiverEvidence.button.Activated,function()
         controller.receiverEvidence.panel.Visible=not controller.receiverEvidence.panel.Visible
         if controller.receiverEvidence.panel.Visible and receiverMenu then receiverMenu.Visible=false end
-        controller.receiverEvidence.RefreshAdvice(true);controller.receiverEvidence.nextPaintAt=0;controller.receiverEvidence.Paint()
+        controller.receiverEvidence.RefreshAdvice(true);controller.receiverEvidence.nextPaintAt=0;controller.receiverEvidence.Paint();controller.league.Paint()
     end)
     connect(controller.history.button.Activated,function()
-        local ok,result;if controller.bad:report() then ok,result=controller.ExportBadPlay() else ok,result=controller.history.Export() end;controller.history.button.Text=ok and 'COPIED' or 'FAIL';log('HISTORY_COPY',result)
+        local ok,result;if controller.bad:report()then ok,result=controller.ExportBadPlay()else ok,result=controller.history.Export()end;controller.history.button.Text=ok and (result=='SAVED' and 'SAVED' or 'COPIED') or 'FAIL';log('HISTORY_COPY',result)
     end)
     controller.jumpBullet.button.Name='JumpBullet';controller.jumpBullet.button.Visible=false
     if controller.nativeJump.supported then
         controller.nativeJump.button=controller.jumpBullet.button;controller.nativeJump.button.Name='NativeJump'
-        controller.nativeJump.button.Text=controller.nativeJump.enabled and 'JUMP ON' or 'JUMP OFF'
+        controller.nativeJump.button.Text=controller.nativeJump.enabled and 'HIGH ON' or 'HIGH OFF'
     end
     connect(controller.jumpBullet.button.Activated,function()
         if controller.nativeJump.supported then controller.SetNativeJump(not controller.nativeJump.enabled)
@@ -4614,6 +5515,19 @@ local built,buildError=pcall(function()
     connect(riskButton.Activated,function()
         controller.SetRiskMode(riskPolicy.mode=='SAFE' and 'MOD' or riskPolicy.mode=='MOD' and 'TRUST' or 'SAFE')
     end)
+    controller.unified.toolsButton=button('TOOLS',-230,64,40);controller.unified.toolsButton.Name='Tools'
+    connect(controller.unified.toolsButton.Activated,function()controller.unified.toolsOpen=not controller.unified.toolsOpen;receiverMenu.Visible=false;controller.receiverEvidence.panel.Visible=false;controller.league.Paint()end)
+    controller.unified.clearButton=button('CLEAR BAD',-230,72,187);controller.unified.clearButton.Name='ClearBadPlay'
+    connect(controller.unified.clearButton.Activated,function()controller.bad.pinned=nil;env.PELICAN_FF3_BAD_PLAY_REPORT=nil;copyButton.Text='COPY';controller.history.button.Text='DATA';controller.league.Paint()end)
+    controller.unified.stopButton=button('STOP',-230,72,187);controller.unified.stopButton.Name='StopQB'
+    connect(controller.unified.stopButton.Activated,function()controller.Stop('USER_END')end)
+    controller.badButton=button('BAD THROW',-226,106,162);controller.badButton.Name='BadPlay'
+    controller.badCurrentButton=button('MISSED',-116,106,162);controller.badCurrentButton.Name='MissedPlay'
+    for _,entry in ipairs({{controller.badButton,false},{controller.badCurrentButton,true}})do
+        connect(entry[1].Activated,function()local ok=controller.bad:flag(os.clock(),entry[2]);if ok then controller.ExportBadPlay() end;entry[1].Text=ok and 'FLAGGED' or 'NO PLAY';expanded=false;controller.league.Paint() end)
+    end
+    controller.unified.easeButton=button(controller.passPlan.openComfort and 'EASE ON' or 'EASE OFF',-226,106,187);controller.unified.easeButton.Name='OpenComfort'
+    connect(controller.unified.easeButton.Activated,function()controller.SetOpenComfort(not controller.passPlan.openComfort)end)
     awayButton=button('AWAY',-226,54,62);awayButton.Name='ThrowAway'
     connect(awayButton.Activated,controller.ThrowAway)
     controller.league.screenButton=button('SCREEN',-226,54,62);controller.league.screenButton.Name='Screen';controller.league.screenButton.Visible=false
@@ -4625,7 +5539,7 @@ local built,buildError=pcall(function()
     receiverMenu.Position=UDim2.new(1,-166,0,137); receiverMenu.BackgroundColor3=Color3.fromRGB(24,30,28); receiverMenu.Parent=gui
     local title=Instance.new('TextLabel'); title.Name='Title'; title.Size=UDim2.fromOffset(158,22); title.Position=UDim2.fromOffset(2,0)
     controller.league.menuTitle=title
-    title.Text='Tap: normal > block > trust'; title.TextSize=10; title.TextColor3=Color3.new(1,1,1); title.BackgroundTransparency=1; title.Parent=receiverMenu
+    title.Text='Tap: normal > block'; title.TextSize=10; title.TextColor3=Color3.new(1,1,1); title.BackgroundTransparency=1; title.Parent=receiverMenu
     local rows,rowPlayers={},{}; local page=1; local lastRender=-math.huge
     for i=1,3 do
         local index=i; local row=button('',0,158,0); row.Name='Receiver'..i; row.Parent=receiverMenu
@@ -4638,9 +5552,10 @@ local built,buildError=pcall(function()
                     else controller.league.UI(controller.SelectScreen,p) end
                 else
                     local state=controller.GetReceiverState(p)
-                    controller.SetReceiverState(p,state=='NORMAL' and 'BLOCKED' or state=='BLOCKED' and 'TRUSTED' or 'NORMAL')
+                    controller.SetReceiverState(p,state=='BLOCKED' and 'NORMAL' or 'BLOCKED')
                 end
             end
+            if not receiverMenu.Visible then expanded=false end;controller.league.Paint()
         end)
     end
     local prev,nextPage=button('<',0,28,0),button('>',0,28,0)
@@ -4663,7 +5578,7 @@ local built,buildError=pcall(function()
                 local state=controller.GetReceiverState(p)
                 local mark
                 if controller.league.menuScreen then mark=controller.league.screen and controller.league.screen.player==p and '[S]' or state=='BLOCKED' and '[X]' or '[ ]'
-                else mark=state=='BLOCKED' and '[X]' or state=='TRUSTED' and '[T]' or controller.mag.Source(p,false)=='FRIEND' and '[F]' or '[ ]' end
+                else mark=state=='BLOCKED' and '[X]' or controller.receiverFilter.friend(p,false) and '[F]' or '[ ]' end
                 row.Text=mark..' @'..p.Name
             end
         end
@@ -4673,16 +5588,17 @@ local built,buildError=pcall(function()
     connect(prev.Activated,function() page=math.max(1,page-1); renderReceivers() end)
     connect(nextPage.Activated,function() page=page+1; renderReceivers() end)
     connect(receiverButton.Activated,function()
-        controller.league.menuScreen=false;title.Text='Tap: normal > block > trust'
+        controller.league.menuScreen=false;title.Text='Tap: normal > block'
         receiverMenu.Visible=not receiverMenu.Visible;if receiverMenu.Visible then controller.receiverEvidence.panel.Visible=false end; if cancelSequence then cancelSequence('RECEIVER_MENU') end;clearGuide();cancelJump('RECEIVER_MENU'); clearWindows(); if choice then choice.openSince=nil end
         if receiverMenu.Visible then renderReceivers() end
+        controller.league.Paint()
     end)
     autoButton.Visible=false; throwButton.Visible=false; copyButton.Visible=false; receiverButton.Visible=false;riskButton.Visible=false; receiverMenu.Visible=false
     controller.league.Paint=function()
         local league=controller.league.mode=='LEAGUE'
         autoButton.Visible=expanded;throwButton.Visible=expanded;copyButton.Visible=expanded;riskButton.Visible=expanded
-        receiverButton.Visible=expanded and not league;awayButton.Visible=not league
-        controller.league.screenButton.Visible=league;controller.league.profileButton.Visible=expanded
+        receiverButton.Visible=expanded and not league;awayButton.Visible=expanded and not league
+        controller.league.screenButton.Visible=expanded and league;controller.league.profileButton.Visible=expanded
         controller.league.profileButton.Text=controller.league.requested=='AUTO' and 'AUTO' or controller.league.mode
         controller.league.profileButton.Position=league and UDim2.new(1,-166,0,112) or UDim2.new(1,-346,0,87)
         controller.league.profileButton.Size=UDim2.fromOffset(league and 106 or 54,22)
@@ -4690,8 +5606,40 @@ local built,buildError=pcall(function()
             controller.history.button,controller.receiverEvidence.button,controller.passPlan.button,controller.receiverFilter.button}) do b.Visible=expanded and not league end
         controller.receiverFilter.button.Text=controller.receiverFilter.mode;controller.passPlan.button.Text=controller.passPlan.mode
         controller.comeback.button.Text=controller.comeback.enabled and 'CB ON' or 'CB OFF';controller.mag.button.Text=controller.mag.enabled and 'MAG TEST' or 'MAG OFF'
+        controller.badButton.Visible=expanded;controller.badCurrentButton.Visible=expanded;controller.unified.easeButton.Visible=expanded
+        controller.mag.button.Visible=false
+        controller.jumpBullet.button.Visible=expanded and controller.nativeJump.supported and not league
+        controller.jumpBullet.button.Text=controller.nativeJump.enabled and 'HIGH ON' or 'HIGH OFF'
+        status.Text=expanded and gate:gsub('_',' '):sub(1,24) or 'QB'
+        if expanded then status.Size=UDim2.fromOffset(166,22);status.Position=UDim2.new(1,-194,0,40)else status.Size=UDim2.fromOffset(54,22);status.Position=UDim2.new(1,-82,0,40)end
         if not expanded or league then controller.receiverEvidence.panel.Visible=false end
-        if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end;receiverMenu.Visible=false end
+        if not expanded then if receiverMenu.Visible and choice then choice.openSince=nil end;receiverMenu.Visible=false;controller.unified.toolsOpen=false end
+        controller.history.button.Text=controller.bad:report() and 'BAD DATA' or 'DATA'
+        controller.unified.toolsButton.Visible=expanded;controller.unified.toolsButton.Text=controller.unified.toolsOpen and 'PLAY' or 'TOOLS'
+        if expanded then status.Size=UDim2.fromOffset(136,22);status.Position=UDim2.new(1,-164,0,40)end
+        local all={autoButton,throwButton,copyButton,receiverButton,riskButton,awayButton,controller.comeback.button,
+            controller.receiverFilter.button,controller.passPlan.button,controller.mag.button,controller.angle.button,
+            controller.jumpBullet.button,controller.history.button,controller.receiverEvidence.button,controller.league.screenButton,
+            controller.league.profileButton,controller.badButton,controller.badCurrentButton,controller.unified.easeButton,controller.unified.stopButton,controller.unified.clearButton}
+        for _,b in ipairs(all)do b.Visible=false end
+        local list={};local function add(b,allowed)if allowed~=false then list[#list+1]=b end end
+        if controller.unified.toolsOpen then
+            add(controller.badButton);add(controller.badCurrentButton);add(copyButton);add(controller.history.button)
+            add(controller.league.profileButton);add(controller.comeback.button,not league)
+            add(controller.unified.clearButton,controller.bad:report()~=nil);add(controller.unified.stopButton)
+        else
+            add(autoButton);add(throwButton);add(riskButton);add(controller.passPlan.button)
+            add(receiverButton,not league);add(controller.receiverFilter.button,not league);add(controller.league.screenButton,league)
+            add(controller.unified.easeButton);add(controller.jumpBullet.button,controller.nativeJump.supported);add(controller.angle.button)
+        end
+        for i,b in ipairs(list)do
+            b.Visible=expanded and not receiverMenu.Visible and not controller.receiverEvidence.panel.Visible
+            b.Size=UDim2.fromOffset(72,24);b.Position=UDim2.new(1,-230+((i-1)%3)*76,0,68+math.floor((i-1)/3)*26)
+        end
+        awayButton.Visible=true;awayButton.Size=UDim2.fromOffset(40,22);awayButton.Position=UDim2.new(1,expanded and -274 or -126,0,40)
+        receiverMenu.Position=UDim2.new(1,-166,0,68)
+        controller.receiverEvidence.panel.Position=UDim2.new(1,-230,0,68);controller.receiverEvidence.panel.Size=UDim2.fromOffset(226,139)
+
     end
     connect(status.Activated,function() expanded=not expanded;controller.league.Paint() end)
     connect(controller.league.screenButton.Activated,function()
@@ -4699,11 +5647,12 @@ local built,buildError=pcall(function()
         releaseChoice();controller.league.menuScreen=true;title.Text='Screen: this possession only'
         receiverMenu.Visible=not receiverMenu.Visible;controller.receiverEvidence.panel.Visible=false
         if receiverMenu.Visible then renderReceivers() end
+        controller.league.Paint()
     end)
     controller.SetProfile(controller.league.requested,'INITIAL_PROFILE')
     connect(autoButton.Activated,function() controller.SetAuto(not auto) end)
     connect(throwButton.Activated,function() controller.SetThrow(not throwing) end)
-    connect(copyButton.Activated,function() if controller.bad:report() then controller.ExportBadPlay();copyButton.Text='BAD COPY';return end;preserve(true); copyButton.Text=copyResult=='API_ACCEPTED' and 'SENT' or 'FAIL' end)
+    connect(copyButton.Activated,function() if controller.bad:report()then local ok,result=controller.ExportBadPlay();copyButton.Text=ok and result or 'FAIL';return end;preserve(true); copyButton.Text=copyResult=='API_ACCEPTED' and 'SENT' or 'FAIL' end)
     kill.Name='Reload'
     connect(kill.Activated,function()
         if type(context.RequestReload)=='function' then context.RequestReload()
@@ -4721,7 +5670,7 @@ local built,buildError=pcall(function()
     connect(Run.Heartbeat,function()
         if stopped then return end
         local now=os.clock(); frameCalls=0;motionFrame=motionFrame+1
-        local ok,err=pcall(function() controller.league.Update(now);controller.jumpTiming.Observe(now);updateJump(now);driveSequence(now) end)
+        local ok,err=pcall(function() controller.presentation:update(now);controller.unified.ObserveOscillation(now);controller.league.Update(now);if ff3Options.CompactCompanionHUD~=false then controller.unified.helperHUD:check(now)end;controller.jumpTiming.Observe(now);updateJump(now);driveSequence(now) end)
         if not ok then fatalError=clean(err); log('RELEASE_ERROR',err); controller.Stop('RELEASE_SEQUENCE_ERROR'); return end
         local wakeOK,wake=pcall(controller.reactivity.Wake,now)
         if not wakeOK then fatalError=clean(wake);log('MOTION_WATCH_ERROR',wake);controller.Stop('MOTION_WATCH_ERROR');return end

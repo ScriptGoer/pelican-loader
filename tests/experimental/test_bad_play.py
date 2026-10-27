@@ -1,19 +1,20 @@
 from pathlib import Path
-import hashlib,json,subprocess,sys,tempfile
+import hashlib,json,subprocess,sys,tempfile,re
 R=Path(__file__).resolve().parents[2]
 ns={'__file__':str(R/'tests/test_trust_burn.py')}
 exec((R/'tests/test_trust_burn.py').read_text().split("source = (ROOT/")[0],ns)
 pre=ns['PRELUDE'].replace('a.X*b,a.Y*b,a.Z*b',"a.X*(type(b)=='number' and b or b.X),a.Y*(type(b)=='number' and b or b.Y),a.Z*(type(b)=='number' and b or b.Z)")
 engine=(R/'experimental/decision_engine.lua').read_text();digest=hashlib.sha256(engine.encode()).hexdigest()
+runtime=(R/'experimental/auto_qb.lua').read_text();codeid=re.search(r"end\)\(\)\.new\('([a-f0-9]{64})'",runtime)[1]
 with tempfile.TemporaryDirectory() as folder:
     dest=Path(folder)/'fixture.json'
     code=pre+'\nVector3={new=vec}\nlocal E=(function()\n'+engine+'\nend)()\nlocal B=(function()\n'+(R/'experimental/bad_play.lua').read_text()+'\nend)()\nlocal replay=(function()\n'+(R/'experimental/replay.lua').read_text()+'\nend)()\n'+r'''
 local count=0
 local function check(ok,label)count=count+1;assert(ok,label)end
-local b=B.new('build-test','DIGEST');local e=E.new()
+local b=B.new('CODEID','DIGEST');b.compare=E.compare;local e=E.new()
 local wr={name='private_receiver_name',p=vec(0,3,40),v=vec(0,0,20),hum={WalkSpeed=20},observedSpeed=20}
 local function shot(t,variant)return{origin=vec(0,5,0),velocity=vec(0,14*t,(40+20*t)/t),arrival=vec(0,5,40+20*t),time=t,power=80,variant=variant,mode='Bullet',networkPing=.02,at=1}end
-local context={gravity=28,mode='TRUST',gain=20,endzone=false}
+local context={gravity=28,mode='TRUST',gain=20,endzone=false,OpenComfort=true,ComfortSeconds=.9,Guard={Allowed=true,Strict=true,Reason='CLEAR_NATIVE_WINDOW',Margin=45,Lane=45}}
 local receivers={{player={Name=wr.name},sample=wr}}
 b:begin(1,1,receivers,{'SoftBullet','QuickBullet','Fit'},{},e.config,'TRUST','NORMAL')
 b:schedule(wr.name,{'SoftBullet','QuickBullet','Fit'})
@@ -25,6 +26,8 @@ end
 b:status(wr.name,'Fit','NOT_EVALUATED','GRADING_BUDGET')
 b:finish({player={Name=wr.name},shot=gentle},.009)
 check(b.profile.OverBudget==2,'per-grade soft budget overruns counted')
+local comparison=b.frame.Rows[b:token(wr.name)..'/QuickBullet'].SelectionComparison
+check(comparison.Preferred and comparison.Field=='ComfortDeficit','candidate comparison preserves the actual deciding score field')
 local row=b.frame.Rows[b:token(wr.name)..'/Fit'];check(row.Reason=='GRADING_BUDGET','budget skip remains unevaluated')
 check(row.Input==nil and row.Status=='NOT_EVALUATED','skip never fabricated into rejection')
 local snap=b.frame.Rows[b:token(wr.name)..'/SoftBullet']
@@ -32,37 +35,84 @@ check(snap.Input.Receiver.p[3]==40,'initial snapshot geometry')
 wr.p=vec(0,3,42)
 check(snap.Input.Receiver.p[3]==40,'snapshot independent of later actor movement')
 wr.p=vec(0,3,40)
-b:final(1,1.1,wr,{Plan='NORMAL'})
+b:settings({Risk='SAFE',Plan='NORMAL'},1)
+b:final(1,1.1,wr,{Risk='TRUST',Plan='NORMAL'})
 local final=shot(.9,'SoftBullet');e:evaluate(final,wr,{},context);b:grade(final,wr,{},context,e.config,.001)
 b.current.Final.Native=b:trajectory(final);b.current.Final.PlanAllowed=true
 b:sent('throw-1','API_ACCEPTED_UNCONFIRMED',1.2)
+b:settings({Risk='SAFE',Plan='SHORT'},1.3)
+check(b.current.Settings.Risk=='TRUST' and b.current.Settings.Plan=='NORMAL','release settings remain frozen after later UI changes')
+check(b.current.LatestSettings.Risk=='SAFE' and b.current.LatestSettings.Plan=='SHORT','post-release settings are retained with separate scope')
+check(b.current.SettingsScope=='FINAL_RELEASE_CONTEXT' and b.current.SettingsAt==1.1,'settings identify actual final attempt context')
+b:flag(1.4,true)
+local missed=b:report()
+check(missed.Flag.Kind=='MISSED' and missed.Flag.Selection=='CURRENT_POSSESSION','MISSED button provenance is explicit')
+check(missed.Flag.HasReleasedThrow and missed.Flag.PossessionId==b.current.Id,'MISSED after a release does not falsely imply no throw')
 b:begin(2,2,receivers,{'SoftBullet'},{},e.config,'TRUST','NORMAL')
 check(b:flag(2.1),'flag succeeds after planner advanced')
-local report=b:report()
+local report=b:report();report.Version='MODEL_ONLY_TEST'
 check(report.Possession.Epoch==1,'flags prior attempted possession')
+check(#report.Possession.FinalAttempts==1 and report.Possession.AttemptCount==1,'flagging a closed released possession cannot duplicate its attempt')
+check(report.Flag.Kind=='BAD_THROW' and report.Flag.Selection=='LAST_SENT_WITHIN_45S','BAD THROW button and selected scope are explicit')
+check(report.Flag.Sequence==missed.Flag.Sequence+1 and missed.Flag.Kind=='MISSED','each flag is independent of later flags')
+check(report.Possession.Settings.Risk==report.Possession.Final.Settings.Risk,'export root settings agree with actual released attempt')
 check(report.Possession.Final.Input.Shot.time==.9,'actual final recalculation retained')
 check(report.Possession.Frames[1].Rows[b:token(wr.name)..'/SoftBullet'].Input.Shot.time==1,'planner tuple remains separate')
-check(report.CodeId=='build-test' and report.EngineId=='DIGEST','code identity survives serialization copy')
+check(report.CodeId=='CODEID' and report.EngineId=='DIGEST','code identity survives serialization copy')
 b:observe('throw-1',{ObservedOutcome='OPPONENT_POSSESSION_OBSERVED',RequiredMovement='UNKNOWN',Fault='UNRESOLVED'})
 check(report.Possession.Observation.ObservedOutcome=='OPPONENT_POSSESSION_OBSERVED','late observation linked to pinned report')
 check(report.Possession.Outcome.Fault=='UNRESOLVED','no inferred fault')
+check(report.Possession.FirstViable and report.Possession.Timeline[1].Rows[b:token(wr.name)..'/SoftBullet'].Score,'earliest viable cohort and timeline scores retained')
 local outcome=replay(report,E,'DIGEST')
-check(outcome.Complete and outcome.Reproduced==3,'planner and final evaluator replay match')
+check(outcome.Complete and outcome.Reproduced==7,'planner and final evaluator replay match')
 local wrong=replay(report,E,'wrong-engine');check(not wrong.Complete and #wrong.Missing>0,'version mismatch is not replay success')
 local old=report.Possession.Final.Input
 report.Possession.Final.Input=nil
 check(not replay(report,E,'DIGEST').Complete,'missing final input flagged')
 report.Possession.Final.Input=old
 local score=report.Possession.Final.Result.Score
-report.Possession.Final.Result.Score=score+1
+report.Possession.Final.Result.Score={Flight=999}
 check(#replay(report,E,'DIGEST').Mismatches>0,'corrupted expected score detected')
 report.Possession.Final.Result.Score=score
 for i=3,10 do b:begin(i,i,receivers,{'SoftBullet'},{},e.config,'TRUST','NORMAL')end
 check(#b.ring==3,'possession ring bounded')
+for i=1,70 do b:begin(99,20+i,receivers,{'SoftBullet'},{},e.config,'TRUST','NORMAL');b:finish(nil,.001)end
+check(#b.current.Timeline==64 and b.current.TimelineDropped==6,'timeline has an explicit memory bound and omission count')
 b:observe('throw-1',{ObservedOutcome='UNKNOWN'})
 check(report.Possession.Outcome.Status=='UNKNOWN','late unknown outcome retained after ring eviction')
 b:heartbeat(1,.001,2);b:heartbeat(1.1,.004,8)
 check(b.profile.FrameIntervals.GT33_33==1 and b.profile.MaxNativeCalls==8,'live frame interval histogram')
+local edge=B.new('CODEID','DIGEST')
+local edgeWR={name='private_boundary_receiver',p=vec(0,3,150),v=vec(0,0,20),hum={WalkSpeed=20}}
+local edgeShot=shot(2,'Bullet');edgeShot.arrival=vec(0,5,175);edgeShot.velocity=vec(0,28,87.5);edgeShot.effectiveYLead=0;edgeShot.appliedLead={X=3,Y=0}
+local edgeContext={gravity=28,mode='SAFE',Guard={Allowed=true,Strict=true,Margin=45,Lane=45},NativeBoundary={Enabled=true,XTolerance=0,ZTolerance=0}}
+edge:begin(1,1,{{player={Name=edgeWR.name},sample=edgeWR}},{'Bullet'},{},e.config,'SAFE','NORMAL')
+e:evaluate(edgeShot,edgeWR,{},edgeContext);edge:grade(edgeShot,edgeWR,{},edgeContext,e.config,.001)
+edge:finish({player={Name=edgeWR.name},shot=edgeShot},.001);edge:flag(2,true)
+local edgeReport=edge:report();edgeReport.Version='MODEL_ONLY_TEST'
+check(replay(edgeReport,E,'DIGEST').Complete,'boundary/flat classification and veto reproduce from actual serialized fields')
+for _,row in pairs(edgeReport.Possession.FirstPlan.Rows)do row.Result.Boundary.Projected=row.Result.Boundary.Projected+1 end
+check(not replay(edgeReport,E,'DIGEST').Complete,'corrupt boundary evidence is rejected by replay')
+-- Chronological attempts remain bounded; flagging doesn't freeze a live attempt.
+local attempts=B.new('CODEID','DIGEST')
+attempts:pos(1,1)
+for i=1,20 do
+ attempts:final(1,i,wr,{Risk='TRUST'},'Dime')
+ attempts:gate(i%2==0 and 'NATIVE_FRAME_BUDGET' or 'DEFENDER_INTERCEPTION_RISK')
+ attempts:prejump(false)
+end
+check(#attempts.current.FinalAttempts==16 and attempts.current.AttemptsDropped==4,'attempt history is bounded with explicit omissions')
+check(attempts.current.FinalAttempts[1].AttemptAt==5 and attempts.current.FinalAttempts[16].AttemptAt==20,'failed attempts remain chronological')
+check(attempts.current.FinalAttempts[16].Stage=='PREJUMP_DEFERRED','budget failure is recorded as scheduling rather than unsafe coverage')
+check(attempts.current.FinalAttempts[15].Gate=='DEFENDER_INTERCEPTION_RISK','actual safety refusal retains its reason')
+check(attempts.current.FinalAttempts[1].Input==nil,'attempt receipts avoid duplicating full scene histories')
+attempts:final(1,21,wr,{Risk='TRUST'},'Dime');attempts:gate('NATIVE_SOLVER_INVALID')
+attempts:flag(21.1,true)
+check(attempts:report().Possession.FinalAttempts[16].Stage=='FLAGGED_CURRENT_ATTEMPT','flag captures an uncompleted failed final attempt')
+check(attempts.current.AttemptCount==20,'flagging does not close or mutate the active attempt')
+attempts:sent('later','API_ACCEPTED_UNCONFIRMED',22)
+check(attempts.current.FinalAttempts[16].Stage=='REQUEST_ATTEMPTED','later actual send keeps its own completed attempt receipt')
+check(attempts:report().Possession.FinalAttempts[16].Stage=='FLAGGED_CURRENT_ATTEMPT','later activity does not rewrite pinned attempt history')
 -- Minimal test-only JSON encoder; runtime uses HttpService outside throw work.
 local function json(v)
  if v==nil then return 'null' end
@@ -77,11 +127,36 @@ check(not text:find('private_receiver_name',1,true),'report does not expose play
 local f=assert(io.open('DEST','w'));f:write(text);f:close()
 print('PASS '..count..' BAD PLAY retention, replay and privacy checks')
 '''
-    code=code.replace('DIGEST',digest).replace('DEST',str(dest))
+    code=code.replace('CODEID',codeid).replace('DIGEST',digest).replace('DEST',str(dest))
     ns['run'](code)
     subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(dest)],check=True)
+    # Reports must stay replayable against their actual published source after
+    # a repair changes the current engine/build fingerprint. No report code runs.
+    historical=json.loads(dest.read_text())
+    oldruntime=subprocess.check_output(['git','show','experimental-unified-b3:experimental/auto_qb.lua'],cwd=R,text=True)
+    ids=re.search(r"end\)\(\)\.new\('([a-f0-9]{64})','([a-f0-9]{64})'\)",oldruntime)
+    historical['CodeId'],historical['EngineId']=ids[1],ids[2]
+    def original_score_shape(value):
+        if isinstance(value,dict):
+            score=value.get('Score')
+            if isinstance(score,dict):
+                assert score.pop('RouteStability',0)==0
+                assert score.pop('RiskDebt',0)==0
+            difficulty=value.get('CatchDifficulty')
+            if isinstance(difficulty,dict):assert difficulty.pop('BelowGroundedBody',0)==0
+            for item in value.values():original_score_shape(item)
+        elif isinstance(value,list):
+            for item in value:original_score_shape(item)
+    original_score_shape(historical) # synthetic non-oscillating inputs serialized in original B3's schema
+    older=Path(folder)/'historical.json';older.write_text(json.dumps(historical))
+    subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(older),'--ref','experimental-unified-b3'],check=True)
+    print('PASS explicit historical-source CLI replay without network or report-supplied code')
     report=json.loads(dest.read_text());report['Possession']['Final'].pop('Input')
     dest.write_text(json.dumps(report))
     failed=subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(dest)],capture_output=True,text=True)
     assert failed.returncode!=0 and 'MISSING' in failed.stdout
-    print('PASS saved JSON CLI round-trip and incomplete-report nonzero exit')
+    report=json.loads(dest.read_text());report['CodeId']='different-build'
+    dest.write_text(json.dumps(report))
+    failed=subprocess.run([sys.executable,str(R/'scripts/replay_bad_play.py'),str(dest)],capture_output=True,text=True)
+    assert failed.returncode!=0 and 'BUILD_CODE_ID_MISMATCH' in failed.stdout
+    print('PASS saved JSON CLI round-trip, incomplete input and wrong-build nonzero exits')
